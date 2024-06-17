@@ -1,0 +1,20 @@
+{
+    "arguments": [
+        "/c",
+        "D:\\msys2\\usr\\bin\\bash.exe",
+        "--login",
+        "-i"
+    ],
+    "cleanEnvironment": true,
+    "command": "C:\\windows\\system32\\cmd.exe",
+    "defaultExitWaitTimeout": 3,
+    "environment": {
+        "CHERE_INVOKING": "1",
+        "MSYSTEM": "CLANG64",
+        "TERM": "xterm-256color"
+    },
+    "isPty": true,
+    "pathExtension": "D:/msys2/usr/bin",
+    "stderr": "msys2TerminalStderr_xXKNezmNcyFp5LSAnkhhx",
+    "stdout": "msys2TerminalStdout_xXKNezmNcyFp5LSAnkhhx"
+}
