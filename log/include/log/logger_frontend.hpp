@@ -1,0 +1,160 @@
+#pragma once
+
+#include <log/level.hpp>
+#include <log/def.hpp>
+
+#include <fmt/format.h>
+#include <nui/frontend/rpc_client.hpp>
+#include <nui/frontend/api/console.hpp>
+#include <nui/frontend/api/json.hpp>
+#include <nui/frontend/utility/val_conversion.hpp>
+
+#include <functional>
+#include <chrono>
+#include <string>
+#include <string_view>
+
+namespace Log
+{
+    namespace Detail
+    {
+        template <typename T>
+        struct AsFormattable
+        {
+            template <typename U = T>
+            static T&& convert(U&& t)
+            {
+                return std::forward<U>(t);
+            }
+        };
+
+        template <>
+        struct AsFormattable<Nui::val>
+        {
+            static std::string convert(Nui::val const& t)
+            {
+                return Nui::JSON::stringify(t);
+            }
+        };
+    }
+
+    class Logger
+    {
+      public:
+        Logger(
+            std::function<void(std::chrono::system_clock::time_point const&, Log::Level, std::string const&)> onLog,
+            bool logOnConsole = true)
+            : onLog_{std::move(onLog)}
+            , logOnConsole_{logOnConsole}
+            , autoUnregisterOnLog_{Nui::RpcClient::autoRegisterFunction(
+                  "log",
+                  [this](int integralLevel, std::string const& message) {
+                      log(static_cast<Log::Level>(integralLevel), message);
+                  })}
+            , autoUnregisterSetLevel_{Nui::RpcClient::autoRegisterFunction(
+                  "setLogLevel",
+                  [this](int integralLevel) {
+                      logLevel_ = static_cast<Log::Level>(integralLevel);
+                  })}
+            , logLevel_{Log::Level::Info}
+        {}
+
+      public:
+        void setLevel(Log::Level level)
+        {
+            logLevel_ = level;
+
+            const auto callable = Nui::RpcClient::getRemoteCallable("setLogLevel");
+            if (callable)
+                callable(static_cast<int>(level));
+        }
+
+        template <typename... Args>
+        void log(Log::Level level, std::string const& message)
+        {
+            if (level < logLevel_)
+                return;
+
+            onLog_(std::chrono::system_clock::now(), level, message);
+
+            if (logOnConsole_)
+            {
+                switch (level)
+                {
+                    case Log::Level::Trace:
+                        Nui::Console::trace(message);
+                        break;
+                    case Log::Level::Debug:
+                        Nui::Console::debug(message);
+                        break;
+                    case Log::Level::Info:
+                        Nui::Console::info(message);
+                        break;
+                    case Log::Level::Warning:
+                        Nui::Console::warn(message);
+                        break;
+                    case Log::Level::Error:
+                        Nui::Console::error(message);
+                        break;
+                    case Log::Level::Critical:
+                        Nui::Console::error(message);
+                        break;
+                    case Log::Level::Off:
+                        break;
+                }
+            }
+        }
+
+        template <typename... Args>
+        void log(Log::Level level, std::string_view fmt, Args&&... args)
+        {
+            if (level < logLevel_)
+                return;
+
+            onLog_(std::chrono::system_clock::now(), level, format(fmt, std::forward<Args>(args)...));
+
+            if (logOnConsole_)
+            {
+                switch (level)
+                {
+                    case Log::Level::Trace:
+                        // Leverage better printing of Nui::val
+                        Nui::Console::trace(fmt, std::forward<Args>(args)...);
+                        break;
+                    case Log::Level::Debug:
+                        Nui::Console::debug(fmt, std::forward<Args>(args)...);
+                        break;
+                    case Log::Level::Info:
+                        Nui::Console::info(fmt, std::forward<Args>(args)...);
+                        break;
+                    case Log::Level::Warning:
+                        Nui::Console::warn(fmt, std::forward<Args>(args)...);
+                        break;
+                    case Log::Level::Error:
+                        Nui::Console::error(fmt, std::forward<Args>(args)...);
+                        break;
+                    case Log::Level::Critical:
+                        Nui::Console::error(fmt, std::forward<Args>(args)...);
+                        break;
+                    case Log::Level::Off:
+                        break;
+                    default:
+                        break;
+                }
+            }
+        }
+
+        template <typename... Args>
+        static std::string format(std::string_view fmt, Args&&... args)
+        {
+            return fmt::format(fmt::runtime(fmt), Detail::AsFormattable<Args>::convert(std::forward<Args>(args))...);
+        }
+
+      private:
+        std::function<void(std::chrono::system_clock::time_point const&, Log::Level, std::string const&)> onLog_;
+        bool logOnConsole_;
+        Nui::RpcClient::AutoUnregister autoUnregisterOnLog_;
+        Nui::RpcClient::AutoUnregister autoUnregisterSetLevel_;
+        Log::Level logLevel_;
+    };
+}

@@ -12,11 +12,17 @@ target_sources(
 
 target_include_directories(${PROJECT_NAME} PRIVATE ${CMAKE_SOURCE_DIR}/frontend/include)
 
-add_library(roar-include-only INTERFACE)
-target_include_directories(roar-include-only INTERFACE "${CMAKE_BINARY_DIR}/../_deps/roar-src/include")
-
 # Link frontend of nui inside of emscripten
-target_link_libraries(${PROJECT_NAME} PRIVATE nui-frontend roar-include-only)
+target_link_libraries(
+    ${PROJECT_NAME}
+    PRIVATE
+        nui-frontend
+        roar-include-only
+        utility
+        log
+        persistence
+        nlohmann_json::nlohmann_json
+)
 
 nui_prepare_emscripten_target(
     TARGET

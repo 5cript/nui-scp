@@ -23,7 +23,16 @@ find_package(Boost REQUIRED COMPONENTS filesystem)
 target_include_directories(${PROJECT_NAME} PRIVATE ${CMAKE_SOURCE_DIR}/backend/include)
 
 # Link backend of nui outside of emscripten
-target_link_libraries(${PROJECT_NAME} PRIVATE nui-backend efsw-static Boost::filesystem)
+target_link_libraries(
+    ${PROJECT_NAME}
+    PRIVATE
+        nui-backend
+        efsw-static
+        Boost::filesystem
+        utility
+        log
+        persistence
+)
 
 nui_set_target_output_directories(${PROJECT_NAME})
 
