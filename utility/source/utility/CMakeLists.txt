@@ -16,5 +16,3 @@ else()
 endif()
 
 target_link_libraries(utility PUBLIC core-target nlohmann_json::nlohmann_json)
-
-target_compile_definitions(utility PUBLIC "JSON_DIAGNOSTICS=1")
