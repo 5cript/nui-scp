@@ -1,5 +1,4 @@
 include("${CMAKE_CURRENT_LIST_DIR}/dependencies/efsw.cmake")
-include("${CMAKE_CURRENT_LIST_DIR}/dependencies/expected.cmake")
 if (EMSCRIPTEN)
 else()
     include("${CMAKE_CURRENT_LIST_DIR}/dependencies/spdlog.cmake")

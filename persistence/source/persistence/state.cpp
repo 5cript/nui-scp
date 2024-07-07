@@ -1,5 +1,5 @@
 #include <persistence/state.hpp>
-#include <utility/json.hpp>
+#include <nlohmann/json.hpp>
 
 namespace Persistence
 {
@@ -12,7 +12,7 @@ namespace Persistence
     {
 #ifdef NUI_FRONTEND
         auto proxy = state.terminalEngines.modify();
-        j.at("terminalEngines").get_to(unwrap(state.terminalEngines));
 #endif
+        j.at("terminalEngines").get_to(unwrap(state.terminalEngines));
     }
 }

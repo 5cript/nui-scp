@@ -1,9 +1,10 @@
 #pragma once
 
 #include <nui/core.hpp>
-#include <utility/json.hpp>
+#include <nlohmann/json.hpp>
 
 #include <utility>
+#include <optional>
 
 #ifdef NUI_FRONTEND
 #    include <nui/frontend/event_system/observed_value.hpp>
@@ -65,3 +66,57 @@ namespace Persistence
     template <typename T>
     constexpr bool isStateWrap = IsStateWrap<T>::value;
 }
+
+namespace Detail
+{
+    template <typename T>
+    struct FromJsonUnwrapped
+    {
+        static void fromJson(nlohmann::json const& json, T& value, char const* name)
+        {
+            if (auto it = json.find(name); it != json.end())
+                value = it->get<typename T::value_type>();
+        }
+    };
+
+    template <typename T>
+    struct ToJsonUnwrapped
+    {
+        static void toJson(nlohmann::json& json, T const& value, char const* name)
+        {
+            json[name] = *value;
+        }
+    };
+
+#ifdef NUI_FRONTEND
+    template <typename T>
+    struct FromJsonUnwrapped<Persistence::StateWrap<T>>
+    {
+        static void fromJson(nlohmann::json const& json, Persistence::StateWrap<T>& value, char const* name)
+        {
+            const auto proxy = value.modify();
+            if (auto it = json.find(name); it != json.end())
+                Persistence::unwrap(value) = it->get<typename T::value_type>();
+        }
+    };
+
+    template <typename T>
+    struct ToJsonUnwrapped<Persistence::StateWrap<T>>
+    {
+        static void toJson(nlohmann::json& json, Persistence::StateWrap<T> const& value, char const* name)
+        {
+            json[name] = *Persistence::unwrap(value);
+        }
+    };
+#endif
+} // namespace Detail
+
+#define TO_JSON_OPTIONAL_RENAME(JSON, CLASS, MEMBER, JSON_NAME) \
+    Detail::ToJsonUnwrapped<std::decay_t<decltype(CLASS.MEMBER)>>::toJson(JSON, CLASS.MEMBER, JSON_NAME)
+
+#define TO_JSON_OPTIONAL(JSON, CLASS, MEMBER) TO_JSON_OPTIONAL_RENAME(JSON, CLASS, MEMBER, #MEMBER)
+
+#define FROM_JSON_OPTIONAL_RENAME(JSON, CLASS, MEMBER, JSON_NAME) \
+    Detail::FromJsonUnwrapped<std::decay_t<decltype(CLASS.MEMBER)>>::fromJson(JSON, CLASS.MEMBER, JSON_NAME)
+
+#define FROM_JSON_OPTIONAL(JSON, CLASS, MEMBER) FROM_JSON_OPTIONAL_RENAME(JSON, CLASS, MEMBER, #MEMBER)

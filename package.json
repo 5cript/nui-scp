@@ -6,7 +6,7 @@
     "tailwatch": "cross-env NODE_ENV=development tailwindcss --config tailwind.config.js --watch=always --output build/clang_debug/bin/liveload/tailwind.css"
   },
   "devDependencies": {
-    "parcel": "^2.9.1",
+    "parcel": "^2.12.0",
     "parcel-reporter-static-files-copy": "^1.5.0",
     "postcss": "^8.4.38",
     "tailwindcss": "^3.4.3",

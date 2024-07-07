@@ -1,9 +1,9 @@
-build
-_build
-.vscode
-.vs
-.idea
-out
+build/*
+_build/*
+.vscode/*
+.vs/*
+.idea/*
+out/*
 CMakeSettings.json
-dependencies
-node_modules
+dependencies/*
+node_modules/*

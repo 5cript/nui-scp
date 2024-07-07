@@ -1,7 +1,7 @@
 #pragma once
 
 #include <persistence/state_core.hpp>
-#include <utility/json.hpp>
+#include <nlohmann/json.hpp>
 
 #include <unordered_map>
 #include <optional>
@@ -23,29 +23,29 @@ namespace Persistence
 
     struct ExecutingTerminalEngine
     {
-        StateWrap<std::string> command{};
-        StateWrap<std::optional<std::vector<std::string>>> arguments{};
-        StateWrap<std::optional<std::unordered_map<std::string, std::string>>> environment{};
-        StateWrap<std::optional<int>> exitTimeoutSeconds{};
-        StateWrap<std::optional<bool>> cleanEnvironment{};
+        std::string command{};
+        std::optional<std::vector<std::string>> arguments{};
+        std::optional<std::unordered_map<std::string, std::string>> environment{};
+        std::optional<int> exitTimeoutSeconds{};
+        std::optional<bool> cleanEnvironment{};
     };
     void to_json(nlohmann::json& j, ExecutingTerminalEngine const& engine);
     void from_json(nlohmann::json const& j, ExecutingTerminalEngine& engine);
 
     struct SshTerminalEngine
     {
-        StateWrap<std::string> host{};
-        StateWrap<std::optional<int>> port{22};
+        std::string host{};
+        std::optional<int> port{22};
         // optional => use current logged in user
-        StateWrap<std::optional<std::string>> user{};
+        std::optional<std::string> user{};
         // TODO: KeePassXC integration or enforce agent usage
-        // StateWrap<std::string> password{};
-        StateWrap<std::optional<std::string>> privateKey{};
-        StateWrap<std::optional<std::string>> keyPassphrase{};
+        // std::string> password{};
+        std::optional<std::string> privateKey{};
+        std::optional<std::string> keyPassphrase{};
         // Default: bash
-        StateWrap<std::optional<std::string>> shell{};
-        StateWrap<std::optional<std::filesystem::path>> sshDirectory{};
-        StateWrap<std::optional<bool>> tryAgentForAuthentication{true};
+        std::optional<std::string> shell{};
+        std::optional<std::filesystem::path> sshDirectory{};
+        std::optional<bool> tryAgentForAuthentication{true};
         // TODO: ?
         // StateWrap<std::unordered_map<std::string, std::string>> environment;
     };
@@ -55,7 +55,7 @@ namespace Persistence
     struct TerminalEngine
     {
         StateWrap<std::string> type;
-        StateWrap<std::variant<ExecutingTerminalEngine, SshTerminalEngine, std::monostate>> engine;
+        StateWrap<std::variant<std::monostate, ExecutingTerminalEngine, SshTerminalEngine>> engine;
     };
     void to_json(nlohmann::json& j, TerminalEngine const& engine);
     void from_json(nlohmann::json const& j, TerminalEngine& engine);

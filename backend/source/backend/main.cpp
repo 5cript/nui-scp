@@ -1,6 +1,7 @@
 #include <backend/main.hpp>
 
 #include <backend/process/process_store.hpp>
+#include <boost/process/v2/src.hpp>
 
 #include <nui/core.hpp>
 #include <nui/rpc.hpp>

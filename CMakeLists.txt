@@ -3,6 +3,8 @@ cmake_minimum_required(VERSION 3.21)
 project(nui-scp VERSION 0.1.0)
 
 set(NUI_FETCH_ROAR OFF CACHE BOOL "Dont fetch roar, use local copy" FORCE)
+set(NUI_FETCH_NLOHMANN_JSON OFF CACHE BOOL "Dont fetch nlohmann, use local copy" FORCE)
+set(ROAR_EXTERNAL_NLOHMANN_JSON ON CACHE BOOL "Use an external nlohmann_json library (provide it manually)" FORCE)
 
 include (${CMAKE_CURRENT_LIST_DIR}/_cmake/common_options.cmake)
 
@@ -15,8 +17,9 @@ target_link_libraries(${PROJECT_NAME} PUBLIC core-target)
 
 # Subdirectories & Dependencies
 add_library(roar-include-only INTERFACE)
-target_include_directories(roar-include-only INTERFACE "${CMAKE_BINARY_DIR}/../_deps/roar-src/include")
-include("${CMAKE_CURRENT_LIST_DIR}/dependencies/Nui/cmake/dependencies/nlohmann_json.cmake")
+target_include_directories(roar-include-only INTERFACE "${CMAKE_CURRENT_LIST_DIR}/dependencies/roar/include")
+
+include("${CMAKE_CURRENT_LIST_DIR}/dependencies/nui/cmake/dependencies/nlohmann_json.cmake")
 add_subdirectory("${CMAKE_SOURCE_DIR}/constants/source/constants")
 add_subdirectory("${CMAKE_SOURCE_DIR}/utility/source/utility")
 add_subdirectory("${CMAKE_SOURCE_DIR}/log/source/log")
