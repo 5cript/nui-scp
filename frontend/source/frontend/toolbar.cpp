@@ -5,10 +5,16 @@
 #include <nui/frontend/attributes.hpp>
 
 struct Toolbar::Implementation
-{};
+{
+    Persistence::StateHolder* stateHolder;
 
-Toolbar::Toolbar()
-    : impl_(std::make_unique<Implementation>())
+    Implementation(Persistence::StateHolder* stateHolder)
+        : stateHolder{stateHolder}
+    {}
+};
+
+Toolbar::Toolbar(Persistence::StateHolder* stateHolder)
+    : impl_(std::make_unique<Implementation>(stateHolder))
 {}
 
 ROAR_PIMPL_SPECIAL_FUNCTIONS_IMPL(Toolbar);

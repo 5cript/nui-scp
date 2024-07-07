@@ -6,6 +6,7 @@ target_sources(
         sidebar.cpp
         toolbar.cpp
         session_area.cpp
+        session.cpp
         terminal/terminal.cpp
         terminal/msys2.cpp
 )
@@ -17,6 +18,7 @@ target_link_libraries(
     ${PROJECT_NAME}
     PRIVATE
         nui-frontend
+        ui5
         roar-include-only
         utility
         log

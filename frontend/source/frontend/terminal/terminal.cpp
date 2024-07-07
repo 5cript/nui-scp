@@ -1,6 +1,9 @@
 #include <frontend/terminal/terminal.hpp>
+#include <log/log.hpp>
+#include <frontend/nlohmann_compat.hpp>
 
 #include <nui/frontend/api/console.hpp>
+#include <nui/frontend/api/json.hpp>
 #include <nui/frontend/utility/functions.hpp>
 
 #include <cctype>
@@ -18,7 +21,7 @@ globalThis.terminalUtility.stringToUint8Array = (str) => {
     return new TextEncoder().encode(str);
 };
 globalThis.terminalUtility.terminals = new Map();
-globalThis.terminalUtility.createTerminal = (host) => {
+globalThis.terminalUtility.createTerminal = (host, options) => {
     console.log(host);
 
     const terminal = new Terminal({
@@ -29,6 +32,7 @@ globalThis.terminalUtility.createTerminal = (host) => {
             background: "#000000",
             foreground: "#FFFFFF",
         },
+        ...options,
         cols: 80,
         rows: 30
     });
@@ -119,11 +123,12 @@ namespace
         }
         if (isUserInput)
         {
-            Nui::Console::log("Terminal::sending", debugPrint);
+            // Never! Could contain sensitive data
+            // Log::debug("Terminal::sending", debugPrint);
         }
         else
         {
-            Nui::Console::log("Terminal::received", debugPrint);
+            Log::trace("Terminal::received", debugPrint);
         }
     }
 }
@@ -156,15 +161,15 @@ Terminal::Terminal(std::unique_ptr<TerminalEngine> engine)
         write(data, false);
     });
 }
-void Terminal::open(Nui::val element)
+void Terminal::open(Nui::val element, Persistence::CommonTerminalOptions const& options)
 {
-    impl_->termId = terminalUtility().call<std::string>("createTerminal", element);
+    impl_->termId = terminalUtility().call<std::string>("createTerminal", element, asVal(options));
     impl_->engine->open([this](bool success) {
         if (!success)
         {
-            Nui::Console::error("Failed to open terminal");
+            Log::error("Failed to open terminal");
         }
-        Nui::Console::log("Terminal opened");
+        Log::info("Terminal opened");
 
         impl_->terminal().call<void>(
             "onData",
@@ -179,6 +184,7 @@ void Terminal::open(Nui::val element)
             "onResize",
             Nui::bind(
                 [this](Nui::val obj, Nui::val) {
+                    Log::debug("Terminal resized {}:{}. ", obj["cols"].as<int>(), obj["rows"].as<int>());
                     impl_->engine->resize(obj["cols"].as<int>(), obj["rows"].as<int>());
                 },
                 std::placeholders::_1,
@@ -202,43 +208,6 @@ void Terminal::write(std::string const& data, bool isUserInput)
     if (isUserInput)
     {
         impl_->engine->write(data);
-        // if (data.front() == '\r' || data.front() == '\n')
-        // {
-        //     // TODO: trim whitespace
-        //     for (std::size_t i = 0; i != impl_->command.size(); ++i)
-        //     {
-        //         impl_->terminal().call<void>("write", std::string{"\x08 \x08"});
-        //     }
-        //     impl_->engine->write(impl_->command + data);
-        //     debugPrintTerminalWrite(impl_->command, isUserInput);
-        //     impl_->command = "";
-        //     return;
-        // }
-        // else if (data.front() < 0x20)
-        // {
-        //     impl_->engine->write(data);
-        //     debugPrintTerminalWrite(data, isUserInput);
-        //     return;
-        // }
-        // else if (data.front() == '\x7f')
-        // {
-        //     if (!impl_->command.empty())
-        //     {
-        //         impl_->terminal().call<void>("write", std::string{"\x08 \x08"});
-        //         impl_->command.pop_back();
-        //     }
-        //     else
-        //     {
-        //         impl_->terminal().call<void>("write", "\a");
-        //     }
-        //     return;
-        // }
-        // else
-        // {
-        //     Nui::Console::log("X: ", data);
-        //     impl_->command += data;
-        // }
-        // impl_->terminal().call<void>("write", data);
     }
     else
     {

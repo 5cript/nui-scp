@@ -5,11 +5,22 @@
 
 namespace Persistence
 {
+    void to_json(nlohmann::json& j, BaseTerminalEngine const& engine)
+    {
+        j["isPty"] = engine.isPty;
+    }
+    void from_json(nlohmann::json const& j, BaseTerminalEngine& engine)
+    {
+        if (j.contains("isPty"))
+            engine.isPty = j.at("isPty").get<bool>();
+    }
+
     void to_json(nlohmann::json& j, ExecutingTerminalEngine const& engine)
     {
         j = nlohmann::json{
             {"command", engine.command},
         };
+        to_json(j, static_cast<BaseTerminalEngine const&>(engine));
 
         TO_JSON_OPTIONAL(j, engine, arguments);
         TO_JSON_OPTIONAL(j, engine, environment);
@@ -18,7 +29,10 @@ namespace Persistence
     }
     void from_json(nlohmann::json const& j, ExecutingTerminalEngine& engine)
     {
-        engine.command = j.at("command").get<std::string>();
+        from_json(j, static_cast<BaseTerminalEngine&>(engine));
+
+        if (j.contains("command"))
+            engine.command = j.at("command").get<std::string>();
 
         FROM_JSON_OPTIONAL(j, engine, arguments);
         FROM_JSON_OPTIONAL(j, engine, environment);
@@ -31,6 +45,7 @@ namespace Persistence
         j = nlohmann::json{
             {"host", engine.host},
         };
+        to_json(j, static_cast<BaseTerminalEngine const&>(engine));
 
         TO_JSON_OPTIONAL(j, engine, port);
         TO_JSON_OPTIONAL(j, engine, user);
@@ -42,7 +57,10 @@ namespace Persistence
     }
     void from_json(nlohmann::json const& j, SshTerminalEngine& engine)
     {
-        engine.host = j.at("host").get<std::string>();
+        from_json(j, static_cast<BaseTerminalEngine&>(engine));
+
+        if (j.contains("host"))
+            engine.host = j.at("host").get<std::string>();
 
         FROM_JSON_OPTIONAL(j, engine, port);
         FROM_JSON_OPTIONAL(j, engine, user);
@@ -57,10 +75,12 @@ namespace Persistence
     {
         j = nlohmann::json{
             {"type", engine.type},
+            {"name", engine.name},
+            {"options", engine.options},
         };
 
         Utility::visitOverloaded(
-            unwrap(engine.engine),
+            engine.engine,
             [&j](ExecutingTerminalEngine const& engine) {
                 j["engine"] = engine;
             },
@@ -73,14 +93,21 @@ namespace Persistence
     }
     void from_json(nlohmann::json const& j, TerminalEngine& engine)
     {
-        engine.type = j.at("type").get<std::string>();
-        if (unwrap(engine.type) == "msys2")
+        if (j.contains("type"))
+            engine.type = j.at("type").get<std::string>();
+
+        if (j.contains("name"))
+            engine.name = j.at("name").get<std::string>();
+
+        if (j.contains("options"))
+            engine.options = j.at("options").get<CommonTerminalOptions>();
+        if (engine.type == "msys2")
         {
             ExecutingTerminalEngine e;
             from_json(j.at("engine"), e);
             engine.engine = e;
         }
-        else if (unwrap(engine.type) == "ssh")
+        else if (engine.type == "ssh")
         {
             SshTerminalEngine e;
             from_json(j.at("engine"), e);
@@ -94,7 +121,7 @@ namespace Persistence
 
     ExecutingTerminalEngine defaultMsys2TerminalEngine()
     {
-        ExecutingTerminalEngine engine;
+        ExecutingTerminalEngine engine{};
         engine.command = "C:/msys64/usr/bin/bash.exe";
         engine.arguments = {std::vector<std::string>{"--login", "-i"}};
         engine.environment = {std::unordered_map<std::string, std::string>{
@@ -102,17 +129,19 @@ namespace Persistence
             {"CHERE_INVOKING", "1"},
             {"TERM", "xterm-256color"},
         }};
+        engine.exitTimeoutSeconds = 3;
         return engine;
     }
 
     ExecutingTerminalEngine defaultBashTerminalEngine()
     {
-        ExecutingTerminalEngine engine;
+        ExecutingTerminalEngine engine{};
         engine.command = "/bin/bash";
         engine.arguments = {std::vector<std::string>{"-i"}};
         engine.environment = {std::unordered_map<std::string, std::string>{
             {"TERM", "xterm-256color"},
         }};
+        engine.exitTimeoutSeconds = 3;
         return engine;
     }
 }

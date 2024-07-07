@@ -2,6 +2,7 @@
 
 #include <frontend/terminal/terminal_engine.hpp>
 #include <roar/detail/pimpl_special_functions.hpp>
+#include <persistence/state/terminal_engine.hpp>
 
 #include <memory>
 #include <string>
@@ -14,12 +15,11 @@ class Msys2Terminal : public TerminalEngine
   public:
     struct Settings
     {
-        std::string msys2Directory{"D:/msys2"};
-        std::string msystem{"CLANG64"};
+        Persistence::ExecutingTerminalEngine engineOptions;
     };
 
   public:
-    Msys2Terminal(Settings const& settings);
+    Msys2Terminal(Settings settings);
     ROAR_PIMPL_SPECIAL_FUNCTIONS(Msys2Terminal);
 
     void open(std::function<void(bool)> onOpen) override;

@@ -33,6 +33,7 @@ include("${CMAKE_CURRENT_LIST_DIR}/_cmake/dependencies.cmake")
 set(PREJS_FILE "${CMAKE_SOURCE_DIR}/frontend/source/frontend/js/module.js")
 
 if (EMSCRIPTEN)
+    include("${CMAKE_CURRENT_LIST_DIR}/_cmake/dependencies/ui5.cmake")
     add_subdirectory("${CMAKE_SOURCE_DIR}/frontend/source/frontend")
 else()
 	add_subdirectory("${CMAKE_SOURCE_DIR}/backend/source/backend")

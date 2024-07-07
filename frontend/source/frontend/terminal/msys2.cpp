@@ -17,8 +17,8 @@ struct Msys2Terminal::Implementation
     std::function<void(std::string const&)> stdoutHandler;
     std::function<void(std::string const&)> stderrHandler;
 
-    Implementation(Msys2Terminal::Settings const& settings)
-        : settings{settings}
+    Implementation(Msys2Terminal::Settings&& settings)
+        : settings{std::move(settings)}
         , id{Nui::val::global("nanoid")().as<std::string>()}
         , stdoutReceiver{}
         , stderrReceiver{}
@@ -28,8 +28,8 @@ struct Msys2Terminal::Implementation
     {}
 };
 
-Msys2Terminal::Msys2Terminal(Settings const& settings)
-    : impl_{std::make_unique<Implementation>(settings)}
+Msys2Terminal::Msys2Terminal(Settings settings)
+    : impl_{std::make_unique<Implementation>(std::move(settings))}
 {}
 Msys2Terminal::~Msys2Terminal() = default;
 
@@ -62,30 +62,49 @@ void Msys2Terminal::open(std::function<void(bool)> onOpen)
         });
 
     Nui::val obj = Nui::val::object();
-    Nui::val args = Nui::val::array();
 
-    obj.set("command", "D:\\msys2\\usr\\bin\\bash.exe");
-    args.call<void>("push", "--login"s);
-    args.call<void>("push", "-i"s);
+    obj.set("command", impl_->settings.engineOptions.command);
+    if (impl_->settings.engineOptions.arguments)
+    {
+        Nui::val args = Nui::val::array();
+        for (auto const& arg : *impl_->settings.engineOptions.arguments)
+        {
+            args.call<void>("push", arg);
+        }
+        obj.set("arguments", args);
+    }
+    else
+    {
+        obj.set("arguments", Nui::val::array());
+    }
 
-    // TODO: dont hardcode all of this:
-    // obj.set("command", "C:\\windows\\system32\\cmd.exe");
-    // args.call<void>("push", "/c"s);
-    // args.call<void>("push", "D:\\msys2\\usr\\bin\\bash.exe"s);
-    // args.call<void>("push", "--login"s);
-    // args.call<void>("push", "-i"s);
-    obj.set("arguments", args);
-    Nui::val env = Nui::val::object();
-    env.set("MSYSTEM", impl_->settings.msystem);
-    env.set("CHERE_INVOKING", "1");
-    env.set("TERM", "xterm-256color");
-    obj.set("environment", env);
-    obj.set("defaultExitWaitTimeout", 3);
+    if (impl_->settings.engineOptions.environment)
+    {
+        Nui::val env = Nui::val::object();
+        for (auto const& [key, value] : *impl_->settings.engineOptions.environment)
+        {
+            env.set(key.c_str(), value);
+        }
+        obj.set("environment", env);
+    }
+    else
+    {
+        obj.set("environment", Nui::val::object());
+    }
+
+    if (impl_->settings.engineOptions.exitTimeoutSeconds)
+    {
+        obj.set("defaultExitWaitTimeout", *impl_->settings.engineOptions.exitTimeoutSeconds);
+    }
+    if (impl_->settings.engineOptions.cleanEnvironment)
+    {
+        obj.set("cleanEnvironment", *impl_->settings.engineOptions.cleanEnvironment);
+    }
+    obj.set("isPty", impl_->settings.engineOptions.isPty);
+
     obj.set("stdout", "msys2TerminalStdout_" + impl_->id);
     obj.set("stderr", "msys2TerminalStderr_" + impl_->id);
-    obj.set("cleanEnvironment", true);
-    obj.set("pathExtension", impl_->settings.msys2Directory + "/usr/bin");
-    obj.set("isPty", true);
+    // obj.set("pathExtension", impl_->settings.msys2Directory + "/usr/bin");
 
     Nui::RpcClient::callWithBackChannel(
         "ProcessStore::spawn",

@@ -1,7 +1,9 @@
 #include <frontend/session_area.hpp>
 #include <frontend/tailwind.hpp>
-#include <frontend/terminal/terminal.hpp>
-#include <frontend/terminal/msys2.hpp>
+#include <frontend/session.hpp>
+#include <log/log.hpp>
+
+#include <ui5/components/tab_container.hpp>
 
 #include <nui/frontend/api/console.hpp>
 #include <nui/frontend/elements.hpp>
@@ -9,22 +11,73 @@
 
 struct SessionArea::Implementation
 {
-    std::unique_ptr<Terminal> terminal;
+    Persistence::StateHolder* stateHolder;
+    Nui::Observed<std::vector<Session>> sessions;
 
-    Implementation()
-        : terminal{std::make_unique<Terminal>(std::make_unique<Msys2Terminal>(Msys2Terminal::Settings{}))}
+    Implementation(Persistence::StateHolder* stateHolder)
+        : stateHolder{stateHolder}
     {
         Nui::Console::log("SessionArea::Implementation()");
     }
 };
 
-SessionArea::SessionArea()
-    : impl_{std::make_unique<Implementation>()}
+SessionArea::SessionArea(Persistence::StateHolder* stateHolder)
+    : impl_{std::make_unique<Implementation>(stateHolder)}
 {
     Nui::Console::log("SessionArea::SessionArea()");
+
+    addSession("msys2 default");
 }
 
 ROAR_PIMPL_SPECIAL_FUNCTIONS_IMPL(SessionArea);
+
+void SessionArea::addSession(std::string const& name)
+{
+    impl_->stateHolder->load([this, name](bool success, Persistence::StateHolder& holder) {
+        if (!success)
+            return;
+
+        auto const& state = holder.stateCache();
+        auto engine = std::find_if(
+            begin(state.terminalEngines.value()), end(state.terminalEngines.value()), [name](const auto& engine) {
+                if (engine.name == name)
+                    return true;
+                return false;
+            });
+
+        if (engine == end(state.terminalEngines.value()))
+        {
+            Log::error("No engine found for name: {}", name);
+            return;
+        }
+
+        auto options = engine->options;
+        if (options.inherits)
+        {
+            Log::debug("Inheriting options from: {}", *options.inherits);
+            auto parent = std::find_if(
+                begin(state.terminalOptions.value()),
+                end(state.terminalOptions.value()),
+                [options](const auto& parentOption) {
+                    if (parentOption.id == *options.inherits)
+                        return true;
+                    return false;
+                });
+
+            if (parent == end(state.terminalOptions.value()))
+            {
+                Log::warn("Parent option not found for id: {}", *options.inherits);
+                return;
+            }
+
+            options.useDefaultsFrom(static_cast<Persistence::CommonTerminalOptions const&>(*parent));
+        }
+
+        Log::info("Adding session: {}", name);
+        impl_->sessions.emplace_back(impl_->stateHolder, *engine, options);
+        Nui::globalEventContext.executeActiveEventsImmediately();
+    });
+}
 
 Nui::ElementRenderer SessionArea::operator()()
 {
@@ -39,13 +92,16 @@ Nui::ElementRenderer SessionArea::operator()()
     return div{
         class_ = classes(defaultBgText, "[grid-area:SessionArea]")
     }(
-        div{
-            style = "height: 100%;",
-            reference.onMaterialize([this](Nui::val element) {
-                Nui::Console::log("materialize");
-                impl_->terminal->open(element);
-            })
-        }()
+        ui5::tabcontainer{
+            style = "height: calc(100% - 10px);"
+        }(
+            range(impl_->sessions),
+            [](long long, auto& session) {
+                return ui5::tab{"text"_prop = "asdf"}(
+                    session()
+                );
+            }
+        )
     );
     // clang-format on
 }

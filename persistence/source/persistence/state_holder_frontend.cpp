@@ -2,25 +2,24 @@
 
 namespace Persistence
 {
-    void StateHolder::load(std::function<void(std::optional<State> const&)> const& onLoad)
+    void StateHolder::load(std::function<void(bool, StateHolder&)> const& onLoad)
     {
         Nui::RpcClient::getRemoteCallableWithBackChannel(
-            "StateHolder::load", [onLoad](Nui::val const& jsonStringOrError) {
+            "StateHolder::load", [this, onLoad](Nui::val const& jsonStringOrError) {
                 if (jsonStringOrError.hasOwnProperty("error"))
                 {
-                    onLoad(std::nullopt);
+                    onLoad(false, *this);
                     return;
                 }
 
-                State state;
-                nlohmann::json::parse(jsonStringOrError.as<std::string>()).get_to(state);
-                onLoad(std::move(state));
+                nlohmann::json::parse(jsonStringOrError.as<std::string>()).get_to(stateCache_);
+                onLoad(true, *this);
             })();
     }
-    void StateHolder::save(State const& state, std::function<void()> const& onSaveComplete)
+    void StateHolder::save(std::function<void()> const& onSaveComplete)
     {
         Nui::RpcClient::getRemoteCallableWithBackChannel("StateHolder::save", [onSaveComplete](Nui::val const&) {
             onSaveComplete();
-        })(nlohmann::json(state).dump());
+        })(nlohmann::json(stateCache_).dump());
     }
 }

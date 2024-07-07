@@ -102,15 +102,26 @@ void ProcessStore::registerRpc(Nui::Window& wnd, Nui::RpcHub& hub)
                 const auto isPty = parameters.at("isPty").get<bool>();
                 const auto stdoutReceptacle = parameters.at("stdout").get<std::string>();
                 const auto stderrReceptacle = parameters.at("stderr").get<std::string>();
-                const auto cleanEnvironment = parameters.at("cleanEnvironment").get<bool>();
-                const auto pathExtension = parameters.at("pathExtension").get<std::string>();
 
                 Environment env;
-                if (!cleanEnvironment)
-                    env.loadFromCurrent();
 
-                if (!pathExtension.empty())
-                    env.extendPath(pathExtension);
+                if (parameters.contains("cleanEnvironment"))
+                {
+                    const auto cleanEnvironment = parameters.at("cleanEnvironment").get<bool>();
+                    if (!cleanEnvironment)
+                        env.loadFromCurrent();
+                }
+                else
+                {
+                    env.loadFromCurrent();
+                }
+
+                if (parameters.contains("pathExtension"))
+                {
+                    const auto pathExtension = parameters.at("pathExtension").get<std::string>();
+                    if (!pathExtension.empty())
+                        env.extendPath(pathExtension);
+                }
 
                 env.merge(environment);
                 auto uuid = std::make_shared<std::string>();

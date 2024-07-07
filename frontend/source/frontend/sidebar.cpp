@@ -5,10 +5,16 @@
 #include <nui/frontend/attributes.hpp>
 
 struct Sidebar::Implementation
-{};
+{
+    Persistence::StateHolder* stateHolder;
 
-Sidebar::Sidebar()
-    : impl_(std::make_unique<Implementation>())
+    Implementation(Persistence::StateHolder* stateHolder)
+        : stateHolder{stateHolder}
+    {}
+};
+
+Sidebar::Sidebar(Persistence::StateHolder* stateHolder)
+    : impl_(std::make_unique<Implementation>(stateHolder))
 {}
 
 ROAR_PIMPL_SPECIAL_FUNCTIONS_IMPL(Sidebar);

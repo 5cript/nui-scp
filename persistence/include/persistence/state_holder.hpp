@@ -18,15 +18,17 @@ namespace Persistence
         StateHolder();
         ROAR_PIMPL_SPECIAL_FUNCTIONS(StateHolder);
 
-        void load(std::function<void(std::optional<State> const&)> const& onLoad);
-        void save(State const& state, std::function<void()> const& onSaveComplete = []() {});
+        void load(std::function<void(bool, StateHolder&)> const& onLoad);
+        void save(std::function<void()> const& onSaveComplete = []() {});
+
+        State& stateCache();
 
 #ifdef NUI_BACKEND
         void registerRpc(Nui::RpcHub& rpcHub);
+        void initializeOsDefaults();
 #endif
 
       private:
-        struct Implementation;
-        std::unique_ptr<Implementation> impl_;
+        State stateCache_;
     };
 } // namespace Persistence

@@ -3,11 +3,13 @@
 #include <persistence/state_core.hpp>
 
 #include <persistence/state/terminal_engine.hpp>
+#include <persistence/inheritable_state.hpp>
 
 namespace Persistence
 {
     struct State
     {
+        StateWrap<std::vector<InheritableState<CommonTerminalOptions>>> terminalOptions{};
         StateWrap<std::vector<TerminalEngine>> terminalEngines{};
     };
 

@@ -8,6 +8,7 @@
 
 #include <filesystem>
 #include <fstream>
+#include <chrono>
 
 namespace Persistence
 {
@@ -29,59 +30,72 @@ namespace Persistence
         }
     }
 
-    void StateHolder::load(std::function<void(std::optional<State> const&)> const& onLoad)
+    void StateHolder::load(std::function<void(bool, StateHolder&)> const& onLoad)
     {
         setupPersistence();
         const auto path = Roar::resolvePath(Constants::persistencePath);
 
-        auto onLoadFailure = [this, &path]() {
-            // copy config to backup:
+        auto makeBackup = [&path]() {
             const auto backupFileName = [&path]() {
                 const auto now = std::chrono::system_clock::now();
                 const auto time = fmt::format("{:%Y-%m-%d_%H-%M-%S}", now);
 
                 return path.parent_path() / (path.filename().string() + ".backup_" + time);
             }();
-            std::filesystem::copy_file(path, backupFileName);
 
+            {
+                std::ifstream reader{path, std::ios_base::binary};
+                std::ofstream writer{backupFileName, std::ios_base::binary};
+
+                writer << reader.rdbuf();
+            }
             Log::info("Copied config file to backup: {}", backupFileName.string());
-            save({});
         };
 
         try
         {
-            const auto before = [&path, &onLoadFailure]() {
-                std::ifstream reader{path, std::ios_base::binary};
-                if (!reader.good())
+            const auto before = [this, &path, &makeBackup]() {
+                try
                 {
-                    onLoadFailure();
+                    std::ifstream reader{path, std::ios_base::binary};
+                    if (!reader.good())
+                        return nlohmann::json(nullptr);
+                    return nlohmann::json::parse(reader);
+                }
+                catch (std::exception const& e)
+                {
+                    Log::error("Failed to parse config file: {}", e.what());
+                    makeBackup();
+                    save();
                     return nlohmann::json(nullptr);
                 }
-
-                return nlohmann::json::parse(reader);
             }();
-            if (before.is_null())
-                return onLoad(std::nullopt);
 
-            State state;
-            before.get_to(state);
-            const auto after = nlohmann::json(state);
+            if (before.is_null())
+            {
+                onLoad(true, *this);
+                return;
+            }
+
+            before.get_to(stateCache_);
+            const auto after = nlohmann::json(stateCache_);
 
             if (!nlohmann::json::diff(before, after).empty())
             {
                 Log::warn("Config file misses some defaults, writing them back to disk.");
-                save(state);
+                makeBackup();
+                save();
             }
 
-            onLoad(state);
+            onLoad(true, *this);
         }
         catch (std::exception const& e)
         {
             Log::error("Failed to load config file: {}", e.what());
-            onLoad(std::nullopt);
+            onLoad(false, *this);
         }
     }
-    void StateHolder::save(State const& state, std::function<void()> const& onSaveComplete)
+    void StateHolder::save(std::function<void()> const& onSaveComplete)
     {
         setupPersistence();
         const auto path = Roar::resolvePath(Constants::persistencePath);
@@ -89,7 +103,7 @@ namespace Persistence
         try
         {
             std::ofstream writer{path, std::ios_base::binary};
-            writer << nlohmann::json(state).dump(4);
+            writer << nlohmann::json(stateCache_).dump(4);
             onSaveComplete();
         }
         catch (std::exception const& e)
@@ -104,8 +118,8 @@ namespace Persistence
         hub.registerFunction("StateHolder::load", [&hub, this](std::string responseId) {
             Log::debug("Received state load request from frontend state holder.");
 
-            load([responseId, &hub](std::optional<State> const& state) {
-                if (!state)
+            load([responseId, &hub](bool success, StateHolder& holder) {
+                if (!success)
                 {
                     hub.callRemote(
                         responseId,
@@ -115,7 +129,7 @@ namespace Persistence
                     return;
                 }
                 Log::debug("State loaded from disk.");
-                hub.callRemote(responseId, nlohmann::json(*state).dump());
+                hub.callRemote(responseId, nlohmann::json(holder.stateCache_).dump());
             });
         });
 
@@ -124,7 +138,8 @@ namespace Persistence
 
             try
             {
-                save(nlohmann::json::parse(state).get<State>(), [&hub, responseId]() {
+                stateCache_ = nlohmann::json::parse(state).get<State>();
+                save([&hub, responseId]() {
                     Log::debug("State saved to disk.");
                     hub.callRemote(responseId, nlohmann::json{{"success", true}});
                 });
@@ -136,6 +151,34 @@ namespace Persistence
                     nlohmann::json{
                         {"error", fmt::format("Failed to save state to disk: {}", e.what())},
                     });
+            }
+        });
+    }
+
+    void StateHolder::initializeOsDefaults()
+    {
+        load([this](bool success, StateHolder&) {
+            if (!success)
+                return;
+
+            if (stateCache_.terminalEngines.empty())
+            {
+#ifdef _WIN32
+                stateCache_.terminalEngines.push_back({
+                    .type = "msys2",
+                    .name = "msys2 default",
+                    .engine = defaultMsys2TerminalEngine(),
+                });
+#elif __APPLE__
+// nothing
+#else
+                stateCache_.terminalEngines.push_back({
+                    .type = "shell",
+                    .name = "bash default",
+                    .engine = defaultBashTerminalEngine(),
+                });
+#endif
+                save();
             }
         });
     }

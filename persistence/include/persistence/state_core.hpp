@@ -84,7 +84,8 @@ namespace Detail
     {
         static void toJson(nlohmann::json& json, T const& value, char const* name)
         {
-            json[name] = *value;
+            if (value)
+                json[name] = *value;
         }
     };
 
@@ -105,7 +106,8 @@ namespace Detail
     {
         static void toJson(nlohmann::json& json, Persistence::StateWrap<T> const& value, char const* name)
         {
-            json[name] = *Persistence::unwrap(value);
+            if (auto const& v = Persistence::unwrap(value); v)
+                json[name] = *v;
         }
     };
 #endif

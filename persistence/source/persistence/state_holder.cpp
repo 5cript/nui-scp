@@ -2,13 +2,13 @@
 
 namespace Persistence
 {
-    struct StateHolder::Implementation
-    {
-        State state;
-    };
-
     StateHolder::StateHolder()
-        : impl_(std::make_unique<Implementation>())
+        : stateCache_{}
     {}
     ROAR_PIMPL_SPECIAL_FUNCTIONS_IMPL(StateHolder);
+
+    State& StateHolder::stateCache()
+    {
+        return stateCache_;
+    }
 } // namespace Persistence

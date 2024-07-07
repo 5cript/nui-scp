@@ -9,15 +9,17 @@
 
 struct MainPage::Implementation
 {
+    Persistence::StateHolder* stateHolder;
     Sidebar sidebar;
     Toolbar toolbar;
     SessionArea session_area;
     Nui::Observed<bool> darkMode;
 
-    Implementation()
-        : sidebar{}
-        , toolbar{}
-        , session_area{}
+    Implementation(Persistence::StateHolder* stateHolder)
+        : stateHolder{stateHolder}
+        , sidebar{stateHolder}
+        , toolbar{stateHolder}
+        , session_area{stateHolder}
         , darkMode{true}
     {
         Nui::Console::log("MainPage::Implementation()");
@@ -29,8 +31,8 @@ struct MainPage::Implementation
     }
 };
 
-MainPage::MainPage()
-    : impl_{std::make_unique<Implementation>()}
+MainPage::MainPage(Persistence::StateHolder* stateHolder)
+    : impl_{std::make_unique<Implementation>(stateHolder)}
 {
     Nui::Console::log("MainPage::MainPage()");
 }

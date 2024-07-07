@@ -2,6 +2,7 @@ add_library(
     persistence
     STATIC
         state/terminal_engine.cpp
+        state/common_terminal_options.cpp
         state_holder.cpp
         state.cpp
 )
