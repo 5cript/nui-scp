@@ -13,6 +13,7 @@ endforeach()
 
 add_custom_command(
     OUTPUT ${THEME_OUTPUTS}
+    COMMAND ${CMAKE_COMMAND} -E create_symlink "${CMAKE_CURRENT_BINARY_DIR}/node_modules" "${CMAKE_SOURCE_DIR}/themes/node_modules"
     COMMAND ${NUI_NODE} "${CMAKE_SOURCE_DIR}/themes/compile.mjs" "${THEME_OUTPUT_DIRECTORY}"
     DEPENDS ${THEME_DEPENDS}
     WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}"
