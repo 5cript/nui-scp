@@ -244,7 +244,7 @@ void Process::spawn(
         boost::asio::any_io_executor,
         std::filesystem::path const& executable,
         std::vector<std::string> const& args,
-        boost::process::v2::process_environment)> launcher)
+        std::unordered_map<bp2::environment::key, bp2::environment::value>)> launcher)
 {
     impl_->defaultExitWaitTimeout = defaultExitWaitTimeout;
     if (impl_->isRunning())
@@ -282,7 +282,7 @@ void Process::spawn(
     }
     else
     {
-        impl_->child = launcher(impl_->executor, executable, arguments, bp2::process_environment{env});
+        impl_->child = launcher(impl_->executor, executable, arguments, env);
     }
 }
 

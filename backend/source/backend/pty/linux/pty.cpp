@@ -155,6 +155,9 @@ namespace PTY
             Log::error("Failed to open pty: {}", strerror(errno));
             return std::nullopt;
         }
+        else {
+            Log::info("Opened pty: {}", name);
+        }
 
         return std::optional<PseudoTerminal>(std::move(term));
     }

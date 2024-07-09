@@ -31,7 +31,7 @@ class Process : public std::enable_shared_from_this<Process>
             boost::asio::any_io_executor,
             std::filesystem::path const& executable,
             std::vector<std::string> const& args,
-            boost::process::v2::process_environment)> launcher = {});
+            std::unordered_map<boost::process::v2::environment::key, boost::process::v2::environment::value>)> launcher = {});
 
     /**
      * @brief Returns true if an async operation was started to exit the process.

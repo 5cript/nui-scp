@@ -86,8 +86,7 @@ std::string ProcessStore::emplace(
             defaultExitWaitTimeout,
             [&pty2](auto executor, auto const& executable, auto const& arguments, auto const& env) {
                 bp2::posix::default_launcher launcher;
-                auto init = pty2.makeProcessLauncherInit();
-                return std::make_unique<bp2::process>(launcher(executor, executable, arguments, env, init));
+                return std::make_unique<bp2::process>(launcher(executor, executable, arguments, bp2::process_environment{env}, pty2.makeProcessLauncherInit()));
             });
 #endif
     }
