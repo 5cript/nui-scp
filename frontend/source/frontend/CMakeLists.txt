@@ -1,3 +1,5 @@
+set(NUISCP_NPM_INSTALL_ARGS "" CACHE STRING "Arguments to pass to npm install for nui-scp")
+
 target_sources(
     ${PROJECT_NAME}
     PRIVATE
@@ -34,6 +36,7 @@ nui_prepare_emscripten_target(
     PREJS
         ${PREJS_FILE}
     NPM_INSTALL_ARGS
+        ${NUISCP_NPM_INSTALL_ARGS}
     EMSCRIPTEN_LINK_OPTIONS
         -sEXPORTED_FUNCTIONS=_frontendMain
         -sALLOW_MEMORY_GROWTH=1
