@@ -76,14 +76,16 @@ namespace Persistence
             }
 
             before.get_to(stateCache_);
-            const auto after = nlohmann::json(stateCache_);
 
-            if (!nlohmann::json::diff(before, after).empty())
-            {
-                Log::warn("Config file misses some defaults, writing them back to disk.");
-                makeBackup();
-                save();
-            }
+            // TODO: fix this
+            // const auto after = nlohmann::json(stateCache_);
+
+            // if (!nlohmann::json::diff(before, after).empty())
+            // {
+            //     Log::warn("Config file misses some defaults, writing them back to disk.");
+            //     makeBackup();
+            //     save();
+            // }
 
             onLoad(true, *this);
         }

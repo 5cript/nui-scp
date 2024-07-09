@@ -131,10 +131,14 @@ namespace PTY
 
         // TODO: Should the user be able to specify the flags?
         termios ttyOptions;
-        ttyOptions.c_iflag = IUTF8;
-        ttyOptions.c_oflag = (tcflag_t)0;
-        ttyOptions.c_lflag = (tcflag_t)0;
-        ttyOptions.c_cflag = CS8;
+        ttyOptions.c_cflag |= (CLOCAL | CREAD);
+        ttyOptions.c_cflag &= ~PARENB;
+        ttyOptions.c_cflag &= ~CSTOPB;
+        ttyOptions.c_cflag &= ~CSIZE;
+        ttyOptions.c_cflag |= CS8;
+        ttyOptions.c_cflag &= ~( ICANON | ECHO | ECHOE |ISIG );
+        ttyOptions.c_iflag &= ~(IXON | IXOFF | IXANY );
+        ttyOptions.c_oflag &= ~OPOST;
 
         winsize initialSize{
             .ws_row = 30,

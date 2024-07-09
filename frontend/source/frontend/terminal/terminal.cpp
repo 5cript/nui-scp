@@ -14,6 +14,7 @@
 js_import { Terminal } from "@xterm/xterm";
 js_import { FitAddon } from "@xterm/addon-fit";
 js_import { WebglAddon } from "@xterm/addon-webgl";
+js_import { CanvasAddon } from "@xterm/addon-canvas";
 js_import { nanoid } from "nanoid";
 
 globalThis.terminalUtility = {};
@@ -23,6 +24,17 @@ globalThis.terminalUtility.stringToUint8Array = (str) => {
 globalThis.terminalUtility.terminals = new Map();
 globalThis.terminalUtility.createTerminal = (host, options) => {
     console.log(host);
+
+    let renderer = undefined;
+    if (options.hasOwnProperty("renderer")) {
+        if (options.renderer === "canvas") {
+            renderer = new CanvasAddon();
+        } else if (options.renderer === "dom") {
+            renderer = undefined;
+        } else if (options.renderer === "webgl") {
+            renderer = new WebglAddon();
+        }
+    }
 
     const terminal = new Terminal({
         cursorBlink: true,
@@ -38,11 +50,12 @@ globalThis.terminalUtility.createTerminal = (host, options) => {
     });
     const addons = {
         fitAddon: new FitAddon(),
-        webglAddon: new WebglAddon()
+        rendererAddon: renderer
     };
     for (const [key, value] of Object.entries(addons))
     {
-        terminal.loadAddon(value);
+        if (value)
+            terminal.loadAddon(value);
     }
 
     terminal.open(host);

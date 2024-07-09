@@ -76,6 +76,8 @@ namespace Detail
         {
             if (auto it = json.find(name); it != json.end())
                 value = it->get<typename T::value_type>();
+            else
+                value = std::nullopt;
         }
     };
 

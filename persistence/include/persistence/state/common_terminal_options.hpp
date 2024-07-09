@@ -46,6 +46,7 @@ namespace Persistence
         std::optional<std::string> fontFamily{std::nullopt};
         std::optional<unsigned int> fontSize{std::nullopt};
         std::optional<bool> cursorBlink{std::nullopt};
+        std::optional<std::string> renderer{std::nullopt};
         std::optional<TerminalTheme> theme{};
 
         void useDefaultsFrom(CommonTerminalOptions const& other);
