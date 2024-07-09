@@ -33,6 +33,7 @@ include("${CMAKE_CURRENT_LIST_DIR}/_cmake/dependencies.cmake")
 set(PREJS_FILE "${CMAKE_SOURCE_DIR}/frontend/source/frontend/js/module.js")
 
 if (EMSCRIPTEN)
+    include("${CMAKE_CURRENT_LIST_DIR}/_cmake/theme_compilation.cmake")
     include("${CMAKE_CURRENT_LIST_DIR}/_cmake/dependencies/ui5.cmake")
     add_subdirectory("${CMAKE_SOURCE_DIR}/frontend/source/frontend")
 else()
@@ -47,4 +48,12 @@ else()
             VERBATIM
         )
     endif()
+
+    # Copy bin (for SAPUI5) files to destination for themes and languages
+    add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_directory "${CMAKE_BINARY_DIR}/module_${PROJECT_NAME}/bin" "$<TARGET_FILE_DIR:${PROJECT_NAME}>/dynamic_sources"
+        COMMAND ${CMAKE_COMMAND} -E rm "$<TARGET_FILE_DIR:${PROJECT_NAME}>/dynamic_sources/index.html"
+        COMMAND ${CMAKE_COMMAND} -E rm "$<TARGET_FILE_DIR:${PROJECT_NAME}>/dynamic_sources/index.js"
+        VERBATIM
+    )
 endif()

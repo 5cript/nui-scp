@@ -22,6 +22,7 @@
 #include <string>
 #include <string_view>
 #include <memory>
+#include <unordered_map>
 
 using namespace std::string_literals;
 using namespace std::chrono_literals;
@@ -29,6 +30,35 @@ using namespace Nui;
 
 namespace
 {
+    auto makeResponse(int code, std::string const& reason, std::string body, std::string const& mimeType = ""s)
+    {
+        std::unordered_multimap<std::string, std::string> headers = {
+            {"Content-Type"s, mimeType.empty() ? "text/plain" : mimeType},
+            // Do not forget to allow CORS
+            {"Access-Control-Allow-Origin"s, "*"s},
+        };
+
+        if (!body.empty())
+            headers.emplace("Content-Length"s, std::to_string(body.size()));
+
+        return CustomSchemeResponse{
+            .statusCode = code,
+            .reasonPhrase = reason,
+            .headers = std::move(headers),
+            .body = std::move(body),
+        };
+    };
+
+    auto readFile(std::filesystem::path const& path)
+    {
+        std::ifstream reader{path, std::ios::binary};
+        reader.seekg(0, std::ios::end);
+        std::string content(reader.tellg(), '\0');
+        reader.seekg(0, std::ios::beg);
+        reader.read(&content[0], content.size());
+        return content;
+    };
+
     CustomScheme createFolderMapping(std::filesystem::path const& programDir, std::string const& schemeName)
     {
         return CustomScheme{
@@ -37,12 +67,42 @@ namespace
             .onRequest =
                 [programDir, schemeName](CustomSchemeRequest const& request) {
                     // make path relative to / to avoid directory traversal
-                    const auto file =
-                        programDir / schemeName / std::filesystem::relative(request.parseUrl()->pathAsString(), "/");
+                    const auto url = request.parseUrl();
+                    if (!url)
+                    {
+                        Log::error("Failed to parse url: '{}'", request.uri);
+                        return makeResponse(400, "Bad Request", "Bad Request");
+                    }
+
+                    const auto pathString = url->pathAsString();
+                    Log::debug("Request for {}", pathString);
+
+                    if (pathString == "/index.html")
+                        return makeResponse(200, "OK", index(), "text/html");
+
+                    const auto file = [&]() {
+                        const auto endsWith = [&](std::string_view ending) {
+                            return pathString.size() >= ending.size() &&
+                                pathString.substr(pathString.size() - ending.size()) == ending;
+                        };
+
+                        if (endsWith("css_variables.css"))
+                        {
+                            return programDir / "themes" / std::filesystem::path{pathString}.parent_path().filename() /
+                                "css_variables.css";
+                        }
+
+                        // make path relative to / to avoid directory traversal
+                        if (endsWith(".js") || endsWith(".map") || endsWith(".css") || endsWith(".ttf"))
+                            return programDir / "dynamic_sources" / std::filesystem::relative(pathString, "/");
+                        else
+                            return programDir / "assets" / std::filesystem::relative(pathString, "/");
+                    }();
 
                     // Check if file exists and return 404 if not
                     if (!std::filesystem::exists(file))
                     {
+                        Log::error("File not found: '{}'", file.string());
                         return CustomSchemeResponse{
                             .statusCode = 404,
                             .reasonPhrase = "Not Found",
@@ -57,45 +117,15 @@ namespace
                     }
 
                     // Read file
-                    std::ifstream reader{file, std::ios::binary};
-                    if (!reader.is_open())
-                    {
-                        return CustomSchemeResponse{
-                            .statusCode = 500,
-                            .reasonPhrase = "Internal Server Error",
-                            .headers =
-                                {
-                                    {"Content-Type"s, "text/plain"s},
-                                    // Do not forget to allow CORS
-                                    {"Access-Control-Allow-Origin"s, "*"s},
-                                },
-                            .body = "Internal Server Error",
-                        };
-                    }
-
-                    reader.seekg(0, std::ios::end);
-                    std::string content(reader.tellg(), '\0');
-                    reader.seekg(0, std::ios::beg);
-                    reader.read(&content[0], content.size());
-
-                    // Get mime type
-                    const std::string mime =
-                        Roar::extensionToMime(file.extension().string()).value_or("application/octet-stream");
+                    auto content = readFile(file);
 
                     // Return file
-                    return CustomSchemeResponse{
-                        .statusCode = content.empty() ? 204 : 200,
-                        .reasonPhrase = "OK",
-                        .headers =
-                            {
-                                {"Content-Type"s, mime},
-                                // Do not forget to allow CORS
-                                {"Access-Control-Allow-Origin"s, "*"s},
-                            },
-
-                        // Currently there is no streaming way to write the body, if its large.
-                        .body = content,
-                    };
+                    const auto code = content.empty() ? 204 : 200;
+                    return makeResponse(
+                        code,
+                        "OK",
+                        std::move(content),
+                        Roar::extensionToMime(file.extension().string()).value_or("application/octet-stream"));
                 },
 
             // Windows: Is this secure like https (not http)? A lot of things are not allowed in http.
@@ -115,7 +145,7 @@ Main::Main(int const, char const* const* argv)
           Nui::WindowOptions{
               .title = "NuiScp"s,
               .debug = true,
-              .customSchemes = {createFolderMapping(programDir_, "liveload"), createFolderMapping(programDir_, "assets")},
+              .customSchemes = {createFolderMapping(programDir_, "nui")},
           },
       }
     , hub_{window_}
@@ -143,7 +173,8 @@ void Main::show()
 {
     window_.setSize(1200, 800, Nui::WebViewHint::WEBVIEW_HINT_NONE);
     window_.centerOnPrimaryDisplay();
-    window_.setHtml(index());
+    // window_.setHtml(index());
+    window_.navigate("nui://app.example/index.html");
     window_.setConsoleOutput(false);
     window_.run();
 }

@@ -34,7 +34,6 @@ nui_prepare_emscripten_target(
     PREJS
         ${PREJS_FILE}
     NPM_INSTALL_ARGS
-        --loglevel=verbose
     EMSCRIPTEN_LINK_OPTIONS
         -sEXPORTED_FUNCTIONS=_frontendMain
         -sALLOW_MEMORY_GROWTH=1
@@ -45,3 +44,6 @@ nui_prepare_emscripten_target(
         # -O3
         -g
 )
+
+add_dependencies(theme_compilation ${PROJECT_NAME}-npm-install)
+add_dependencies(${PROJECT_NAME}-parcel theme_compilation)

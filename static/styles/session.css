@@ -1,0 +1,15 @@
+.terminal-session *::-webkit-scrollbar {
+    width: 10px;
+}
+
+.terminal-session *::-webkit-scrollbar-thumb {
+    border-radius: 8px;
+    background-color: #363636;
+}
+
+.terminal-session *::-webkit-scrollbar-track {
+    border-radius: 8px;
+    background-color: #363636;
+    border: 1px solid #202020;
+    box-shadow: inset 0 0 6px rgba(240, 240, 240, .5);
+}

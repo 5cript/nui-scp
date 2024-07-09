@@ -90,10 +90,12 @@ Nui::ElementRenderer SessionArea::operator()()
 
     // clang-format off
     return div{
-        class_ = classes(defaultBgText, "[grid-area:SessionArea]")
+        class_ = classes(defaultBgText, "session-area", "[grid-area:SessionArea]")
     }(
         ui5::tabcontainer{
-            style = "height: calc(100% - 10px);"
+            style = "height: calc(100% - 10px);display: block",
+            class_ = "session-area-tabs",
+            "fixed"_prop = true,
         }(
             range(impl_->sessions),
             [](long long, auto& session) {

@@ -1,0 +1,5 @@
+.session-area-tabs::part(content) {
+    padding: 0;
+}
+
+.session-area-tabs::part(tabstrip) {}

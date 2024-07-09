@@ -11,7 +11,7 @@ struct Session::Implementation
 {
     Persistence::StateHolder* stateHolder;
     Persistence::TerminalEngine engine;
-    Persistence::CommonTerminalOptions options;
+    Nui::Observed<Persistence::CommonTerminalOptions> options;
     Nui::Observed<std::unique_ptr<Terminal>> terminal;
     Nui::StableElement stable;
 
@@ -48,6 +48,7 @@ Nui::ElementRenderer Session::operator()()
     using namespace Nui;
     using namespace Nui::Elements;
     using namespace Nui::Attributes;
+    using namespace Nui::Attributes::Literals;
     using Nui::Elements::div; // because of the global div.
 
     Nui::Console::log("Session::operator()");
@@ -57,15 +58,20 @@ Nui::ElementRenderer Session::operator()()
         impl_->stable,
         div{
             class_ = "terminal-session",
+            style = "height: 100%;",
         }(
             observe(impl_->terminal),
             [this](){
                 return div{
-                    style = "height: 100%;",
+                    style = Style{
+                        "height"_style = "100%",
+                        "background-color"_style = observe(impl_->options).generate([this]() -> std::string {
+                            return impl_->options->theme ? impl_->options->theme->background.value_or("#303030") : "#303030";
+                        }),
+                    },
                     reference.onMaterialize([this](Nui::val element) {
-                        Nui::Console::log("materialize");
                         if (impl_->terminal.value())
-                            impl_->terminal.value()->open(element, impl_->options);
+                            impl_->terminal.value()->open(element, *impl_->options);
                     })
                 }();
             }
