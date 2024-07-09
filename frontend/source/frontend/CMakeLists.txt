@@ -10,7 +10,7 @@ target_sources(
         session_area.cpp
         session.cpp
         terminal/terminal.cpp
-        terminal/msys2.cpp
+        terminal/executing_engine.cpp
 )
 
 target_include_directories(${PROJECT_NAME} PRIVATE ${CMAKE_SOURCE_DIR}/frontend/include)

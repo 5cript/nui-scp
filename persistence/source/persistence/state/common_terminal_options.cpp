@@ -4,7 +4,7 @@ namespace Persistence
 {
     void to_json(nlohmann::json& j, TerminalTheme const& theme)
     {
-        j = {};
+        j = nlohmann::json::object();
 
         TO_JSON_OPTIONAL(j, theme, background);
         TO_JSON_OPTIONAL(j, theme, black);
@@ -115,6 +115,8 @@ namespace Persistence
 
     void to_json(nlohmann::json& j, CommonTerminalOptions const& engine)
     {
+        j = nlohmann::json::object();
+
         TO_JSON_OPTIONAL(j, engine, fontFamily);
         TO_JSON_OPTIONAL(j, engine, fontSize);
         TO_JSON_OPTIONAL(j, engine, cursorBlink);
@@ -123,6 +125,8 @@ namespace Persistence
     }
     void from_json(nlohmann::json const& j, CommonTerminalOptions& engine)
     {
+        engine = {};
+
         FROM_JSON_OPTIONAL(j, engine, inherits);
         FROM_JSON_OPTIONAL(j, engine, fontFamily);
         FROM_JSON_OPTIONAL(j, engine, fontSize);

@@ -4,12 +4,13 @@
 #include <nlohmann/json.hpp>
 #include <roar/utility/base64.hpp>
 #include <boost/uuid/uuid_io.hpp>
+#include <log/log.hpp>
 
 #ifdef _WIN32
 #    include <backend/pty/windows/conpty.hpp>
+#else
+#    include <backend/pty/linux/pty.hpp>
 #endif
-
-#include <iostream>
 
 using namespace std::chrono_literals;
 namespace bp2 = boost::process::v2;
@@ -54,11 +55,40 @@ std::string ProcessStore::emplace(
         auto pty = createPseudoConsole();
         processes_[processId]->attachState(0, std::move(pty));
 
-        bp2::windows::default_launcher launcher;
         auto& pty2 = processes_[processId]->getState<ConPTY::PseudoConsole>(ProcessAttachedState::PseudoConsole);
         pty2.prepareProcessLauncher(launcher);
-        processes_[processId]->spawn(command, arguments, environment, defaultExitWaitTimeout, &launcher);
+        processes_[processId]->spawn(
+            command,
+            arguments,
+            environment,
+            defaultExitWaitTimeout,
+            [](auto executor, auto const& executable, auto const& arguments, auto const& env) {
+                bp2::windows::default_launcher launcher;
+                return std::make_unique<bp2::process>(launcher(executor, executable, arguments, env));
+            });
         pty2.closeOtherPipeEnd();
+#else
+        using namespace PTY;
+        auto pty = createPseudoTerminal(executor_);
+        if (!pty)
+        {
+            processes_.erase(processId);
+            Log::error("Failed to create PTY");
+        }
+        Log::info("Created PTY");
+        processes_[processId]->attachState(0, std::move(pty).value());
+
+        auto& pty2 = processes_[processId]->getState<PTY::PseudoTerminal>(ProcessAttachedState::PseudoConsole);
+        processes_[processId]->spawn(
+            command,
+            arguments,
+            environment,
+            defaultExitWaitTimeout,
+            [&pty2](auto executor, auto const& executable, auto const& arguments, auto const& env) {
+                bp2::posix::default_launcher launcher;
+                auto init = pty2.makeProcessLauncherInit();
+                return std::make_unique<bp2::process>(launcher(executor, executable, arguments, env, init));
+            });
 #endif
     }
     else
@@ -90,7 +120,7 @@ void ProcessStore::registerRpc(Nui::Window& wnd, Nui::RpcHub& hub)
         [this, hub = &hub, wnd = &wnd](std::string const& responseId, nlohmann::json const& parameters) {
             try
             {
-                std::cout << parameters.dump(4) << std::endl;
+                Log::info("Spawning process with parameters: {}", parameters.dump(4));
 
                 const auto command = parameters.at("command").get<std::string>();
                 const auto arguments = parameters.at("arguments").get<std::vector<std::string>>();
@@ -130,10 +160,15 @@ void ProcessStore::registerRpc(Nui::Window& wnd, Nui::RpcHub& hub)
                 *uuid = processId;
 
 #ifdef _WIN32
+                using PtyType = ConPTY::PseudoConsole;
+#else
+                using PtyType = PTY::PseudoTerminal;
+#endif
+
                 if (processes_[processId]->getState<ProcessInfo>(ProcessAttachedState::ProcessInfo).isPty)
                 {
-                    auto& pty =
-                        processes_[processId]->getState<ConPTY::PseudoConsole>(ProcessAttachedState::PseudoConsole);
+                    Log::info("Starting PTY reading");
+                    auto& pty = processes_[processId]->getState<PtyType>(ProcessAttachedState::PseudoConsole);
                     pty.startReading(
                         [wnd, hub, stdoutReceptacle, uuid](std::string_view message) {
                             wnd->runInJavascriptThread([hub, stdoutReceptacle, uuid, msg = std::string{message}]() {
@@ -152,27 +187,31 @@ void ProcessStore::registerRpc(Nui::Window& wnd, Nui::RpcHub& hub)
                 }
                 else
                 {
+                    Log::info("Starting non-PTY reading");
                     processes_[processId]->startReading(
-                        [hub, stdoutReceptacle, uuid](std::string_view message) {
-                            hub->callRemote(
-                                stdoutReceptacle,
-                                nlohmann::json{{"uuid", *uuid}, {"data", Roar::base64Encode(std::string{message})}});
+                        [hub, stdoutReceptacle, uuid, wnd](std::string_view message) {
+                            wnd->runInJavascriptThread([hub, stdoutReceptacle, uuid, msg = std::string{message}]() {
+                                hub->callRemote(
+                                    stdoutReceptacle,
+                                    nlohmann::json{{"uuid", *uuid}, {"data", Roar::base64Encode(msg)}});
+                            });
                             return true;
                         },
-                        [hub, stderrReceptacle, uuid](std::string_view message) {
-                            hub->callRemote(
-                                stderrReceptacle,
-                                nlohmann::json{{"uuid", *uuid}, {"data", Roar::base64Encode(std::string{message})}});
+                        [hub, stderrReceptacle, uuid, wnd](std::string_view message) {
+                            wnd->runInJavascriptThread([hub, stderrReceptacle, uuid, msg = std::string{message}]() {
+                                hub->callRemote(
+                                    stderrReceptacle,
+                                    nlohmann::json{{"uuid", *uuid}, {"data", Roar::base64Encode(msg)}});
+                            });
                             return true;
                         });
                 }
-#else
-#endif
 
                 hub->callRemote(responseId, nlohmann::json{{"uuid", processId}});
             }
             catch (std::exception const& e)
             {
+                Log::error("Failed to spawn process: {}", e.what());
                 hub->callRemote(responseId, nlohmann::json{{"error", e.what()}});
                 return;
             }
@@ -183,6 +222,7 @@ void ProcessStore::registerRpc(Nui::Window& wnd, Nui::RpcHub& hub)
             try
             {
                 const auto uuid = parameters.at("uuid").get<std::string>();
+                Log::info("Terminating process with UUID: {}", uuid);
 
                 auto process = processes_.find(uuid);
                 if (process == processes_.end())
@@ -206,6 +246,7 @@ void ProcessStore::registerRpc(Nui::Window& wnd, Nui::RpcHub& hub)
         "ProcessStore::exit", [this, hub = &hub](std::string const& responseId, std::string const& uuid) {
             try
             {
+                Log::info("Exiting process with UUID: {}", uuid);
                 auto process = processes_.find(uuid);
                 if (process == processes_.end())
                 {
@@ -237,14 +278,19 @@ void ProcessStore::registerRpc(Nui::Window& wnd, Nui::RpcHub& hub)
                 }
 
 #ifdef _WIN32
+                using PtyType = ConPTY::PseudoConsole;
+#else
+                using PtyType = PTY::PseudoTerminal;
+#endif
+
                 if (process->second->getState<ProcessInfo>(ProcessAttachedState::ProcessInfo).isPty)
                 {
-                    auto& pty = process->second->getState<ConPTY::PseudoConsole>(ProcessAttachedState::PseudoConsole);
+                    auto& pty = process->second->getState<PtyType>(ProcessAttachedState::PseudoConsole);
                     pty.write(Roar::base64Decode(data));
                 }
                 else
                     process->second->write(Roar::base64Decode(data) + "\r");
-#endif
+
                 hub->callRemote(responseId, nlohmann::json{{"success", true}});
             }
             catch (std::exception const& e)
@@ -259,6 +305,7 @@ void ProcessStore::registerRpc(Nui::Window& wnd, Nui::RpcHub& hub)
         [this, hub = &hub](std::string const& responseId, std::string const& uuid, int cols, int rows) {
             try
             {
+                Log::info("Resizing PTY with UUID: {} to cols: {}, rows: {}", uuid, cols, rows);
                 auto process = processes_.find(uuid);
                 if (process == processes_.end())
                 {
@@ -267,12 +314,16 @@ void ProcessStore::registerRpc(Nui::Window& wnd, Nui::RpcHub& hub)
                 }
 
 #ifdef _WIN32
+                using PtyType = ConPTY::PseudoConsole;
+#else
+                using PtyType = PTY::PseudoTerminal;
+#endif
+
                 if (process->second->getState<ProcessInfo>(ProcessAttachedState::ProcessInfo).isPty)
                 {
-                    auto& pty = process->second->getState<ConPTY::PseudoConsole>(ProcessAttachedState::PseudoConsole);
+                    auto& pty = process->second->getState<PtyType>(ProcessAttachedState::PseudoConsole);
                     pty.resize(cols, rows);
                 }
-#endif
             }
             catch (std::exception const& e)
             {

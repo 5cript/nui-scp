@@ -15,12 +15,20 @@ if (WIN32)
             pty/windows/pipe.cpp
     )
 else()
+    target_sources(
+        ${PROJECT_NAME}
+        PRIVATE
+            pty/linux/pty.cpp
+    )
+
     target_compile_definitions(${PROJECT_NAME} PRIVATE -DBOOST_PROCESS_V2_SEPARATE_COMPILATION)
 endif()
 
 find_package(Boost CONFIG 1.81.0 REQUIRED COMPONENTS system filesystem)
 
 target_include_directories(${PROJECT_NAME} PRIVATE "${CMAKE_SOURCE_DIR}/backend/include")
+
+target_compile_definitions(${PROJECT_NAME} PRIVATE -DBOOST_PROCESS_USE_STD_FS=1)
 
 # Link backend of nui outside of emscripten
 target_link_libraries(

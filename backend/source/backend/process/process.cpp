@@ -240,7 +240,11 @@ void Process::spawn(
     std::vector<std::string> const& arguments,
     Environment environment,
     std::chrono::seconds defaultExitWaitTimeout,
-    void* launcherHijack)
+    std::function<std::unique_ptr<boost::process::v2::process>(
+        boost::asio::any_io_executor,
+        std::filesystem::path const& executable,
+        std::vector<std::string> const& args,
+        boost::process::v2::process_environment)> launcher)
 {
     impl_->defaultExitWaitTimeout = defaultExitWaitTimeout;
     if (impl_->isRunning())
@@ -267,7 +271,7 @@ void Process::spawn(
         impl_->exited = false;
     }
 
-    if (launcherHijack == nullptr)
+    if (!launcher)
     {
         impl_->child = std::make_unique<bp2::process>(
             impl_->executor,
@@ -278,13 +282,7 @@ void Process::spawn(
     }
     else
     {
-#ifdef _WIN32
-        auto& launcher = *static_cast<bp2::windows::default_launcher*>(launcherHijack);
-        impl_->child = std::make_unique<bp2::process>(
-            launcher(impl_->executor, executable, arguments, bp2::process_environment{env}));
-#else
-        throw std::runtime_error("Launcher hijack not supported on this platform");
-#endif
+        impl_->child = launcher(impl_->executor, executable, arguments, bp2::process_environment{env});
     }
 }
 

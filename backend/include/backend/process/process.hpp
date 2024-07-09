@@ -2,9 +2,11 @@
 
 #include <backend/process/environment.hpp>
 
+#include <boost/process/v2.hpp>
 #include <boost/asio/any_io_executor.hpp>
 #include <roar/detail/pimpl_special_functions.hpp>
 #include <nui/utility/move_detector.hpp>
+#include <boost/process/v2/environment.hpp>
 
 #include <memory>
 #include <string>
@@ -25,7 +27,11 @@ class Process : public std::enable_shared_from_this<Process>
         std::vector<std::string> const& arguments,
         Environment environment,
         std::chrono::seconds defaultExitWaitTimeout = std::chrono::seconds{10},
-        void* launcherHijack = nullptr);
+        std::function<std::unique_ptr<boost::process::v2::process>(
+            boost::asio::any_io_executor,
+            std::filesystem::path const& executable,
+            std::vector<std::string> const& args,
+            boost::process::v2::process_environment)> launcher = {});
 
     /**
      * @brief Returns true if an async operation was started to exit the process.

@@ -1,12 +1,12 @@
-#include <frontend/terminal/msys2.hpp>
+#include <frontend/terminal/executing_engine.hpp>
 
 #include <nui/rpc.hpp>
 
 using namespace std::string_literals;
 
-struct Msys2Terminal::Implementation
+struct ExecutingTerminalEngine::Implementation
 {
-    Msys2Terminal::Settings settings;
+    ExecutingTerminalEngine::Settings settings;
     std::string id;
 
     Nui::RpcClient::AutoUnregister stdoutReceiver;
@@ -17,7 +17,7 @@ struct Msys2Terminal::Implementation
     std::function<void(std::string const&)> stdoutHandler;
     std::function<void(std::string const&)> stderrHandler;
 
-    Implementation(Msys2Terminal::Settings&& settings)
+    Implementation(ExecutingTerminalEngine::Settings&& settings)
         : settings{std::move(settings)}
         , id{Nui::val::global("nanoid")().as<std::string>()}
         , stdoutReceiver{}
@@ -28,17 +28,17 @@ struct Msys2Terminal::Implementation
     {}
 };
 
-Msys2Terminal::Msys2Terminal(Settings settings)
+ExecutingTerminalEngine::ExecutingTerminalEngine(Settings settings)
     : impl_{std::make_unique<Implementation>(std::move(settings))}
 {}
-Msys2Terminal::~Msys2Terminal() = default;
+ExecutingTerminalEngine::~ExecutingTerminalEngine() = default;
 
-ROAR_PIMPL_SPECIAL_FUNCTIONS_IMPL_NO_DTOR(Msys2Terminal);
+ROAR_PIMPL_SPECIAL_FUNCTIONS_IMPL_NO_DTOR(ExecutingTerminalEngine);
 
-void Msys2Terminal::open(std::function<void(bool)> onOpen)
+void ExecutingTerminalEngine::open(std::function<void(bool)> onOpen)
 {
     impl_->stdoutReceiver =
-        Nui::RpcClient::autoRegisterFunction("msys2TerminalStdout_" + impl_->id, [this](Nui::val val) {
+        Nui::RpcClient::autoRegisterFunction("execTerminalStdout_" + impl_->id, [this](Nui::val val) {
             if (val.hasOwnProperty("data"))
             {
                 const std::string data = Nui::val::global("atob")(val["data"]).as<std::string>();
@@ -46,11 +46,11 @@ void Msys2Terminal::open(std::function<void(bool)> onOpen)
                     impl_->stdoutHandler(data);
             }
             else
-                Nui::Console::log("msys2TerminalStdout_" + impl_->id + " received an empty message");
+                Nui::Console::log("execTerminalStdout_" + impl_->id + " received an empty message");
         });
 
     impl_->stderrReceiver =
-        Nui::RpcClient::autoRegisterFunction("msys2TerminalStderr_" + impl_->id, [this](Nui::val val) {
+        Nui::RpcClient::autoRegisterFunction("execTerminalStderr_" + impl_->id, [this](Nui::val val) {
             if (val.hasOwnProperty("data"))
             {
                 const std::string data = Nui::val::global("atob")(val["data"]).as<std::string>();
@@ -58,7 +58,7 @@ void Msys2Terminal::open(std::function<void(bool)> onOpen)
                     impl_->stderrHandler(data);
             }
             else
-                Nui::Console::error("msys2TerminalStderr_" + impl_->id + " received an empty message");
+                Nui::Console::error("execTerminalStderr_" + impl_->id + " received an empty message");
         });
 
     Nui::val obj = Nui::val::object();
@@ -102,9 +102,8 @@ void Msys2Terminal::open(std::function<void(bool)> onOpen)
     }
     obj.set("isPty", impl_->settings.engineOptions.isPty);
 
-    obj.set("stdout", "msys2TerminalStdout_" + impl_->id);
-    obj.set("stderr", "msys2TerminalStderr_" + impl_->id);
-    // obj.set("pathExtension", impl_->settings.msys2Directory + "/usr/bin");
+    obj.set("stdout", "execTerminalStdout_" + impl_->id);
+    obj.set("stderr", "execTerminalStderr_" + impl_->id);
 
     Nui::RpcClient::callWithBackChannel(
         "ProcessStore::spawn",
@@ -126,7 +125,7 @@ void Msys2Terminal::open(std::function<void(bool)> onOpen)
         obj);
 }
 
-void Msys2Terminal::dispose()
+void ExecutingTerminalEngine::dispose()
 {
     Nui::RpcClient::callWithBackChannel(
         "ProcessStore::exit",
@@ -139,7 +138,7 @@ void Msys2Terminal::dispose()
     impl_->stderrReceiver.reset();
 }
 
-void Msys2Terminal::resize(int cols, int rows)
+void ExecutingTerminalEngine::resize(int cols, int rows)
 {
     Nui::RpcClient::callWithBackChannel(
         "ProcessStore::ptyResize",
@@ -151,17 +150,17 @@ void Msys2Terminal::resize(int cols, int rows)
         rows);
 }
 
-void Msys2Terminal::write(std::string const& data)
+void ExecutingTerminalEngine::write(std::string const& data)
 {
     Nui::RpcClient::callWithBackChannel(
         "ProcessStore::write", [](Nui::val) {}, impl_->processId, Nui::val::global("btoa")(data).as<std::string>());
 }
 
-void Msys2Terminal::setStdoutHandler(std::function<void(std::string const&)> handler)
+void ExecutingTerminalEngine::setStdoutHandler(std::function<void(std::string const&)> handler)
 {
     impl_->stdoutHandler = std::move(handler);
 }
-void Msys2Terminal::setStderrHandler(std::function<void(std::string const&)> handler)
+void ExecutingTerminalEngine::setStderrHandler(std::function<void(std::string const&)> handler)
 {
     impl_->stderrHandler = std::move(handler);
 }

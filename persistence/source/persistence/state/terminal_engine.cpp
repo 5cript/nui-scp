@@ -29,6 +29,7 @@ namespace Persistence
     }
     void from_json(nlohmann::json const& j, ExecutingTerminalEngine& engine)
     {
+        engine = {};
         from_json(j, static_cast<BaseTerminalEngine&>(engine));
 
         if (j.contains("command"))
@@ -57,6 +58,7 @@ namespace Persistence
     }
     void from_json(nlohmann::json const& j, SshTerminalEngine& engine)
     {
+        engine = {};
         from_json(j, static_cast<BaseTerminalEngine&>(engine));
 
         if (j.contains("host"))
@@ -93,6 +95,8 @@ namespace Persistence
     }
     void from_json(nlohmann::json const& j, TerminalEngine& engine)
     {
+        engine = {};
+
         if (j.contains("type"))
             engine.type = j.at("type").get<std::string>();
 
@@ -101,7 +105,8 @@ namespace Persistence
 
         if (j.contains("options"))
             engine.options = j.at("options").get<CommonTerminalOptions>();
-        if (engine.type == "msys2")
+
+        if (engine.type == "shell")
         {
             ExecutingTerminalEngine e;
             from_json(j.at("engine"), e);

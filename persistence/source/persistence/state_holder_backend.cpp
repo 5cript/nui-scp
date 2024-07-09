@@ -21,12 +21,6 @@ namespace Persistence
 
             if (!std::filesystem::exists(parentPath))
                 std::filesystem::create_directories(parentPath);
-
-            if (!std::filesystem::exists(path))
-            {
-                std::ofstream writer{path, std::ios_base::binary};
-                writer << nlohmann::json(State{}).dump(4);
-            }
         }
     }
 
@@ -54,25 +48,29 @@ namespace Persistence
 
         try
         {
-            const auto before = [this, &path, &makeBackup]() {
+            const auto before = [&path, &makeBackup]() {
                 try
                 {
                     std::ifstream reader{path, std::ios_base::binary};
                     if (!reader.good())
+                    {
+                        Log::warn("Config file does not exist, creating it with defaults.");
                         return nlohmann::json(nullptr);
+                    }
                     return nlohmann::json::parse(reader);
                 }
                 catch (std::exception const& e)
                 {
                     Log::error("Failed to parse config file: {}", e.what());
                     makeBackup();
-                    save();
                     return nlohmann::json(nullptr);
                 }
             }();
 
             if (before.is_null())
             {
+                // Save something valid
+                save();
                 onLoad(true, *this);
                 return;
             }
@@ -165,7 +163,7 @@ namespace Persistence
             {
 #ifdef _WIN32
                 stateCache_.terminalEngines.push_back({
-                    .type = "msys2",
+                    .type = "shell",
                     .name = "msys2 default",
                     .engine = defaultMsys2TerminalEngine(),
                 });

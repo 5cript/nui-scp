@@ -26,7 +26,11 @@ SessionArea::SessionArea(Persistence::StateHolder* stateHolder)
 {
     Nui::Console::log("SessionArea::SessionArea()");
 
+#ifdef _WIN32
     addSession("msys2 default");
+#else
+    addSession("bash default");
+#endif
 }
 
 ROAR_PIMPL_SPECIAL_FUNCTIONS_IMPL(SessionArea);

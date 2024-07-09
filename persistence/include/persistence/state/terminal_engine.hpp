@@ -15,8 +15,7 @@ namespace Persistence
 {
     enum class TerminalEngineType
     {
-        msys2,
-        shell, // TODO
+        shell,
         cmd, // TODO
         powershell, // TODO
         ssh // TODO

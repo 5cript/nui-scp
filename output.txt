@@ -15,6 +15,6 @@
     },
     "isPty": true,
     "pathExtension": "D:/msys2/usr/bin",
-    "stderr": "msys2TerminalStderr_xXKNezmNcyFp5LSAnkhhx",
-    "stdout": "msys2TerminalStdout_xXKNezmNcyFp5LSAnkhhx"
+    "stderr": "execTerminalStderr_xXKNezmNcyFp5LSAnkhhx",
+    "stdout": "execTerminalStdout_xXKNezmNcyFp5LSAnkhhx"
 }

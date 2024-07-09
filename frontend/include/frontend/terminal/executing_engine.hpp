@@ -10,7 +10,7 @@
 
 // TODO: https://devblogs.microsoft.com/commandline/windows-command-line-introducing-the-windows-pseudo-console-conpty/
 
-class Msys2Terminal : public TerminalEngine
+class ExecutingTerminalEngine : public TerminalEngine
 {
   public:
     struct Settings
@@ -19,8 +19,8 @@ class Msys2Terminal : public TerminalEngine
     };
 
   public:
-    Msys2Terminal(Settings settings);
-    ROAR_PIMPL_SPECIAL_FUNCTIONS(Msys2Terminal);
+    ExecutingTerminalEngine(Settings settings);
+    ROAR_PIMPL_SPECIAL_FUNCTIONS(ExecutingTerminalEngine);
 
     void open(std::function<void(bool)> onOpen) override;
     void dispose() override;

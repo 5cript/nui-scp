@@ -1,6 +1,6 @@
 #include <frontend/session.hpp>
 #include <frontend/terminal/terminal.hpp>
-#include <frontend/terminal/msys2.hpp>
+#include <frontend/terminal/executing_engine.hpp>
 #include <persistence/state_holder.hpp>
 
 #include <nui/frontend/api/console.hpp>
@@ -32,8 +32,9 @@ Session::Session(
     Persistence::CommonTerminalOptions options)
     : impl_{std::make_unique<Implementation>(stateHolder, std::move(engine), std::move(options))}
 {
-    impl_->terminal = std::make_unique<Terminal>(std::make_unique<Msys2Terminal>(Msys2Terminal::Settings{
-        .engineOptions = std::get<Persistence::ExecutingTerminalEngine>(impl_->engine.engine)}));
+    impl_->terminal =
+        std::make_unique<Terminal>(std::make_unique<ExecutingTerminalEngine>(ExecutingTerminalEngine::Settings{
+            .engineOptions = std::get<Persistence::ExecutingTerminalEngine>(impl_->engine.engine)}));
 }
 
 ROAR_PIMPL_SPECIAL_FUNCTIONS_IMPL(Session);
