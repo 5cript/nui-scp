@@ -36,10 +36,10 @@ globalThis.terminalUtility.createTerminal = (host, options) => {
         }
     }
 
-    const terminal = new Terminal({
+    const defaultedOptions = {
         cursorBlink: true,
         fontSize: 14,
-        fontFamily: "Consolas",
+        fontFamily: "courier-new, courier, monospace",
         theme: {
             background: "#000000",
             foreground: "#FFFFFF",
@@ -47,7 +47,11 @@ globalThis.terminalUtility.createTerminal = (host, options) => {
         ...options,
         cols: 80,
         rows: 30
-    });
+    };
+
+    console.log('Terminal Options', defaultedOptions);
+
+    const terminal = new Terminal(defaultedOptions);
     const addons = {
         fitAddon: new FitAddon(),
         rendererAddon: renderer

@@ -122,6 +122,7 @@ namespace Persistence
         TO_JSON_OPTIONAL(j, engine, cursorBlink);
         TO_JSON_OPTIONAL(j, engine, renderer);
         TO_JSON_OPTIONAL(j, engine, theme);
+        TO_JSON_OPTIONAL(j, engine, letterSpacing);
         TO_JSON_OPTIONAL(j, engine, inherits);
     }
     void from_json(nlohmann::json const& j, CommonTerminalOptions& engine)
@@ -133,6 +134,7 @@ namespace Persistence
         FROM_JSON_OPTIONAL(j, engine, fontSize);
         FROM_JSON_OPTIONAL(j, engine, cursorBlink);
         FROM_JSON_OPTIONAL(j, engine, renderer);
+        FROM_JSON_OPTIONAL(j, engine, letterSpacing);
         FROM_JSON_OPTIONAL(j, engine, theme);
     }
 
