@@ -80,6 +80,7 @@ void MainPage::onSetupComplete()
     impl_->sessionArea.addSession("msys2_default");
 #else
     impl_->sessionArea.addSession("bash_default");
+    impl_->sessionArea.addSession("bash_default2");
 #endif
 }
 

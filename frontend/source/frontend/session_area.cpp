@@ -16,6 +16,7 @@ struct SessionArea::Implementation
 
     Implementation(Persistence::StateHolder* stateHolder)
         : stateHolder{stateHolder}
+        , sessions{}
     {
         Nui::Console::log("SessionArea::Implementation()");
     }
@@ -118,8 +119,8 @@ Nui::ElementRenderer SessionArea::operator()()
             "fixed"_prop = true,
         }(
             range(impl_->sessions),
-            [](long long, auto& session) {
-                return ui5::tab{"text"_prop = "asdf"}(
+            [](long long, auto& session) -> Nui::ElementRenderer {
+                return ui5::tab{"text"_prop = session.name()}(
                     session()
                 );
             }

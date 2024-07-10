@@ -22,6 +22,8 @@ class Session
     Nui::ElementRenderer operator()();
     Nui::StableElement& stable();
 
+    std::string name() const;
+
   private:
     struct Implementation;
     std::unique_ptr<Implementation> impl_;

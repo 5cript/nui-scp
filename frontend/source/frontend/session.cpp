@@ -26,6 +26,7 @@ struct Session::Implementation
         , termios{std::move(termios)}
         , options{std::move(options)}
         , terminal{}
+        , stable{}
     {}
 };
 
@@ -50,6 +51,11 @@ Nui::StableElement& Session::stable()
     return impl_->stable;
 }
 
+std::string Session::name() const
+{
+    return impl_->engine.name;
+}
+
 Nui::ElementRenderer Session::operator()()
 {
     using namespace Nui;
@@ -61,32 +67,29 @@ Nui::ElementRenderer Session::operator()()
     Nui::Console::log("Session::operator()");
 
     // clang-format off
-    return stabilize(
-        impl_->stable,
-        div{
-            class_ = "terminal-session",
-            style = "height: 100%;",
-        }(
-            observe(impl_->terminal),
-            [this](){
-                Nui::Console::log("Terminal materializing");
-                return div{
-                    style = Style{
-                        "height"_style = "100%",
-                        "background-color"_style = observe(impl_->options).generate([this]() -> std::string {
-                            if (impl_->options->theme && impl_->options->theme->background)
-                                return *impl_->options->theme->background;
-                            return "#202020";
-                        }),
-                    },
-                    reference.onMaterialize([this](Nui::val element) {
-                        Nui::Console::log("Terminal materialized");
-                        if (impl_->terminal.value())
-                            impl_->terminal.value()->open(element, *impl_->options);
-                    })
-                }();
-            }
-        )
+    return div{
+        class_ = "terminal-session",
+        style = "height: 100%;",
+    }(
+        observe(impl_->terminal),
+        [this](){
+            Nui::Console::log("Terminal materializing");
+            return div{
+                style = Style{
+                    "height"_style = "100%",
+                    "background-color"_style = observe(impl_->options).generate([this]() -> std::string {
+                        if (impl_->options->theme && impl_->options->theme->background)
+                            return *impl_->options->theme->background;
+                        return "#202020";
+                    }),
+                },
+                reference.onMaterialize([this](Nui::val element) {
+                    Nui::Console::log("Terminal materialized");
+                    if (impl_->terminal.value())
+                        impl_->terminal.value()->open(element, *impl_->options);
+                })
+            }();
+        }
     );
     // clang-format on
 }

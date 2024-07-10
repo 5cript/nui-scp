@@ -32,7 +32,7 @@ nui_prepare_emscripten_target(
     TARGET
         ${PROJECT_NAME}
     PARCEL_ARGS
-        # --no-optimize
+        --no-optimize
     PREJS
         ${PREJS_FILE}
     NPM_INSTALL_ARGS
