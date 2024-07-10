@@ -1,5 +1,6 @@
 #pragma once
 
+#include <persistence/state/termios.hpp>
 #include <frontend/terminal/terminal_engine.hpp>
 #include <roar/detail/pimpl_special_functions.hpp>
 #include <persistence/state/terminal_engine.hpp>
@@ -16,6 +17,7 @@ class ExecutingTerminalEngine : public TerminalEngine
     struct Settings
     {
         Persistence::ExecutingTerminalEngine engineOptions;
+        Persistence::Termios termios;
     };
 
   public:

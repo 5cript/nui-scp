@@ -2,6 +2,7 @@
 
 #include <persistence/state_holder.hpp>
 #include <persistence/state/terminal_engine.hpp>
+#include <persistence/state/termios.hpp>
 #include <persistence/state/common_terminal_options.hpp>
 
 #include <nui/frontend/element_renderer.hpp>
@@ -14,6 +15,7 @@ class Session
     Session(
         Persistence::StateHolder* stateHolder,
         Persistence::TerminalEngine engine,
+        Persistence::Termios termios,
         Persistence::CommonTerminalOptions options);
     ROAR_PIMPL_SPECIAL_FUNCTIONS(Session);
 

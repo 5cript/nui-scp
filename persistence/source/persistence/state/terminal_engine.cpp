@@ -17,7 +17,7 @@ namespace Persistence
 
     void to_json(nlohmann::json& j, ExecutingTerminalEngine const& engine)
     {
-        j = nlohmann::json{
+        j = {
             {"command", engine.command},
         };
         to_json(j, static_cast<BaseTerminalEngine const&>(engine));
@@ -43,7 +43,7 @@ namespace Persistence
 
     void to_json(nlohmann::json& j, SshTerminalEngine const& engine)
     {
-        j = nlohmann::json{
+        j = {
             {"host", engine.host},
         };
         to_json(j, static_cast<BaseTerminalEngine const&>(engine));
@@ -75,10 +75,11 @@ namespace Persistence
 
     void to_json(nlohmann::json& j, TerminalEngine const& engine)
     {
-        j = nlohmann::json{
+        j = {
             {"type", engine.type},
             {"name", engine.name},
             {"options", engine.options},
+            {"termiosInherit", engine.termiosInherit},
         };
 
         Utility::visitOverloaded(
@@ -102,6 +103,9 @@ namespace Persistence
 
         if (j.contains("name"))
             engine.name = j.at("name").get<std::string>();
+
+        if (j.contains("termiosInherit"))
+            engine.termiosInherit = j.at("termiosInherit").get<std::string>();
 
         if (j.contains("options"))
             engine.options = j.at("options").get<CommonTerminalOptions>();

@@ -18,9 +18,10 @@ namespace Log
     }
 #else
     void setupFrontendLogger(
-        std::function<void(std::chrono::system_clock::time_point const&, Log::Level, std::string const&)> onLog)
+        std::function<void(std::chrono::system_clock::time_point const&, Log::Level, std::string const&)> onLog,
+        std::function<void(Log::Level)> onLogLevel)
     {
-        Log::Detail::logger = std::make_shared<Log::Logger>(std::move(onLog));
+        Log::Detail::logger = std::make_shared<Log::Logger>(std::move(onLog), std::move(onLogLevel));
 
         const auto callable = Nui::RpcClient::getRemoteCallable("loggerReady");
         if (callable)

@@ -119,6 +119,7 @@ namespace Persistence
 
         TO_JSON_OPTIONAL(j, engine, fontFamily);
         TO_JSON_OPTIONAL(j, engine, fontSize);
+        TO_JSON_OPTIONAL(j, engine, lineHeight);
         TO_JSON_OPTIONAL(j, engine, cursorBlink);
         TO_JSON_OPTIONAL(j, engine, renderer);
         TO_JSON_OPTIONAL(j, engine, theme);
@@ -132,6 +133,7 @@ namespace Persistence
         FROM_JSON_OPTIONAL(j, engine, inherits);
         FROM_JSON_OPTIONAL(j, engine, fontFamily);
         FROM_JSON_OPTIONAL(j, engine, fontSize);
+        FROM_JSON_OPTIONAL(j, engine, lineHeight);
         FROM_JSON_OPTIONAL(j, engine, cursorBlink);
         FROM_JSON_OPTIONAL(j, engine, renderer);
         FROM_JSON_OPTIONAL(j, engine, letterSpacing);

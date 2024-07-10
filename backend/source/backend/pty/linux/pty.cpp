@@ -125,20 +125,28 @@ namespace PTY
         close(terminal_->impl_->slave);
     }
 
-    std::optional<PseudoTerminal> createPseudoTerminal(boost::asio::any_io_executor executor)
+    std::optional<PseudoTerminal>
+    createPseudoTerminal(boost::asio::any_io_executor executor, Persistence::Termios const& termy)
     {
         auto term = PseudoTerminal{std::move(executor)};
 
         // TODO: Should the user be able to specify the flags?
-        termios ttyOptions;
-        ttyOptions.c_cflag |= (CLOCAL | CREAD);
-        ttyOptions.c_cflag &= ~PARENB;
-        ttyOptions.c_cflag &= ~CSTOPB;
-        ttyOptions.c_cflag &= ~CSIZE;
-        ttyOptions.c_cflag |= CS8;
-        ttyOptions.c_cflag &= ~( ICANON | ECHO | ECHOE |ISIG );
-        ttyOptions.c_iflag &= ~(IXON | IXOFF | IXANY );
-        ttyOptions.c_oflag &= ~OPOST;
+        termios ttyOptions{
+            .c_iflag = termy.inputFlags.assemble(),
+            .c_oflag = termy.outputFlags.assemble(),
+            .c_cflag = termy.controlFlags.assemble(),
+            .c_lflag = termy.localFlags.assemble(),
+            .c_line = 0,
+            .c_cc = {},
+            .c_ispeed = termy.iSpeed,
+            .c_ospeed = termy.oSpeed,
+        };
+
+        std::vector<unsigned char> cc = termy.cc.assemble();
+        for (size_t i = 0; i < cc.size(); ++i)
+        {
+            ttyOptions.c_cc[i] = cc[i];
+        }
 
         winsize initialSize{
             .ws_row = 30,
@@ -155,7 +163,8 @@ namespace PTY
             Log::error("Failed to open pty: {}", strerror(errno));
             return std::nullopt;
         }
-        else {
+        else
+        {
             Log::info("Opened pty: {}", name);
         }
 

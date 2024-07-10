@@ -1,9 +1,10 @@
 #pragma once
 
+#include <nui/utility/move_detector.hpp>
+#include <persistence/state/termios.hpp>
+
 #include <boost/asio/any_io_executor.hpp>
 #include <boost/process/v2.hpp>
-
-#include <nui/utility/move_detector.hpp>
 
 #include <functional>
 #include <memory>
@@ -48,7 +49,8 @@ namespace PTY
         };
 
       public:
-        friend std::optional<PseudoTerminal> createPseudoTerminal(boost::asio::any_io_executor executor);
+        friend std::optional<PseudoTerminal>
+        createPseudoTerminal(boost::asio::any_io_executor executor, Persistence::Termios const& termios);
 
         ~PseudoTerminal();
         PseudoTerminal(PseudoTerminal const&) = delete;
@@ -76,5 +78,6 @@ namespace PTY
         Nui::MoveDetector moveDetector_;
     };
 
-    std::optional<PseudoTerminal> createPseudoTerminal(boost::asio::any_io_executor executor);
+    std::optional<PseudoTerminal>
+    createPseudoTerminal(boost::asio::any_io_executor executor, Persistence::Termios const& termios);
 }

@@ -70,23 +70,13 @@ namespace Persistence
             if (before.is_null())
             {
                 // Save something valid
-                save();
+                dataFixer(nlohmann::json::object());
                 onLoad(true, *this);
                 return;
             }
 
             before.get_to(stateCache_);
-
-            // TODO: fix this
-            // const auto after = nlohmann::json(stateCache_);
-
-            // if (!nlohmann::json::diff(before, after).empty())
-            // {
-            //     Log::warn("Config file misses some defaults, writing them back to disk.");
-            //     makeBackup();
-            //     save();
-            // }
-
+            dataFixer(before);
             onLoad(true, *this);
         }
         catch (std::exception const& e)
@@ -95,6 +85,82 @@ namespace Persistence
             onLoad(false, *this);
         }
     }
+
+    void StateHolder::dataFixer(nlohmann::json const& before)
+    {
+        const auto after = nlohmann::json(stateCache_);
+        bool mustSave = !nlohmann::json::diff(before, after).empty();
+
+        if (stateCache_.termios.empty())
+        {
+            Log::warn("Config file misses termios, adding defaults.");
+            stateCache_.termios.push_back(InheritableState<Termios>{
+                .id = "default",
+                .value = {},
+            });
+            mustSave = true;
+        }
+
+        if (stateCache_.terminalOptions.empty())
+        {
+            Log::warn("Config file misses terminal options, adding defaults.");
+            stateCache_.terminalOptions.push_back(InheritableState<CommonTerminalOptions>{
+                .id = "default",
+                .value =
+                    {
+                        .fontFamily = "consolas, courier-new, courier, monospace",
+                        .fontSize = 14,
+                        .lineHeight = std::nullopt,
+                        .renderer = "canvas",
+                        .letterSpacing = 0,
+                        .theme =
+                            TerminalTheme{
+                                .background = "#202020",
+                                .white = "#efefef",
+                            },
+                    },
+            });
+            mustSave = true;
+        }
+
+        if (stateCache_.terminalEngines.empty())
+        {
+            Log::warn("Config file misses terminal engines, adding defaults.");
+#ifdef _WIN32
+            stateCache_.terminalEngines.push_back({
+                .type = "shell",
+                .name = "msys2_default",
+                .options =
+                    {
+                        .inherits = "default",
+                    },
+                .termiosInherit = "default",
+                .engine = defaultMsys2TerminalEngine(),
+            });
+#elif __APPLE__
+// nothing
+#else
+            stateCache_.terminalEngines.push_back({
+                .type = "shell",
+                .name = "bash_default",
+                .options =
+                    {
+                        .inherits = "default",
+                    },
+                .termiosInherit = "default",
+                .engine = defaultBashTerminalEngine(),
+            });
+#endif
+            mustSave = true;
+        }
+
+        if (mustSave)
+        {
+            Log::warn("Config file misses some defaults, writing them back to disk.");
+            save();
+        }
+    }
+
     void StateHolder::save(std::function<void()> const& onSaveComplete)
     {
         setupPersistence();
@@ -151,34 +217,6 @@ namespace Persistence
                     nlohmann::json{
                         {"error", fmt::format("Failed to save state to disk: {}", e.what())},
                     });
-            }
-        });
-    }
-
-    void StateHolder::initializeOsDefaults()
-    {
-        load([this](bool success, StateHolder&) {
-            if (!success)
-                return;
-
-            if (stateCache_.terminalEngines.empty())
-            {
-#ifdef _WIN32
-                stateCache_.terminalEngines.push_back({
-                    .type = "shell",
-                    .name = "msys2 default",
-                    .engine = defaultMsys2TerminalEngine(),
-                });
-#elif __APPLE__
-// nothing
-#else
-                stateCache_.terminalEngines.push_back({
-                    .type = "shell",
-                    .name = "bash default",
-                    .engine = defaultBashTerminalEngine(),
-                });
-#endif
-                save();
             }
         });
     }

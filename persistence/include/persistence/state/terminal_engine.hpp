@@ -78,6 +78,7 @@ namespace Persistence
         std::string type{};
         std::string name{};
         CommonTerminalOptions options{};
+        std::string termiosInherit{};
         std::variant<std::monostate, ExecutingTerminalEngine, SshTerminalEngine> engine{};
     };
     void to_json(nlohmann::json& j, TerminalEngine const& engine);

@@ -206,6 +206,13 @@ bool Process::exit(std::chrono::seconds exitWaitTimeout)
     return true;
 }
 
+#ifdef __linux__
+void Process::signal(int signal)
+{
+    kill(impl_->child->id(), signal);
+}
+#endif
+
 void Process::terminate()
 {
     if (!impl_->isRunning())

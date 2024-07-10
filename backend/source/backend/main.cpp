@@ -150,9 +150,7 @@ Main::Main(int const, char const* const* argv)
       }
     , hub_{window_}
     , processes_{window_.getExecutor()}
-{
-    stateHolder_.initializeOsDefaults();
-}
+{}
 Main::~Main() = default;
 
 void Main::registerRpc()

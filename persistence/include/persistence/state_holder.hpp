@@ -25,7 +25,7 @@ namespace Persistence
 
 #ifdef NUI_BACKEND
         void registerRpc(Nui::RpcHub& rpcHub);
-        void initializeOsDefaults();
+        void dataFixer(nlohmann::json const& before);
 #endif
 
       private:

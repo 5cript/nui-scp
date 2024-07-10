@@ -19,6 +19,7 @@ namespace Log
             : guard_{}
             , rpcHub_{nullptr}
             , stash_{}
+            , levelStashed_{Level::Info}
         {}
 
         void setup(Nui::RpcHub* hub)

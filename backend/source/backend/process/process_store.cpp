@@ -1,6 +1,7 @@
 #include <backend/process/process_store.hpp>
 
 #include <boost/process/v2.hpp>
+#include <csignal>
 #include <nlohmann/json.hpp>
 #include <roar/utility/base64.hpp>
 #include <boost/uuid/uuid_io.hpp>
@@ -41,6 +42,11 @@ std::string ProcessStore::emplace(
     std::string const& command,
     std::vector<std::string> const& arguments,
     Environment const& environment,
+#ifdef _WIN32
+    Persistence::Termios const&
+#else
+    Persistence::Termios const& termios,
+#endif
     bool isPty,
     std::chrono::seconds defaultExitWaitTimeout)
 {
@@ -69,7 +75,7 @@ std::string ProcessStore::emplace(
         pty2.closeOtherPipeEnd();
 #else
         using namespace PTY;
-        auto pty = createPseudoTerminal(executor_);
+        auto pty = createPseudoTerminal(executor_, termios);
         if (!pty)
         {
             processes_.erase(processId);
@@ -86,7 +92,8 @@ std::string ProcessStore::emplace(
             defaultExitWaitTimeout,
             [&pty2](auto executor, auto const& executable, auto const& arguments, auto const& env) {
                 bp2::posix::default_launcher launcher;
-                return std::make_unique<bp2::process>(launcher(executor, executable, arguments, bp2::process_environment{env}, pty2.makeProcessLauncherInit()));
+                return std::make_unique<bp2::process>(launcher(
+                    executor, executable, arguments, bp2::process_environment{env}, pty2.makeProcessLauncherInit()));
             });
 #endif
     }
@@ -152,9 +159,14 @@ void ProcessStore::registerRpc(Nui::Window& wnd, Nui::RpcHub& hub)
                         env.extendPath(pathExtension);
                 }
 
+                Persistence::Termios termios = {};
+                if (parameters.contains("termios"))
+                    termios = parameters.at("termios").get<Persistence::Termios>();
+
                 env.merge(environment);
                 auto uuid = std::make_shared<std::string>();
-                const auto processId = emplace(command, arguments, std::move(env), isPty, defaultExitWaitTimeout);
+                const auto processId =
+                    emplace(command, arguments, std::move(env), std::move(termios), isPty, defaultExitWaitTimeout);
 
                 *uuid = processId;
 
@@ -323,6 +335,11 @@ void ProcessStore::registerRpc(Nui::Window& wnd, Nui::RpcHub& hub)
                     auto& pty = process->second->getState<PtyType>(ProcessAttachedState::PseudoConsole);
                     pty.resize(cols, rows);
                 }
+
+#ifndef _WIN32
+                // Does nothing ?
+                process->second->signal(SIGWINCH);
+#endif
             }
             catch (std::exception const& e)
             {

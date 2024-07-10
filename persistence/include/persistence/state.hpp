@@ -3,6 +3,7 @@
 #include <persistence/state_core.hpp>
 
 #include <persistence/state/terminal_engine.hpp>
+#include <persistence/state/termios.hpp>
 #include <persistence/inheritable_state.hpp>
 
 namespace Persistence
@@ -10,6 +11,7 @@ namespace Persistence
     struct State
     {
         StateWrap<std::vector<InheritableState<CommonTerminalOptions>>> terminalOptions{};
+        StateWrap<std::vector<InheritableState<Termios>>> termios{};
         StateWrap<std::vector<TerminalEngine>> terminalEngines{};
     };
 

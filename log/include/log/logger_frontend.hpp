@@ -43,6 +43,7 @@ namespace Log
       public:
         Logger(
             std::function<void(std::chrono::system_clock::time_point const&, Log::Level, std::string const&)> onLog,
+            std::function<void(Log::Level)> onLogLevel,
             bool logOnConsole = true)
             : onLog_{std::move(onLog)}
             , logOnConsole_{logOnConsole}
@@ -53,8 +54,9 @@ namespace Log
                   })}
             , autoUnregisterSetLevel_{Nui::RpcClient::autoRegisterFunction(
                   "setLogLevel",
-                  [this](int integralLevel) {
+                  [this, onLogLevel = std::move(onLogLevel)](int integralLevel) {
                       logLevel_ = static_cast<Log::Level>(integralLevel);
+                      onLogLevel(logLevel_);
                   })}
             , logLevel_{Log::Level::Info}
         {}

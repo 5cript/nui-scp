@@ -11,6 +11,7 @@ struct Session::Implementation
 {
     Persistence::StateHolder* stateHolder;
     Persistence::TerminalEngine engine;
+    Persistence::Termios termios;
     Nui::Observed<Persistence::CommonTerminalOptions> options;
     Nui::Observed<std::unique_ptr<Terminal>> terminal;
     Nui::StableElement stable;
@@ -18,9 +19,11 @@ struct Session::Implementation
     Implementation(
         Persistence::StateHolder* stateHolder,
         Persistence::TerminalEngine engine,
+        Persistence::Termios termios,
         Persistence::CommonTerminalOptions options)
         : stateHolder{stateHolder}
         , engine{std::move(engine)}
+        , termios{std::move(termios)}
         , options{std::move(options)}
         , terminal{}
     {}
@@ -29,12 +32,15 @@ struct Session::Implementation
 Session::Session(
     Persistence::StateHolder* stateHolder,
     Persistence::TerminalEngine engine,
+    Persistence::Termios termios,
     Persistence::CommonTerminalOptions options)
-    : impl_{std::make_unique<Implementation>(stateHolder, std::move(engine), std::move(options))}
+    : impl_{std::make_unique<Implementation>(stateHolder, std::move(engine), std::move(termios), std::move(options))}
 {
     impl_->terminal =
         std::make_unique<Terminal>(std::make_unique<ExecutingTerminalEngine>(ExecutingTerminalEngine::Settings{
-            .engineOptions = std::get<Persistence::ExecutingTerminalEngine>(impl_->engine.engine)}));
+            .engineOptions = std::get<Persistence::ExecutingTerminalEngine>(impl_->engine.engine),
+            .termios = impl_->termios,
+        }));
 }
 
 ROAR_PIMPL_SPECIAL_FUNCTIONS_IMPL(Session);
@@ -63,14 +69,18 @@ Nui::ElementRenderer Session::operator()()
         }(
             observe(impl_->terminal),
             [this](){
+                Nui::Console::log("Terminal materializing");
                 return div{
                     style = Style{
                         "height"_style = "100%",
                         "background-color"_style = observe(impl_->options).generate([this]() -> std::string {
-                            return impl_->options->theme ? impl_->options->theme->background.value_or("#303030") : "#303030";
+                            if (impl_->options->theme && impl_->options->theme->background)
+                                return *impl_->options->theme->background;
+                            return "#202020";
                         }),
                     },
                     reference.onMaterialize([this](Nui::val element) {
+                        Nui::Console::log("Terminal materialized");
                         if (impl_->terminal.value())
                             impl_->terminal.value()->open(element, *impl_->options);
                     })

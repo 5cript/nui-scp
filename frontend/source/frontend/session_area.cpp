@@ -25,12 +25,6 @@ SessionArea::SessionArea(Persistence::StateHolder* stateHolder)
     : impl_{std::make_unique<Implementation>(stateHolder)}
 {
     Nui::Console::log("SessionArea::SessionArea()");
-
-#ifdef _WIN32
-    addSession("msys2 default");
-#else
-    addSession("bash default");
-#endif
 }
 
 ROAR_PIMPL_SPECIAL_FUNCTIONS_IMPL(SessionArea);
@@ -74,11 +68,33 @@ void SessionArea::addSession(std::string const& name)
                 return;
             }
 
-            options.useDefaultsFrom(static_cast<Persistence::CommonTerminalOptions const&>(*parent));
+            options.useDefaultsFrom(parent->value);
         }
 
+        const auto termios = [&]() {
+            if (!engine->termiosInherit.empty())
+            {
+                Log::debug("Inheriting termios from: {}", engine->termiosInherit);
+                auto parent = std::find_if(
+                    begin(state.termios.value()), end(state.termios.value()), [engine](const auto& parentTermios) {
+                        if (parentTermios.id == engine->termiosInherit)
+                            return true;
+                        return false;
+                    });
+
+                if (parent == end(state.termios.value()))
+                {
+                    Log::warn("Parent termios not found for id: {}", engine->termiosInherit);
+                    return Persistence::Termios{};
+                }
+
+                return parent->value;
+            }
+            return Persistence::Termios{};
+        }();
+
         Log::info("Adding session: {}", name);
-        impl_->sessions.emplace_back(impl_->stateHolder, *engine, options);
+        impl_->sessions.emplace_back(impl_->stateHolder, *engine, termios, options);
         Nui::globalEventContext.executeActiveEventsImmediately();
     });
 }

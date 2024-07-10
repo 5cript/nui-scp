@@ -1,4 +1,7 @@
+#include <exception>
 #include <frontend/terminal/executing_engine.hpp>
+#include <frontend/nlohmann_compat.hpp>
+#include <log/log.hpp>
 
 #include <nui/rpc.hpp>
 
@@ -104,6 +107,14 @@ void ExecutingTerminalEngine::open(std::function<void(bool)> onOpen)
 
     obj.set("stdout", "execTerminalStdout_" + impl_->id);
     obj.set("stderr", "execTerminalStderr_" + impl_->id);
+    try
+    {
+        obj.set("termios", asVal(impl_->settings.termios));
+    }
+    catch (std::exception const& exc)
+    {
+        Log::error("Failed to serialize termios: {}", exc.what());
+    }
 
     Nui::RpcClient::callWithBackChannel(
         "ProcessStore::spawn",

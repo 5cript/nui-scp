@@ -3,6 +3,7 @@ add_library(
     STATIC
         state/terminal_engine.cpp
         state/common_terminal_options.cpp
+        state/termios.cpp
         state_holder.cpp
         state.cpp
 )

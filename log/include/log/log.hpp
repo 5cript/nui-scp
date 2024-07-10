@@ -59,7 +59,8 @@ namespace Log
     void setupBackendRpcHub(Nui::RpcHub* hub);
 #else
     void setupFrontendLogger(
-        std::function<void(std::chrono::system_clock::time_point const&, Log::Level, std::string const&)> onLog);
+        std::function<void(std::chrono::system_clock::time_point const&, Log::Level, std::string const&)> onLog,
+        std::function<void(Log::Level)> onLogLevel);
 #endif
 
     /**

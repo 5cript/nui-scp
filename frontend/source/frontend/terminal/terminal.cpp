@@ -23,7 +23,6 @@ globalThis.terminalUtility.stringToUint8Array = (str) => {
 };
 globalThis.terminalUtility.terminals = new Map();
 globalThis.terminalUtility.createTerminal = (host, options) => {
-    console.log(host);
 
     let renderer = undefined;
     if (options.hasOwnProperty("renderer")) {
@@ -145,7 +144,7 @@ namespace
         }
         else
         {
-            Log::trace("Terminal::received", debugPrint);
+            Log::debug("Terminal::received", debugPrint);
         }
     }
 }
@@ -180,6 +179,7 @@ Terminal::Terminal(std::unique_ptr<TerminalEngine> engine)
 }
 void Terminal::open(Nui::val element, Persistence::CommonTerminalOptions const& options)
 {
+    Log::info("Opening terminal");
     impl_->termId = terminalUtility().call<std::string>("createTerminal", element, asVal(options));
     impl_->engine->open([this](bool success) {
         if (!success)

@@ -31,7 +31,8 @@ class Process : public std::enable_shared_from_this<Process>
             boost::asio::any_io_executor,
             std::filesystem::path const& executable,
             std::vector<std::string> const& args,
-            std::unordered_map<boost::process::v2::environment::key, boost::process::v2::environment::value>)> launcher = {});
+            std::unordered_map<boost::process::v2::environment::key, boost::process::v2::environment::value>)>
+            launcher = {});
 
     /**
      * @brief Returns true if an async operation was started to exit the process.
@@ -46,7 +47,7 @@ class Process : public std::enable_shared_from_this<Process>
     void terminate();
 
 #ifdef __linux__
-    bool signal(int signal);
+    void signal(int signal);
 #endif
 
     std::optional<int> exitCode() const;

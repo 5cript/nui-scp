@@ -15,6 +15,9 @@ class MainPage
     Nui::ElementRenderer render();
 
   private:
+    void onSetupComplete();
+
+  private:
     struct Implementation;
     std::unique_ptr<Implementation> impl_;
 };

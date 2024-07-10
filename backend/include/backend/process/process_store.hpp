@@ -2,6 +2,7 @@
 
 #include <backend/process/process.hpp>
 #include <backend/process/environment.hpp>
+#include <persistence/state/termios.hpp>
 
 #include <nui/rpc.hpp>
 #include <boost/asio/any_io_executor.hpp>
@@ -26,6 +27,7 @@ class ProcessStore
         std::string const& command,
         std::vector<std::string> const& arguments,
         Environment const& environment,
+        Persistence::Termios const& termios,
         bool isPty = false,
         std::chrono::seconds defaultExitWaitTimeout = std::chrono::seconds{10});
 
