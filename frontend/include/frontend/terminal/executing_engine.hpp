@@ -4,6 +4,7 @@
 #include <frontend/terminal/terminal_engine.hpp>
 #include <roar/detail/pimpl_special_functions.hpp>
 #include <persistence/state/terminal_engine.hpp>
+#include <nui/utility/move_detector.hpp>
 
 #include <memory>
 #include <string>
@@ -18,6 +19,7 @@ class ExecutingTerminalEngine : public TerminalEngine
     {
         Persistence::ExecutingTerminalEngine engineOptions;
         Persistence::Termios termios;
+        std::function<void(std::string)> onProcessChange;
     };
 
   public:
@@ -33,6 +35,10 @@ class ExecutingTerminalEngine : public TerminalEngine
     void setStderrHandler(std::function<void(std::string const&)> handler) override;
 
   private:
+    void updatePtyProcs();
+
+  private:
     struct Implementation;
     std::unique_ptr<Implementation> impl_;
+    Nui::MoveDetector moveDetector_;
 };

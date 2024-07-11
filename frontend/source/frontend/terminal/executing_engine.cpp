@@ -2,6 +2,7 @@
 #include <frontend/terminal/executing_engine.hpp>
 #include <frontend/nlohmann_compat.hpp>
 #include <log/log.hpp>
+#include <nui/frontend/api/timer.hpp>
 
 #include <nui/rpc.hpp>
 
@@ -20,6 +21,8 @@ struct ExecutingTerminalEngine::Implementation
     std::function<void(std::string const&)> stdoutHandler;
     std::function<void(std::string const&)> stderrHandler;
 
+    Nui::TimerHandle procInfoTimer;
+
     Implementation(ExecutingTerminalEngine::Settings&& settings)
         : settings{std::move(settings)}
         , id{Nui::val::global("generateId")().as<std::string>()}
@@ -28,13 +31,20 @@ struct ExecutingTerminalEngine::Implementation
         , processId{}
         , stdoutHandler{}
         , stderrHandler{}
+        , procInfoTimer{}
     {}
 };
 
 ExecutingTerminalEngine::ExecutingTerminalEngine(Settings settings)
     : impl_{std::make_unique<Implementation>(std::move(settings))}
 {}
-ExecutingTerminalEngine::~ExecutingTerminalEngine() = default;
+ExecutingTerminalEngine::~ExecutingTerminalEngine()
+{
+    if (!moveDetector_.wasMoved())
+    {
+        dispose();
+    }
+}
 
 ROAR_PIMPL_SPECIAL_FUNCTIONS_IMPL_NO_DTOR(ExecutingTerminalEngine);
 
@@ -132,6 +142,7 @@ void ExecutingTerminalEngine::open(std::function<void(bool)> onOpen)
             impl_->processId = uuid;
 
             onOpen(true);
+            updatePtyProcs();
         },
         obj);
 }
@@ -161,8 +172,41 @@ void ExecutingTerminalEngine::resize(int cols, int rows)
         rows);
 }
 
+void ExecutingTerminalEngine::updatePtyProcs()
+{
+    Log::info("updatePtyProcs");
+    if (!impl_->procInfoTimer.hasActiveTimer())
+    {
+        Nui::setTimeout(
+            500,
+            [this]() {
+                Nui::RpcClient::callWithBackChannel(
+                    "ProcessStore::ptyProcesses",
+                    [this](Nui::val val) {
+                        if (val.hasOwnProperty("latest"))
+                        {
+                            Log::info("onProcessChange: {}", Nui::JSON::stringify(val));
+                            if (impl_->settings.onProcessChange)
+                                impl_->settings.onProcessChange(val["latest"]["cmdline"].as<std::string>());
+                        }
+                        else
+                        {
+                            Log::warn("ptyProcesses did not return latest: {}", Nui::JSON::stringify(val));
+                        }
+                    },
+                    impl_->processId);
+            },
+            [this](Nui::TimerHandle&& handle) {
+                impl_->procInfoTimer = std::move(handle);
+            });
+    }
+}
+
 void ExecutingTerminalEngine::write(std::string const& data)
 {
+    if (!data.empty() && (data.back() == '\r' || data.back() == '\n'))
+        updatePtyProcs();
+
     Nui::RpcClient::callWithBackChannel(
         "ProcessStore::write", [](Nui::val) {}, impl_->processId, Nui::val::global("btoa")(data).as<std::string>());
 }

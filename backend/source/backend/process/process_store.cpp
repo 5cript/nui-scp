@@ -312,6 +312,55 @@ void ProcessStore::registerRpc(Nui::Window& wnd, Nui::RpcHub& hub)
         });
 
     hub.registerFunction(
+        "ProcessStore::ptyProcesses", [this, hub = &hub](std::string const& responseId, std::string const& uuid) {
+            try
+            {
+                auto process = processes_.find(uuid);
+                if (process == processes_.end())
+                {
+                    hub->callRemote(responseId, nlohmann::json{{"error", "Process not found"}});
+                    return;
+                }
+
+#ifdef _WIN32
+                using PtyType = ConPTY::PseudoConsole;
+#else
+                using PtyType = PTY::PseudoTerminal;
+#endif
+
+                if (process->second->getState<ProcessInfo>(ProcessAttachedState::ProcessInfo).isPty)
+                {
+                    auto& pty = process->second->getState<PtyType>(ProcessAttachedState::PseudoConsole);
+                    const auto procs = pty.listProcessesUnderPty();
+                    if (procs.empty())
+                    {
+                        hub->callRemote(responseId, nlohmann::json{{"error", "No processes found"}});
+                        return;
+                    }
+                    nlohmann::json j = nlohmann::json::object();
+                    j["latest"] = {
+                        {"pid", procs.front().pid},
+                        {"cmdline", procs.front().cmdline},
+                    };
+                    j["all"] = nlohmann::json::array();
+                    for (const auto& p : procs)
+                    {
+                        j["all"].push_back({
+                            {"pid", p.pid},
+                            {"cmdline", p.cmdline},
+                        });
+                    }
+                    hub->callRemote(responseId, j);
+                }
+            }
+            catch (std::exception const& e)
+            {
+                hub->callRemote(responseId, nlohmann::json{{"error", e.what()}});
+                return;
+            }
+        });
+
+    hub.registerFunction(
         "ProcessStore::ptyResize",
         [this, hub = &hub](std::string const& responseId, std::string const& uuid, int cols, int rows) {
             try

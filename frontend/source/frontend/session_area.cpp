@@ -97,7 +97,17 @@ void SessionArea::addSession(std::string const& name)
         }();
 
         Log::info("Adding session: {}", name);
-        impl_->sessions.emplace_back(impl_->stateHolder, *engine, termios, options);
+        impl_->sessions.emplace_back(
+            impl_->stateHolder,
+            *engine,
+            termios,
+            [this](Session const*, std::string const&) {
+                {
+                    impl_->sessions.modify();
+                }
+                Nui::globalEventContext.executeActiveEventsImmediately();
+            },
+            options);
         Nui::globalEventContext.executeActiveEventsImmediately();
     });
 }
@@ -122,7 +132,7 @@ Nui::ElementRenderer SessionArea::operator()()
         }(
             range(impl_->sessions),
             [](long long, auto& session) -> Nui::ElementRenderer {
-                return ui5::tab{"text"_prop = session.name()}(
+                return ui5::tab{"text"_prop = session.tabTitle()}(
                     session()
                 );
             }

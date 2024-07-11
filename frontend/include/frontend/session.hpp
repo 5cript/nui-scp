@@ -16,12 +16,14 @@ class Session
         Persistence::StateHolder* stateHolder,
         Persistence::TerminalEngine engine,
         Persistence::Termios termios,
+        std::function<void(Session const* session, std::string)> doTabTitleChange,
         Persistence::CommonTerminalOptions options);
     ROAR_PIMPL_SPECIAL_FUNCTIONS(Session);
 
     Nui::ElementRenderer operator()();
 
     std::string name() const;
+    std::string tabTitle() const;
 
   private:
     struct Implementation;

@@ -62,6 +62,13 @@ namespace PTY
 
         void resize(short width, short height);
 
+        struct PtyProcess
+        {
+            int pid;
+            std::string cmdline;
+        };
+        std::vector<PtyProcess> listProcessesUnderPty();
+
         void
         startReading(std::function<void(std::string_view)> onStdout, std::function<void(std::string_view)> onStderr);
         void stopReading();

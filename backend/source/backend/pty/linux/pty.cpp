@@ -7,7 +7,10 @@
 #include <pty.h>
 #include <utmp.h>
 
+#include <filesystem>
 #include <atomic>
+#include <algorithm>
+#include <fstream>
 
 namespace PTY
 {
@@ -17,9 +20,9 @@ namespace PTY
         boost::asio::any_io_executor executor;
         int master;
         int slave;
+        std::string name;
 
         std::atomic_bool isReading;
-
         std::function<void(std::string_view)> onStdout;
         std::function<void(std::string_view)> onStderr;
         std::unique_ptr<boost::asio::posix::stream_descriptor> stream;
@@ -74,6 +77,7 @@ namespace PTY
             : executor{std::move(executor)}
             , master{0}
             , slave{0}
+            , name{}
             , isReading{false}
             , onStdout{}
             , onStderr{}
@@ -165,6 +169,7 @@ namespace PTY
         }
         else
         {
+            term.impl_->name = name;
             Log::info("Opened pty: {}", name);
         }
 
@@ -223,6 +228,62 @@ namespace PTY
             .ws_ypixel = 0,
         };
         ioctl(impl_->master, TIOCSWINSZ, &size);
+    }
+
+    std::vector<PseudoTerminal::PtyProcess> PseudoTerminal::listProcessesUnderPty()
+    {
+        std::vector<PtyProcess> processes;
+        for (auto const& entry : std::filesystem::directory_iterator("/proc"))
+        {
+            try
+            {
+                if (entry.is_directory())
+                {
+                    const auto id = entry.path().filename().string();
+                    if (!std::all_of(id.begin(), id.end(), [](char c) {
+                            return std::isdigit(c);
+                        }))
+                    {
+                        continue;
+                    }
+
+                    const auto fdPath = entry.path() / "fd" / "0";
+                    if (!std::filesystem::exists(fdPath) || !std::filesystem::is_symlink(fdPath))
+                    {
+                        continue;
+                    }
+
+                    std::error_code ec;
+                    const auto target = std::filesystem::read_symlink(fdPath, ec);
+                    if (ec)
+                        continue;
+
+                    if (target == impl_->name)
+                    {
+                        std::ifstream cmdlineFile{entry.path() / "cmdline"};
+                        if (!cmdlineFile)
+                            continue;
+                        std::string content;
+                        std::getline(cmdlineFile, content, '\0');
+
+                        processes.push_back(PtyProcess{
+                            .pid = std::stoi(id),
+                            .cmdline = content,
+                        });
+                    }
+                }
+            }
+            catch (...)
+            {
+                // probably a perm error
+                continue;
+            }
+        }
+
+        std::sort(processes.begin(), processes.end(), [](PtyProcess const& a, PtyProcess const& b) {
+            return a.pid < b.pid;
+        });
+        return processes;
     }
 
     PseudoTerminal::LauncherInit PseudoTerminal::makeProcessLauncherInit()
