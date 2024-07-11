@@ -177,8 +177,15 @@ Terminal::Terminal(std::unique_ptr<TerminalEngine> engine)
         write(data, false);
     });
 }
+
+bool Terminal::isOpen() const
+{
+    return !impl_->termId.empty();
+}
 void Terminal::open(Nui::val element, Persistence::CommonTerminalOptions const& options)
 {
+    if (isOpen())
+        return;
     Log::info("Opening terminal");
     impl_->termId = terminalUtility().call<std::string>("createTerminal", element, asVal(options));
     impl_->engine->open([this](bool success) {

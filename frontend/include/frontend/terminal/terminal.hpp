@@ -12,6 +12,7 @@ class Terminal
     Terminal(std::unique_ptr<TerminalEngine> engine);
     ROAR_PIMPL_SPECIAL_FUNCTIONS(Terminal);
 
+    bool isOpen() const;
     void open(Nui::val element, Persistence::CommonTerminalOptions const& options);
     void dispose();
     void write(std::string const& data, bool isUserInput);
