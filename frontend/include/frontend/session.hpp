@@ -20,7 +20,6 @@ class Session
     ROAR_PIMPL_SPECIAL_FUNCTIONS(Session);
 
     Nui::ElementRenderer operator()();
-    Nui::StableElement& stable();
 
     std::string name() const;
 

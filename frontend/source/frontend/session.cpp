@@ -4,6 +4,7 @@
 #include <persistence/state_holder.hpp>
 
 #include <nui/frontend/api/console.hpp>
+#include <nui/frontend/utility/delocalized.hpp>
 #include <nui/frontend/elements.hpp>
 #include <nui/frontend/attributes.hpp>
 
@@ -14,7 +15,7 @@ struct Session::Implementation
     Persistence::Termios termios;
     Nui::Observed<Persistence::CommonTerminalOptions> options;
     Nui::Observed<std::unique_ptr<Terminal>> terminal;
-    Nui::StableElement stable;
+    Nui::Delocalized<int> stable;
 
     Implementation(
         Persistence::StateHolder* stateHolder,
@@ -42,14 +43,30 @@ Session::Session(
             .engineOptions = std::get<Persistence::ExecutingTerminalEngine>(impl_->engine.engine),
             .termios = impl_->termios,
         }));
+
+    using namespace Nui;
+    using namespace Nui::Elements;
+    using namespace Nui::Attributes;
+    using Nui::Elements::div; // because of the global div.
+
+    impl_->stable.element(
+        div{style =
+                Style{
+                    "height"_style = "100%",
+                    "background-color"_style = observe(impl_->options).generate([this]() -> std::string {
+                        if (impl_->options->theme && impl_->options->theme->background)
+                            return *impl_->options->theme->background;
+                        return "#202020";
+                    }),
+                },
+            reference.onMaterialize([this](Nui::val element) {
+                Nui::Console::log("Terminal materialized");
+                if (impl_->terminal.value())
+                    impl_->terminal.value()->open(element, *impl_->options);
+            })}());
 }
 
 ROAR_PIMPL_SPECIAL_FUNCTIONS_IMPL(Session);
-
-Nui::StableElement& Session::stable()
-{
-    return impl_->stable;
-}
 
 std::string Session::name() const
 {
@@ -61,7 +78,6 @@ Nui::ElementRenderer Session::operator()()
     using namespace Nui;
     using namespace Nui::Elements;
     using namespace Nui::Attributes;
-    using namespace Nui::Attributes::Literals;
     using Nui::Elements::div; // because of the global div.
 
     Nui::Console::log("Session::operator()");
@@ -71,25 +87,14 @@ Nui::ElementRenderer Session::operator()()
         class_ = "terminal-session",
         style = "height: 100%;",
     }(
-        observe(impl_->terminal),
-        [this](){
-            Nui::Console::log("Terminal materializing");
-            return div{
-                style = Style{
-                    "height"_style = "100%",
-                    "background-color"_style = observe(impl_->options).generate([this]() -> std::string {
-                        if (impl_->options->theme && impl_->options->theme->background)
-                            return *impl_->options->theme->background;
-                        return "#202020";
-                    }),
-                },
-                reference.onMaterialize([this](Nui::val element) {
-                    Nui::Console::log("Terminal materialized");
-                    if (impl_->terminal.value())
-                        impl_->terminal.value()->open(element, *impl_->options);
-                })
-            }();
-        }
+        delocalizedSlot(
+            0,
+            impl_->stable,
+            {
+                class_ = "terminal-session-content",
+                style = "height: 100%;",
+            }
+        )
     );
     // clang-format on
 }

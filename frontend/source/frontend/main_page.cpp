@@ -79,7 +79,6 @@ void MainPage::onSetupComplete()
     impl_->sessionArea.addSession("msys2_default");
 #else
     impl_->sessionArea.addSession("bash_default");
-    impl_->sessionArea.addSession("bash_default2");
 #endif
 }
 
@@ -106,6 +105,11 @@ Nui::ElementRenderer MainPage::render()
             return res;
         })}
     (
+        button{
+            onClick = [this](){
+                impl_->sessionArea.addSession("bash_default2");
+            }
+        }("X"),
         impl_->toolbar(),
         impl_->sidebar(),
         impl_->sessionArea()
