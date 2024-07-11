@@ -150,6 +150,7 @@ Main::Main(int const, char const* const* argv)
       }
     , hub_{window_}
     , processes_{window_.getExecutor()}
+    , sshSessionManager_{}
 {}
 Main::~Main() = default;
 
@@ -165,6 +166,7 @@ void Main::registerRpc()
     Log::setupBackendRpcHub(&hub_);
     stateHolder_.registerRpc(hub_);
     processes_.registerRpc(window_, hub_);
+    sshSessionManager_.registerRpc(hub_);
 }
 
 void Main::show()

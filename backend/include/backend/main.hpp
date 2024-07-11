@@ -1,6 +1,8 @@
 #pragma once
 
+#include "ssh/ssh_session_manager.hpp"
 #include <backend/process/process_store.hpp>
+#include <backend/ssh/ssh_session_manager.hpp>
 #include <persistence/state_holder.hpp>
 
 #include <nui/core.hpp>
@@ -29,4 +31,5 @@ class Main
     Nui::Window window_;
     Nui::RpcHub hub_;
     ProcessStore processes_;
+    SshSessionManager sshSessionManager_;
 };

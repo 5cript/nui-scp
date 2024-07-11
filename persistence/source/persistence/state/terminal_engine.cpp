@@ -50,11 +50,28 @@ namespace Persistence
 
         TO_JSON_OPTIONAL(j, engine, port);
         TO_JSON_OPTIONAL(j, engine, user);
-        TO_JSON_OPTIONAL(j, engine, privateKey);
-        TO_JSON_OPTIONAL(j, engine, keyPassphrase);
+        TO_JSON_OPTIONAL(j, engine, bindAddr);
+        TO_JSON_OPTIONAL(j, engine, sshKey);
         TO_JSON_OPTIONAL(j, engine, shell);
         TO_JSON_OPTIONAL(j, engine, sshDirectory);
+        TO_JSON_OPTIONAL(j, engine, knownHostsFile);
         TO_JSON_OPTIONAL(j, engine, tryAgentForAuthentication);
+        TO_JSON_OPTIONAL(j, engine, logVerbosity);
+        TO_JSON_OPTIONAL(j, engine, connectTimeoutSeconds);
+        TO_JSON_OPTIONAL(j, engine, connectTimeoutUSeconds);
+        TO_JSON_OPTIONAL(j, engine, keyExchangeAlgorithms);
+        TO_JSON_OPTIONAL(j, engine, compressionClientToServer);
+        TO_JSON_OPTIONAL(j, engine, compressionServerToClient);
+        TO_JSON_OPTIONAL(j, engine, compressionLevel);
+        TO_JSON_OPTIONAL(j, engine, strictHostKeyCheck);
+        TO_JSON_OPTIONAL(j, engine, proxyCommand);
+        TO_JSON_OPTIONAL(j, engine, gssapiServerIdentity);
+        TO_JSON_OPTIONAL(j, engine, gssapiClientIdentity);
+        TO_JSON_OPTIONAL(j, engine, gssapiDelegateCredentials);
+        TO_JSON_OPTIONAL(j, engine, noDelay);
+        TO_JSON_OPTIONAL(j, engine, bypassConfig);
+        TO_JSON_OPTIONAL(j, engine, identityAgent);
+        TO_JSON_OPTIONAL(j, engine, usePublicKeyAutoAuth);
     }
     void from_json(nlohmann::json const& j, SshTerminalEngine& engine)
     {
@@ -66,11 +83,28 @@ namespace Persistence
 
         FROM_JSON_OPTIONAL(j, engine, port);
         FROM_JSON_OPTIONAL(j, engine, user);
-        FROM_JSON_OPTIONAL(j, engine, privateKey);
-        FROM_JSON_OPTIONAL(j, engine, keyPassphrase);
+        FROM_JSON_OPTIONAL(j, engine, bindAddr);
+        FROM_JSON_OPTIONAL(j, engine, sshKey);
         FROM_JSON_OPTIONAL(j, engine, shell);
         FROM_JSON_OPTIONAL(j, engine, sshDirectory);
         FROM_JSON_OPTIONAL(j, engine, tryAgentForAuthentication);
+        FROM_JSON_OPTIONAL(j, engine, knownHostsFile);
+        FROM_JSON_OPTIONAL(j, engine, logVerbosity);
+        FROM_JSON_OPTIONAL(j, engine, connectTimeoutSeconds);
+        FROM_JSON_OPTIONAL(j, engine, connectTimeoutUSeconds);
+        FROM_JSON_OPTIONAL(j, engine, keyExchangeAlgorithms);
+        FROM_JSON_OPTIONAL(j, engine, compressionClientToServer);
+        FROM_JSON_OPTIONAL(j, engine, compressionServerToClient);
+        FROM_JSON_OPTIONAL(j, engine, compressionLevel);
+        FROM_JSON_OPTIONAL(j, engine, strictHostKeyCheck);
+        FROM_JSON_OPTIONAL(j, engine, proxyCommand);
+        FROM_JSON_OPTIONAL(j, engine, gssapiServerIdentity);
+        FROM_JSON_OPTIONAL(j, engine, gssapiClientIdentity);
+        FROM_JSON_OPTIONAL(j, engine, gssapiDelegateCredentials);
+        FROM_JSON_OPTIONAL(j, engine, noDelay);
+        FROM_JSON_OPTIONAL(j, engine, bypassConfig);
+        FROM_JSON_OPTIONAL(j, engine, identityAgent);
+        FROM_JSON_OPTIONAL(j, engine, usePublicKeyAutoAuth);
     }
 
     void to_json(nlohmann::json& j, TerminalEngine const& engine)

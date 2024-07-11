@@ -5,6 +5,8 @@ target_sources(
         process/process.cpp
         process/process_store.cpp
         process/environment.cpp
+        ssh/ssh_session_manager.cpp
+        password/password_prompter.cpp
 )
 
 if (WIN32)
@@ -28,7 +30,9 @@ find_package(Boost CONFIG 1.81.0 REQUIRED COMPONENTS system filesystem)
 
 target_include_directories(${PROJECT_NAME} PRIVATE "${CMAKE_SOURCE_DIR}/backend/include")
 
-target_compile_definitions(${PROJECT_NAME} PRIVATE -DBOOST_PROCESS_USE_STD_FS=1)
+target_compile_definitions(${PROJECT_NAME} PRIVATE -DBOOST_PROCESS_USE_STD_FS=1 -DSSH_NO_CPP_EXCEPTIONS)
+
+include("${CMAKE_CURRENT_LIST_DIR}/../../../_cmake/dependencies/libssh.cmake")
 
 # Link backend of nui outside of emscripten
 target_link_libraries(
@@ -40,6 +44,7 @@ target_link_libraries(
         utility
         log
         persistence
+        ssh
 )
 
 nui_set_target_output_directories(${PROJECT_NAME})
