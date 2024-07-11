@@ -9,10 +9,12 @@
 #include <nui/frontend/elements.hpp>
 #include <nui/frontend/attributes.hpp>
 
+#include <list>
+
 struct SessionArea::Implementation
 {
     Persistence::StateHolder* stateHolder;
-    Nui::Observed<std::vector<Session>> sessions;
+    Nui::Observed<std::list<Session>> sessions;
 
     Implementation(Persistence::StateHolder* stateHolder)
         : stateHolder{stateHolder}

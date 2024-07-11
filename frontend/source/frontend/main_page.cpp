@@ -51,8 +51,7 @@ MainPage::MainPage(Persistence::StateHolder* stateHolder)
                 Nui::setInterval(
                     200,
                     [this]() {
-                        if (!Nui::val::global("terminalUtility").isUndefined() &&
-                            !Nui::val::global("nanoid").isUndefined())
+                        if (!Nui::val::global("terminalUtility").isUndefined())
                         {
                             if (impl_->setupWait.hasActiveTimer())
                                 impl_->setupWait.stop();
@@ -60,7 +59,7 @@ MainPage::MainPage(Persistence::StateHolder* stateHolder)
                         }
                         else
                         {
-                            Log::info("Waiting for terminalUtility and nanoid to be available.");
+                            Log::info("Waiting for terminalUtility to be available.");
                         }
                     },
                     [this](Nui::TimerHandle&& t) {

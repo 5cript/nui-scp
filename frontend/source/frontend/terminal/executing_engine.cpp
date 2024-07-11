@@ -22,7 +22,7 @@ struct ExecutingTerminalEngine::Implementation
 
     Implementation(ExecutingTerminalEngine::Settings&& settings)
         : settings{std::move(settings)}
-        , id{Nui::val::global("nanoid")().as<std::string>()}
+        , id{Nui::val::global("generateId")().as<std::string>()}
         , stdoutReceiver{}
         , stderrReceiver{}
         , processId{}
