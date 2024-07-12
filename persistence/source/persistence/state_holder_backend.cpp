@@ -1,5 +1,5 @@
 #include <persistence/state_holder.hpp>
-#include <persistence/state.hpp>
+#include <persistence/state/state.hpp>
 #include <constants/persistence.hpp>
 #include <log/log.hpp>
 
@@ -94,32 +94,25 @@ namespace Persistence
         if (stateCache_.termios.empty())
         {
             Log::warn("Config file misses termios, adding defaults.");
-            stateCache_.termios.push_back(InheritableState<Termios>{
-                .id = "default",
-                .value = {},
-            });
+            stateCache_.termios["default"] = Termios{};
             mustSave = true;
         }
 
         if (stateCache_.terminalOptions.empty())
         {
             Log::warn("Config file misses terminal options, adding defaults.");
-            stateCache_.terminalOptions.push_back(InheritableState<CommonTerminalOptions>{
-                .id = "default",
-                .value =
-                    {
-                        .fontFamily = "consolas, courier-new, courier, monospace",
-                        .fontSize = 14,
-                        .lineHeight = std::nullopt,
-                        .renderer = "canvas",
-                        .letterSpacing = 0,
-                        .theme =
-                            TerminalTheme{
-                                .background = "#202020",
-                                .white = "#efefef",
-                            },
+            stateCache_.terminalOptions["default"] = TerminalOptions{
+                .fontFamily = "consolas, courier-new, courier, monospace",
+                .fontSize = 14,
+                .lineHeight = std::nullopt,
+                .renderer = "canvas",
+                .letterSpacing = 0,
+                .theme =
+                    TerminalTheme{
+                        .background = "#202020",
+                        .white = "#efefef",
                     },
-            });
+            };
             mustSave = true;
         }
 
@@ -127,29 +120,21 @@ namespace Persistence
         {
             Log::warn("Config file misses terminal engines, adding defaults.");
 #ifdef _WIN32
-            stateCache_.terminalEngines.push_back({
+            stateCache_.terminalEngines["msys2_default"] = TerminalEngine{
                 .type = "shell",
-                .name = "msys2_default",
-                .options =
-                    {
-                        .inherits = "default",
-                    },
-                .termiosInherit = "default",
+                .options = Reference{.ref = "default"},
+                .termios = Reference{.ref = "default"},
                 .engine = defaultMsys2TerminalEngine(),
-            });
+            };
 #elif __APPLE__
 // nothing
 #else
-            stateCache_.terminalEngines.push_back({
+            stateCache_.terminalEngines["bash_default"] = TerminalEngine{
                 .type = "shell",
-                .name = "bash_default",
-                .options =
-                    {
-                        .inherits = "default",
-                    },
-                .termiosInherit = "default",
+                .options = Reference{.ref = "default"},
+                .termios = Reference{.ref = "default"},
                 .engine = defaultBashTerminalEngine(),
-            });
+            };
 #endif
             mustSave = true;
         }

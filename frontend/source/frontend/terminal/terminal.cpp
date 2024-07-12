@@ -182,7 +182,7 @@ bool Terminal::isOpen() const
 {
     return !impl_->termId.empty();
 }
-void Terminal::open(Nui::val element, Persistence::CommonTerminalOptions const& options)
+void Terminal::open(Nui::val element, Persistence::TerminalOptions const& options)
 {
     if (isOpen())
         return;

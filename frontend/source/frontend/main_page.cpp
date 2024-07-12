@@ -1,7 +1,7 @@
 #include <frontend/main_page.hpp>
 #include <frontend/sidebar.hpp>
-#include <frontend/tailwind.hpp>
 #include <frontend/toolbar.hpp>
+#include <frontend/classes.hpp>
 #include <frontend/session_area.hpp>
 #include <nui/frontend/api/timer.hpp>
 #include <log/log.hpp>
@@ -74,12 +74,6 @@ MainPage::MainPage(Persistence::StateHolder* stateHolder)
 void MainPage::onSetupComplete()
 {
     Log::info("Setup is complete.");
-
-#ifdef _WIN32
-    impl_->sessionArea.addSession("msys2_default");
-#else
-    impl_->sessionArea.addSession("bash_default");
-#endif
 }
 
 ROAR_PIMPL_SPECIAL_FUNCTIONS_IMPL(MainPage);
@@ -95,21 +89,12 @@ Nui::ElementRenderer MainPage::render()
 
     // clang-format off
     return body{
-        class_ = observe(impl_->darkMode).generate([this]() {
-            std::string res = classes(defaultBgText,
+        style = "background-color: var(--sapBackgroundColor); color: var(--sapTextColor);",
+        class_ = classes(
                 "w-full h-screen grid grid-cols-[min-content_auto]",
-                "grid-rows-[min-content_auto] [grid-template-areas:'Toolbar_Toolbar''Sidebar_SessionArea']"
-            );
-            if (impl_->darkMode.value())
-                res += " dark";
-            return res;
-        })}
+                "grid-rows-[min-content_auto] [grid-template-areas:'Toolbar_Toolbar''Sidebar_SessionArea']")            
+    }
     (
-        button{
-            onClick = [this](){
-                impl_->sessionArea.addSession("bash_default2");
-            }
-        }("X"),
         impl_->toolbar(),
         impl_->sidebar(),
         impl_->sessionArea()

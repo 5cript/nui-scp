@@ -1,5 +1,7 @@
 #include <frontend/toolbar.hpp>
-#include <frontend/tailwind.hpp>
+#include <frontend/classes.hpp>
+
+#include <ui5/components/toolbar.hpp>
 
 #include <nui/frontend/elements.hpp>
 #include <nui/frontend/attributes.hpp>
@@ -26,5 +28,28 @@ Nui::ElementRenderer Toolbar::operator()()
     using namespace Nui::Attributes;
     using Nui::Elements::div; // because of the global div.
 
-    return div{class_ = classes(defaultBgText, "[grid-area:Toolbar] p-4")}("Toolbar");
+    // clang-format off
+    return div{class_ = classes("[grid-area:Toolbar] p-4")}(
+        ui5::toolbar{
+            "alignContent"_prop = "Start",
+            "design"_prop = "Solid",
+        }(
+            ui5::toolbar_select{
+                "change"_event = [](Nui::val event) {
+                    Nui::Console::log("Selected: ", event["detail"]["selectedItem"]["text"]);
+                }
+            }(
+                ui5::toolbar_select_option{}("Item 1"),
+                ui5::toolbar_select_option{}("Item 2"),
+                ui5::toolbar_select_option{}("Item 3")
+            ),
+            ui5::toolbar_button{
+                "text"_prop = "New Session",
+                "click"_event = [](Nui::val) {
+                    Nui::Console::log("New Session clicked");
+                }
+            }()
+        )
+    );
+    // clang-format on
 }

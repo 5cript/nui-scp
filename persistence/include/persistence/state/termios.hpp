@@ -11,84 +11,92 @@ namespace Persistence
     {
         struct InputFlags
         {
-            bool IGNBRK_{false};
-            bool BRKINT_{false};
-            bool IGNPAR_{false};
-            bool PARMRK_{false};
-            bool INPCK_{false};
-            bool ISTRIP_{false};
-            bool INLCR_{false};
-            bool IGNCR_{false};
-            bool ICRNL_{true};
-            bool IUCLC_{false};
-            bool IXON_{true};
-            bool IXANY_{false};
-            bool IXOFF_{false};
-            bool IMAXBEL_{false};
-            bool IUTF8_{true};
+            std::optional<bool> IGNBRK_{false};
+            std::optional<bool> BRKINT_{false};
+            std::optional<bool> IGNPAR_{false};
+            std::optional<bool> PARMRK_{false};
+            std::optional<bool> INPCK_{false};
+            std::optional<bool> ISTRIP_{false};
+            std::optional<bool> INLCR_{false};
+            std::optional<bool> IGNCR_{false};
+            std::optional<bool> ICRNL_{true};
+            std::optional<bool> IUCLC_{false};
+            std::optional<bool> IXON_{true};
+            std::optional<bool> IXANY_{false};
+            std::optional<bool> IXOFF_{false};
+            std::optional<bool> IMAXBEL_{false};
+            std::optional<bool> IUTF8_{true};
 
             unsigned int assemble() const;
-        } inputFlags;
+            void useDefaultsFrom(InputFlags const& other);
+        };
+        std::optional<InputFlags> inputFlags{InputFlags{}};
 
         struct OutputFlags
         {
-            bool OPOST_{true};
-            bool OLCUC_{false};
-            bool ONLCR_{true};
-            bool OCRNL_{false};
-            bool ONOCR_{false};
-            bool ONLRET_{false};
-            bool OFILL_{false};
-            bool OFDEL_{false};
-            std::string NLDLY_{};
-            std::string CRDLY_{};
-            std::string TABDLY_{};
-            std::string BSDLY_{};
-            std::string VTDLY_{};
-            std::string FFDLY_{};
+            std::optional<bool> OPOST_{true};
+            std::optional<bool> OLCUC_{false};
+            std::optional<bool> ONLCR_{true};
+            std::optional<bool> OCRNL_{false};
+            std::optional<bool> ONOCR_{false};
+            std::optional<bool> ONLRET_{false};
+            std::optional<bool> OFILL_{false};
+            std::optional<bool> OFDEL_{false};
+            std::optional<std::string> NLDLY_{};
+            std::optional<std::string> CRDLY_{};
+            std::optional<std::string> TABDLY_{};
+            std::optional<std::string> BSDLY_{};
+            std::optional<std::string> VTDLY_{};
+            std::optional<std::string> FFDLY_{};
 
             unsigned int assemble() const;
-        } outputFlags;
+            void useDefaultsFrom(OutputFlags const& other);
+        };
+        std::optional<OutputFlags> outputFlags{OutputFlags{}};
 
         struct ControlFlags
         {
-            unsigned int CBAUD_{0};
-            unsigned int CBAUDEX_{0};
-            std::string CSIZE_{"CS8"};
-            bool CSTOPB_{false};
-            bool CREAD_{true};
-            bool PARENB_{false};
-            bool PARODD_{false};
-            bool HUPCL_{false};
-            bool CLOCAL_{false};
-            bool LOBLK_{false};
-            bool CIBAUD_{0};
-            bool CMSPAR_{false};
-            bool CRTSCTS_{false};
+            std::optional<unsigned int> CBAUD_{0};
+            std::optional<bool> CBAUDEX_{0};
+            std::optional<std::string> CSIZE_{"CS8"};
+            std::optional<bool> CSTOPB_{false};
+            std::optional<bool> CREAD_{true};
+            std::optional<bool> PARENB_{false};
+            std::optional<bool> PARODD_{false};
+            std::optional<bool> HUPCL_{false};
+            std::optional<bool> CLOCAL_{false};
+            std::optional<bool> LOBLK_{false};
+            std::optional<bool> CIBAUD_{0};
+            std::optional<bool> CMSPAR_{false};
+            std::optional<bool> CRTSCTS_{false};
 
             unsigned int assemble() const;
-        } controlFlags;
+            void useDefaultsFrom(ControlFlags const& other);
+        };
+        std::optional<ControlFlags> controlFlags{ControlFlags{}};
 
         struct LocalFlags
         {
-            bool ISIG_{true};
-            bool ICANON_{true};
-            bool XCASE_{false};
-            bool ECHO_{true};
-            bool ECHOE_{true};
-            bool ECHOK_{true};
-            bool ECHONL_{false};
-            bool ECHOCTL_{true};
-            bool ECHOPRT_{false};
-            bool ECHOKE_{true};
-            bool FLUSHO_{false};
-            bool NOFLSH_{false};
-            bool TOSTOP_{false};
-            bool PENDIN_{false};
-            bool IEXTEN_{true};
+            std::optional<bool> ISIG_{true};
+            std::optional<bool> ICANON_{true};
+            std::optional<bool> XCASE_{false};
+            std::optional<bool> ECHO_{true};
+            std::optional<bool> ECHOE_{true};
+            std::optional<bool> ECHOK_{true};
+            std::optional<bool> ECHONL_{false};
+            std::optional<bool> ECHOCTL_{true};
+            std::optional<bool> ECHOPRT_{false};
+            std::optional<bool> ECHOKE_{true};
+            std::optional<bool> FLUSHO_{false};
+            std::optional<bool> NOFLSH_{false};
+            std::optional<bool> TOSTOP_{false};
+            std::optional<bool> PENDIN_{false};
+            std::optional<bool> IEXTEN_{true};
 
             unsigned int assemble() const;
-        } localFlags;
+            void useDefaultsFrom(LocalFlags const& other);
+        };
+        std::optional<LocalFlags> localFlags{LocalFlags{}};
 
         struct CC
         {
@@ -113,10 +121,13 @@ namespace Persistence
             unsigned char VWERASE_{0};
 
             std::vector<unsigned char> assemble() const;
-        } cc;
+        };
+        std::optional<CC> cc{std::nullopt};
 
-        unsigned int iSpeed{0};
-        unsigned int oSpeed{0};
+        std::optional<unsigned int> iSpeed{0};
+        std::optional<unsigned int> oSpeed{0};
+
+        void useDefaultsFrom(Termios const& other);
     };
     void to_json(nlohmann::json& j, Termios::InputFlags const& inputFlags);
     void from_json(nlohmann::json const& j, Termios::InputFlags& inputFlags);

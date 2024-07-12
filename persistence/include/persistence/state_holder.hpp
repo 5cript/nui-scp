@@ -5,7 +5,7 @@
 
 #include <roar/detail/pimpl_special_functions.hpp>
 
-#include <persistence/state.hpp>
+#include <persistence/state/state.hpp>
 
 #include <functional>
 #include <memory>

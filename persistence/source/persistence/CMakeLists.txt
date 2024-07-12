@@ -1,11 +1,14 @@
 add_library(
     persistence
     STATIC
+        state/ssh_options.cpp
+        state/ssh_session_options.cpp
+        state/state.cpp
         state/terminal_engine.cpp
-        state/common_terminal_options.cpp
+        state/terminal_options.cpp
+        state/terminal_theme.cpp
         state/termios.cpp
         state_holder.cpp
-        state.cpp
 )
 
 if (EMSCRIPTEN)

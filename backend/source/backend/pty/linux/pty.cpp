@@ -134,22 +134,34 @@ namespace PTY
     {
         auto term = PseudoTerminal{std::move(executor)};
 
-        // TODO: Should the user be able to specify the flags?
+        Persistence::Termios saneTty{};
+
         termios ttyOptions{
-            .c_iflag = termy.inputFlags.assemble(),
-            .c_oflag = termy.outputFlags.assemble(),
-            .c_cflag = termy.controlFlags.assemble(),
-            .c_lflag = termy.localFlags.assemble(),
+            .c_iflag = termy.inputFlags ? termy.inputFlags->assemble() : saneTty.inputFlags->assemble(),
+            .c_oflag = termy.outputFlags ? termy.outputFlags->assemble() : saneTty.outputFlags->assemble(),
+            .c_cflag = termy.controlFlags ? termy.controlFlags->assemble() : saneTty.controlFlags->assemble(),
+            .c_lflag = termy.localFlags ? termy.localFlags->assemble() : saneTty.localFlags->assemble(),
             .c_line = 0,
             .c_cc = {},
-            .c_ispeed = termy.iSpeed,
-            .c_ospeed = termy.oSpeed,
+            .c_ispeed = termy.iSpeed ? *termy.iSpeed : 0,
+            .c_ospeed = termy.oSpeed ? *termy.oSpeed : 0,
         };
 
-        std::vector<unsigned char> cc = termy.cc.assemble();
-        for (size_t i = 0; i < cc.size(); ++i)
+        if (termy.cc)
         {
-            ttyOptions.c_cc[i] = cc[i];
+            std::vector<unsigned char> cc = termy.cc->assemble();
+            for (size_t i = 0; i < cc.size(); ++i)
+            {
+                ttyOptions.c_cc[i] = cc[i];
+            }
+        }
+        else
+        {
+            std::vector<unsigned char> cc = saneTty.cc->assemble();
+            for (size_t i = 0; i < cc.size(); ++i)
+            {
+                ttyOptions.c_cc[i] = cc[i];
+            }
         }
 
         winsize initialSize{

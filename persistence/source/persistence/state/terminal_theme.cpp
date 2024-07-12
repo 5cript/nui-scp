@@ -1,4 +1,4 @@
-#include <persistence/state/common_terminal_options.hpp>
+#include <persistence/state/terminal_theme.hpp>
 
 namespace Persistence
 {
@@ -111,48 +111,5 @@ namespace Persistence
             white = other.white;
         if (!yellow.has_value())
             yellow = other.yellow;
-    }
-
-    void to_json(nlohmann::json& j, CommonTerminalOptions const& engine)
-    {
-        j = nlohmann::json::object();
-
-        TO_JSON_OPTIONAL(j, engine, fontFamily);
-        TO_JSON_OPTIONAL(j, engine, fontSize);
-        TO_JSON_OPTIONAL(j, engine, lineHeight);
-        TO_JSON_OPTIONAL(j, engine, cursorBlink);
-        TO_JSON_OPTIONAL(j, engine, renderer);
-        TO_JSON_OPTIONAL(j, engine, theme);
-        TO_JSON_OPTIONAL(j, engine, letterSpacing);
-        TO_JSON_OPTIONAL(j, engine, inherits);
-    }
-    void from_json(nlohmann::json const& j, CommonTerminalOptions& engine)
-    {
-        engine = {};
-
-        FROM_JSON_OPTIONAL(j, engine, inherits);
-        FROM_JSON_OPTIONAL(j, engine, fontFamily);
-        FROM_JSON_OPTIONAL(j, engine, fontSize);
-        FROM_JSON_OPTIONAL(j, engine, lineHeight);
-        FROM_JSON_OPTIONAL(j, engine, cursorBlink);
-        FROM_JSON_OPTIONAL(j, engine, renderer);
-        FROM_JSON_OPTIONAL(j, engine, letterSpacing);
-        FROM_JSON_OPTIONAL(j, engine, theme);
-    }
-
-    void CommonTerminalOptions::useDefaultsFrom(CommonTerminalOptions const& other)
-    {
-        if (!fontFamily.has_value())
-            fontFamily = other.fontFamily;
-        if (!fontSize.has_value())
-            fontSize = other.fontSize;
-        if (!cursorBlink.has_value())
-            cursorBlink = other.cursorBlink;
-        if (!theme.has_value())
-            theme = other.theme;
-        else
-        {
-            theme->useDefaultsFrom(other.theme.value());
-        }
     }
 }

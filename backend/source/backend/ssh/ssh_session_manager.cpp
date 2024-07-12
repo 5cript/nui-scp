@@ -108,127 +108,131 @@ bool SshSessionManager::addSession(Persistence::SshTerminalEngine const& engine)
 {
     auto session = std::make_unique<Session>();
 
-    const bool tryAgent = engine.tryAgentForAuthentication ? engine.tryAgentForAuthentication.value() : false;
+    const auto sessionOptions = engine.sshSessionOptions.value();
+    const auto sshOptions = sessionOptions.sshOptions.value();
+
+    const bool tryAgent = sshOptions.tryAgentForAuthentication ? sshOptions.tryAgentForAuthentication.value() : false;
 
     auto result = sequential(
         [&] {
-            if (engine.logVerbosity)
-                return session->session.setOption(SSH_OPTIONS_LOG_VERBOSITY_STR, engine.logVerbosity.value().c_str());
+            if (sshOptions.logVerbosity)
+                return session->session.setOption(
+                    SSH_OPTIONS_LOG_VERBOSITY_STR, sshOptions.logVerbosity.value().c_str());
             return 0;
         },
         [&] {
             int port = 22;
-            if (engine.port)
-                port = engine.port.value();
+            if (sessionOptions.port)
+                port = sessionOptions.port.value();
             return session->session.setOption(SSH_OPTIONS_PORT, &port);
         },
         [&] {
-            return session->session.setOption(SSH_OPTIONS_HOST, engine.host.c_str());
+            return session->session.setOption(SSH_OPTIONS_HOST, sessionOptions.host.c_str());
         },
         [&] {
-            if (engine.bindAddr.has_value())
-                return session->session.setOption(SSH_OPTIONS_BINDADDR, engine.bindAddr.value().c_str());
+            if (sshOptions.bindAddr.has_value())
+                return session->session.setOption(SSH_OPTIONS_BINDADDR, sshOptions.bindAddr.value().c_str());
             return 0;
         },
         [&] {
-            if (engine.user.has_value())
-                return session->session.setOption(SSH_OPTIONS_USER, engine.user.value().c_str());
+            if (sessionOptions.user.has_value())
+                return session->session.setOption(SSH_OPTIONS_USER, sessionOptions.user.value().c_str());
             return 0;
         },
         [&] {
-            if (engine.sshDirectory.has_value())
-                session->session.setOption(SSH_OPTIONS_SSH_DIR, engine.sshDirectory.value().c_str());
+            if (sshOptions.sshDirectory.has_value())
+                session->session.setOption(SSH_OPTIONS_SSH_DIR, sshOptions.sshDirectory.value().c_str());
             return 0;
         },
         [&] {
-            if (engine.knownHostsFile.has_value())
-                session->session.setOption(SSH_OPTIONS_KNOWNHOSTS, engine.knownHostsFile.value().c_str());
+            if (sshOptions.knownHostsFile.has_value())
+                session->session.setOption(SSH_OPTIONS_KNOWNHOSTS, sshOptions.knownHostsFile.value().c_str());
             return 0;
         },
         [&] {
             long timeout = 0;
-            if (engine.connectTimeoutSeconds.has_value())
+            if (sshOptions.connectTimeoutSeconds.has_value())
             {
-                timeout = engine.connectTimeoutSeconds.value();
+                timeout = sshOptions.connectTimeoutSeconds.value();
                 return session->session.setOption(SSH_OPTIONS_TIMEOUT, &timeout);
             }
             return 0;
         },
         [&] {
             long timeout = 0;
-            if (engine.connectTimeoutUSeconds.has_value())
+            if (sshOptions.connectTimeoutUSeconds.has_value())
             {
-                timeout = engine.connectTimeoutUSeconds.value();
+                timeout = sshOptions.connectTimeoutUSeconds.value();
                 return session->session.setOption(SSH_OPTIONS_TIMEOUT_USEC, &timeout);
             }
             return 0;
         },
         [&] {
-            if (engine.keyExchangeAlgorithms.has_value())
+            if (sshOptions.keyExchangeAlgorithms.has_value())
                 return session->session.setOption(
-                    SSH_OPTIONS_KEY_EXCHANGE, engine.keyExchangeAlgorithms.value().c_str());
+                    SSH_OPTIONS_KEY_EXCHANGE, sshOptions.keyExchangeAlgorithms.value().c_str());
             return 0;
         },
         [&] {
-            if (engine.compressionClientToServer.has_value())
+            if (sshOptions.compressionClientToServer.has_value())
                 return session->session.setOption(
-                    SSH_OPTIONS_COMPRESSION_C_S, engine.compressionClientToServer.value().c_str());
+                    SSH_OPTIONS_COMPRESSION_C_S, sshOptions.compressionClientToServer.value().c_str());
             return 0;
         },
         [&] {
-            if (engine.compressionServerToClient.has_value())
+            if (sshOptions.compressionServerToClient.has_value())
                 return session->session.setOption(
-                    SSH_OPTIONS_COMPRESSION_S_C, engine.compressionServerToClient.value().c_str());
+                    SSH_OPTIONS_COMPRESSION_S_C, sshOptions.compressionServerToClient.value().c_str());
             return 0;
         },
         [&] {
-            if (engine.compressionLevel.has_value())
-                return session->session.setOption(SSH_OPTIONS_COMPRESSION_LEVEL, engine.compressionLevel.value());
+            if (sshOptions.compressionLevel.has_value())
+                return session->session.setOption(SSH_OPTIONS_COMPRESSION_LEVEL, sshOptions.compressionLevel.value());
             return 0;
         },
         [&] {
-            if (engine.strictHostKeyCheck)
+            if (sshOptions.strictHostKeyCheck)
             {
-                int strict = engine.strictHostKeyCheck.value() ? 1 : 0;
+                int strict = sshOptions.strictHostKeyCheck.value() ? 1 : 0;
                 return session->session.setOption(SSH_OPTIONS_STRICTHOSTKEYCHECK, &strict);
             }
             return 0;
         },
         [&] {
-            if (engine.proxyCommand)
-                return session->session.setOption(SSH_OPTIONS_PROXYCOMMAND, engine.proxyCommand.value().c_str());
+            if (sshOptions.proxyCommand)
+                return session->session.setOption(SSH_OPTIONS_PROXYCOMMAND, sshOptions.proxyCommand.value().c_str());
             return 0;
         },
         [&] {
-            if (engine.gssapiServerIdentity)
+            if (sshOptions.gssapiServerIdentity)
                 return session->session.setOption(
-                    SSH_OPTIONS_GSSAPI_SERVER_IDENTITY, engine.gssapiServerIdentity.value().c_str());
+                    SSH_OPTIONS_GSSAPI_SERVER_IDENTITY, sshOptions.gssapiServerIdentity.value().c_str());
             return 0;
         },
         [&] {
-            if (engine.gssapiDelegateCredentials)
+            if (sshOptions.gssapiDelegateCredentials)
             {
                 return session->session.setOption(
-                    SSH_OPTIONS_GSSAPI_DELEGATE_CREDENTIALS, engine.gssapiDelegateCredentials.value() ? 1 : 0);
+                    SSH_OPTIONS_GSSAPI_DELEGATE_CREDENTIALS, sshOptions.gssapiDelegateCredentials.value() ? 1 : 0);
             }
             return 0;
         },
         [&] {
-            if (engine.gssapiClientIdentity)
+            if (sshOptions.gssapiClientIdentity)
                 return session->session.setOption(
-                    SSH_OPTIONS_GSSAPI_CLIENT_IDENTITY, engine.gssapiClientIdentity.value().c_str());
+                    SSH_OPTIONS_GSSAPI_CLIENT_IDENTITY, sshOptions.gssapiClientIdentity.value().c_str());
             return 0;
         },
         [&] {
-            if (engine.noDelay)
+            if (sshOptions.noDelay)
             {
-                int noDelay = engine.noDelay.value() ? 1 : 0;
+                int noDelay = sshOptions.noDelay.value() ? 1 : 0;
                 return session->session.setOption(SSH_OPTIONS_NODELAY, &noDelay);
             }
             return 0;
         },
         [&] {
-            if (engine.sshKey)
+            if (sshOptions.sshKey)
             {
                 int pubkeyAuth = 1;
                 return session->session.setOption(SSH_OPTIONS_PUBKEY_AUTH, &pubkeyAuth);
@@ -236,16 +240,16 @@ bool SshSessionManager::addSession(Persistence::SshTerminalEngine const& engine)
             return 0;
         },
         [&] {
-            if (engine.bypassConfig)
+            if (sshOptions.bypassConfig)
             {
-                int processConfig = engine.bypassConfig.value() ? 0 : 1;
+                int processConfig = sshOptions.bypassConfig.value() ? 0 : 1;
                 return session->session.setOption(SSH_OPTIONS_PROCESS_CONFIG, &processConfig);
             }
             return 0;
         },
         [&] {
-            if (engine.identityAgent)
-                return session->session.setOption(SSH_OPTIONS_IDENTITY_AGENT, engine.identityAgent.value().c_str());
+            if (sshOptions.identityAgent)
+                return session->session.setOption(SSH_OPTIONS_IDENTITY_AGENT, sshOptions.identityAgent.value().c_str());
             return 0;
         },
         [&] {
@@ -290,16 +294,16 @@ bool SshSessionManager::addSession(Persistence::SshTerminalEngine const& engine)
     if (result.result == SSH_AUTH_ERROR)
         return false;
 
-    if (result.result != SSH_AUTH_SUCCESS && engine.usePublicKeyAutoAuth && engine.usePublicKeyAutoAuth.value())
+    if (result.result != SSH_AUTH_SUCCESS && sshOptions.usePublicKeyAutoAuth && sshOptions.usePublicKeyAutoAuth.value())
     {
         result = sequential([&] {
             return session->session.userauthPublickeyAuto();
         });
     }
 
-    if (result.result != SSH_AUTH_SUCCESS && engine.sshKey)
+    if (result.result != SSH_AUTH_SUCCESS && sshOptions.sshKey)
     {
-        const auto sshKey = engine.sshKey.value();
+        const auto sshKey = sshOptions.sshKey.value();
 
         ssh_key key{nullptr};
         result = sequential(

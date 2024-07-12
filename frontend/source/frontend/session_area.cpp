@@ -1,6 +1,6 @@
 #include <frontend/session_area.hpp>
-#include <frontend/tailwind.hpp>
 #include <frontend/session.hpp>
+#include <frontend/classes.hpp>
 #include <log/log.hpp>
 
 #include <ui5/components/tab_container.hpp>
@@ -39,75 +39,60 @@ void SessionArea::addSession(std::string const& name)
             return;
 
         auto const& state = holder.stateCache();
-        auto engine = std::find_if(
-            begin(state.terminalEngines.value()), end(state.terminalEngines.value()), [name](const auto& engine) {
-                if (engine.name == name)
-                    return true;
-                return false;
-            });
 
-        if (engine == end(state.terminalEngines.value()))
+        auto engine = state.terminalEngines.find(name);
+        if (engine == end(state.terminalEngines))
         {
             Log::error("No engine found for name: {}", name);
             return;
         }
 
-        auto options = engine->options;
-        if (options.inherits)
+        auto options = engine->second.options;
+        if (options.hasReference())
         {
-            Log::debug("Inheriting options from: {}", *options.inherits);
-            auto parent = std::find_if(
-                begin(state.terminalOptions.value()),
-                end(state.terminalOptions.value()),
-                [options](const auto& parentOption) {
-                    if (parentOption.id == *options.inherits)
-                        return true;
-                    return false;
-                });
+            Log::debug("Inheriting options from: {}", options.ref());
+            auto parent = state.terminalOptions.find(options.ref());
 
-            if (parent == end(state.terminalOptions.value()))
+            if (parent == end(state.terminalOptions))
             {
-                Log::warn("Parent option not found for id: {}", *options.inherits);
+                Log::warn("Parent option not found for id: {}", options.ref());
                 return;
             }
 
-            options.useDefaultsFrom(parent->value);
+            options.useDefaultsFrom(parent->second);
         }
 
         const auto termios = [&]() {
-            if (!engine->termiosInherit.empty())
+            auto termios = engine->second.termios;
+            if (!engine->second.termios.hasReference())
             {
-                Log::debug("Inheriting termios from: {}", engine->termiosInherit);
-                auto parent = std::find_if(
-                    begin(state.termios.value()), end(state.termios.value()), [engine](const auto& parentTermios) {
-                        if (parentTermios.id == engine->termiosInherit)
-                            return true;
-                        return false;
-                    });
+                Log::debug("Inheriting termios from: {}", engine->second.termios.ref());
+                auto parent = state.termios.find(engine->second.termios.ref());
 
-                if (parent == end(state.termios.value()))
+                if (parent == end(state.termios))
                 {
-                    Log::warn("Parent termios not found for id: {}", engine->termiosInherit);
-                    return Persistence::Termios{};
+                    Log::warn("Parent termios not found for id: {}", engine->second.termios.ref());
+                    return termios;
                 }
 
-                return parent->value;
+                termios.useDefaultsFrom(parent->second);
             }
-            return Persistence::Termios{};
+            return termios;
         }();
 
         Log::info("Adding session: {}", name);
         impl_->sessions.emplace_back(
             impl_->stateHolder,
-            *engine,
-            termios,
+            engine->second,
+            termios.value(),
+            options.value(),
+            name,
             [this](Session const*, std::string const&) {
                 {
                     impl_->sessions.modify();
                 }
                 Nui::globalEventContext.executeActiveEventsImmediately();
-            },
-            options);
+            });
         Nui::globalEventContext.executeActiveEventsImmediately();
     });
 }
@@ -123,7 +108,7 @@ Nui::ElementRenderer SessionArea::operator()()
 
     // clang-format off
     return div{
-        class_ = classes(defaultBgText, "session-area", "[grid-area:SessionArea]")
+        class_ = classes("session-area", "[grid-area:SessionArea]")
     }(
         ui5::tabcontainer{
             style = "height: calc(100% - 10px);display: block",

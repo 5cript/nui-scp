@@ -1,6 +1,7 @@
 #include <frontend/session.hpp>
 #include <frontend/terminal/terminal.hpp>
 #include <frontend/terminal/executing_engine.hpp>
+#include <frontend/classes.hpp>
 #include <persistence/state_holder.hpp>
 #include <log/log.hpp>
 
@@ -14,23 +15,26 @@ struct Session::Implementation
     Persistence::StateHolder* stateHolder;
     Persistence::TerminalEngine engine;
     Persistence::Termios termios;
-    Nui::Observed<Persistence::CommonTerminalOptions> options;
+    Nui::Observed<Persistence::TerminalOptions> options;
     Nui::Observed<std::unique_ptr<Terminal>> terminal;
     Nui::Delocalized<int> stable;
+    std::string initialName;
     std::string tabTitle;
 
     Implementation(
         Persistence::StateHolder* stateHolder,
         Persistence::TerminalEngine engine,
         Persistence::Termios termios,
-        Persistence::CommonTerminalOptions options)
+        Persistence::TerminalOptions options,
+        std::string initialName)
         : stateHolder{stateHolder}
         , engine{std::move(engine)}
         , termios{std::move(termios)}
         , options{std::move(options)}
         , terminal{}
         , stable{}
-        , tabTitle{this->engine.name}
+        , initialName{std::move(initialName)}
+        , tabTitle{this->initialName}
     {}
 };
 
@@ -38,9 +42,15 @@ Session::Session(
     Persistence::StateHolder* stateHolder,
     Persistence::TerminalEngine engine,
     Persistence::Termios termios,
-    std::function<void(Session const* session, std::string)> doTabTitleChange,
-    Persistence::CommonTerminalOptions options)
-    : impl_{std::make_unique<Implementation>(stateHolder, std::move(engine), std::move(termios), std::move(options))}
+    Persistence::TerminalOptions options,
+    std::string initialName,
+    std::function<void(Session const* session, std::string)> doTabTitleChange)
+    : impl_{std::make_unique<Implementation>(
+          stateHolder,
+          std::move(engine),
+          std::move(termios),
+          std::move(options),
+          std::move(initialName))}
 {
     impl_->terminal =
         std::make_unique<Terminal>(std::make_unique<ExecutingTerminalEngine>(ExecutingTerminalEngine::Settings{
@@ -80,7 +90,7 @@ ROAR_PIMPL_SPECIAL_FUNCTIONS_IMPL(Session);
 
 std::string Session::name() const
 {
-    return impl_->engine.name;
+    return impl_->initialName;
 }
 
 std::string Session::tabTitle() const

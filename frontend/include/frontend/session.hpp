@@ -3,7 +3,7 @@
 #include <persistence/state_holder.hpp>
 #include <persistence/state/terminal_engine.hpp>
 #include <persistence/state/termios.hpp>
-#include <persistence/state/common_terminal_options.hpp>
+#include <persistence/state/terminal_options.hpp>
 
 #include <nui/frontend/element_renderer.hpp>
 #include <nui/frontend/utility/stabilize.hpp>
@@ -16,8 +16,9 @@ class Session
         Persistence::StateHolder* stateHolder,
         Persistence::TerminalEngine engine,
         Persistence::Termios termios,
-        std::function<void(Session const* session, std::string)> doTabTitleChange,
-        Persistence::CommonTerminalOptions options);
+        Persistence::TerminalOptions options,
+        std::string initialName,
+        std::function<void(Session const* session, std::string)> doTabTitleChange);
     ROAR_PIMPL_SPECIAL_FUNCTIONS(Session);
 
     Nui::ElementRenderer operator()();
