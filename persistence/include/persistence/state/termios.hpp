@@ -11,90 +11,163 @@ namespace Persistence
     {
         struct InputFlags
         {
-            std::optional<bool> IGNBRK_{false};
-            std::optional<bool> BRKINT_{false};
-            std::optional<bool> IGNPAR_{false};
-            std::optional<bool> PARMRK_{false};
-            std::optional<bool> INPCK_{false};
-            std::optional<bool> ISTRIP_{false};
-            std::optional<bool> INLCR_{false};
-            std::optional<bool> IGNCR_{false};
-            std::optional<bool> ICRNL_{true};
-            std::optional<bool> IUCLC_{false};
-            std::optional<bool> IXON_{true};
-            std::optional<bool> IXANY_{false};
-            std::optional<bool> IXOFF_{false};
-            std::optional<bool> IMAXBEL_{false};
-            std::optional<bool> IUTF8_{true};
+            std::optional<bool> IGNBRK_{std::nullopt};
+            std::optional<bool> BRKINT_{std::nullopt};
+            std::optional<bool> IGNPAR_{std::nullopt};
+            std::optional<bool> PARMRK_{std::nullopt};
+            std::optional<bool> INPCK_{std::nullopt};
+            std::optional<bool> ISTRIP_{std::nullopt};
+            std::optional<bool> INLCR_{std::nullopt};
+            std::optional<bool> IGNCR_{std::nullopt};
+            std::optional<bool> ICRNL_{std::nullopt};
+            std::optional<bool> IUCLC_{std::nullopt};
+            std::optional<bool> IXON_{std::nullopt};
+            std::optional<bool> IXANY_{std::nullopt};
+            std::optional<bool> IXOFF_{std::nullopt};
+            std::optional<bool> IMAXBEL_{std::nullopt};
+            std::optional<bool> IUTF8_{std::nullopt};
 
             unsigned int assemble() const;
             void useDefaultsFrom(InputFlags const& other);
+            InputFlags saneDefaults() const
+            {
+                return InputFlags{
+                    .IGNBRK_ = false,
+                    .BRKINT_ = false,
+                    .IGNPAR_ = false,
+                    .PARMRK_ = false,
+                    .INPCK_ = false,
+                    .ISTRIP_ = false,
+                    .INLCR_ = false,
+                    .IGNCR_ = false,
+                    .ICRNL_ = true,
+                    .IUCLC_ = false,
+                    .IXON_ = true,
+                    .IXANY_ = false,
+                    .IXOFF_ = false,
+                    .IMAXBEL_ = false,
+                    .IUTF8_ = true};
+            }
         };
         std::optional<InputFlags> inputFlags{InputFlags{}};
 
         struct OutputFlags
         {
-            std::optional<bool> OPOST_{true};
-            std::optional<bool> OLCUC_{false};
-            std::optional<bool> ONLCR_{true};
-            std::optional<bool> OCRNL_{false};
-            std::optional<bool> ONOCR_{false};
-            std::optional<bool> ONLRET_{false};
-            std::optional<bool> OFILL_{false};
-            std::optional<bool> OFDEL_{false};
-            std::optional<std::string> NLDLY_{};
-            std::optional<std::string> CRDLY_{};
-            std::optional<std::string> TABDLY_{};
-            std::optional<std::string> BSDLY_{};
-            std::optional<std::string> VTDLY_{};
-            std::optional<std::string> FFDLY_{};
+            std::optional<bool> OPOST_{std::nullopt};
+            std::optional<bool> OLCUC_{std::nullopt};
+            std::optional<bool> ONLCR_{std::nullopt};
+            std::optional<bool> OCRNL_{std::nullopt};
+            std::optional<bool> ONOCR_{std::nullopt};
+            std::optional<bool> ONLRET_{std::nullopt};
+            std::optional<bool> OFILL_{std::nullopt};
+            std::optional<bool> OFDEL_{std::nullopt};
+            std::optional<std::string> NLDLY_{std::nullopt};
+            std::optional<std::string> CRDLY_{std::nullopt};
+            std::optional<std::string> TABDLY_{std::nullopt};
+            std::optional<std::string> BSDLY_{std::nullopt};
+            std::optional<std::string> VTDLY_{std::nullopt};
+            std::optional<std::string> FFDLY_{std::nullopt};
 
             unsigned int assemble() const;
             void useDefaultsFrom(OutputFlags const& other);
+            OutputFlags saneDefaults() const
+            {
+                return OutputFlags{
+                    .OPOST_ = true,
+                    .OLCUC_ = false,
+                    .ONLCR_ = false,
+                    .OCRNL_ = false,
+                    .ONOCR_ = false,
+                    .ONLRET_ = false,
+                    .OFILL_ = false,
+                    .OFDEL_ = false,
+                    .NLDLY_ = "NL0",
+                    .CRDLY_ = "CR0",
+                    .TABDLY_ = "TAB0",
+                    .BSDLY_ = "BS0",
+                    .VTDLY_ = "VT0",
+                    .FFDLY_ = "FF0"};
+            }
         };
         std::optional<OutputFlags> outputFlags{OutputFlags{}};
 
         struct ControlFlags
         {
-            std::optional<unsigned int> CBAUD_{0};
-            std::optional<bool> CBAUDEX_{0};
-            std::optional<std::string> CSIZE_{"CS8"};
-            std::optional<bool> CSTOPB_{false};
-            std::optional<bool> CREAD_{true};
-            std::optional<bool> PARENB_{false};
-            std::optional<bool> PARODD_{false};
-            std::optional<bool> HUPCL_{false};
-            std::optional<bool> CLOCAL_{false};
-            std::optional<bool> LOBLK_{false};
-            std::optional<bool> CIBAUD_{0};
-            std::optional<bool> CMSPAR_{false};
-            std::optional<bool> CRTSCTS_{false};
+            std::optional<unsigned int> CBAUD_{std::nullopt};
+            std::optional<bool> CBAUDEX_{std::nullopt};
+            std::optional<std::string> CSIZE_{std::nullopt};
+            std::optional<bool> CSTOPB_{std::nullopt};
+            std::optional<bool> CREAD_{std::nullopt};
+            std::optional<bool> PARENB_{std::nullopt};
+            std::optional<bool> PARODD_{std::nullopt};
+            std::optional<bool> HUPCL_{std::nullopt};
+            std::optional<bool> CLOCAL_{std::nullopt};
+            std::optional<bool> LOBLK_{std::nullopt};
+            std::optional<bool> CIBAUD_{std::nullopt};
+            std::optional<bool> CMSPAR_{std::nullopt};
+            std::optional<bool> CRTSCTS_{std::nullopt};
 
             unsigned int assemble() const;
             void useDefaultsFrom(ControlFlags const& other);
+            ControlFlags saneDefaults() const
+            {
+                return ControlFlags{
+                    .CBAUD_ = 0,
+                    .CBAUDEX_ = false,
+                    .CSIZE_ = "CS8",
+                    .CSTOPB_ = false,
+                    .CREAD_ = true,
+                    .PARENB_ = false,
+                    .PARODD_ = false,
+                    .HUPCL_ = false,
+                    .CLOCAL_ = false,
+                    .LOBLK_ = false,
+                    .CIBAUD_ = false,
+                    .CMSPAR_ = false,
+                    .CRTSCTS_ = false};
+            }
         };
         std::optional<ControlFlags> controlFlags{ControlFlags{}};
 
         struct LocalFlags
         {
-            std::optional<bool> ISIG_{true};
-            std::optional<bool> ICANON_{true};
-            std::optional<bool> XCASE_{false};
-            std::optional<bool> ECHO_{true};
-            std::optional<bool> ECHOE_{true};
-            std::optional<bool> ECHOK_{true};
-            std::optional<bool> ECHONL_{false};
-            std::optional<bool> ECHOCTL_{true};
-            std::optional<bool> ECHOPRT_{false};
-            std::optional<bool> ECHOKE_{true};
-            std::optional<bool> FLUSHO_{false};
-            std::optional<bool> NOFLSH_{false};
-            std::optional<bool> TOSTOP_{false};
-            std::optional<bool> PENDIN_{false};
-            std::optional<bool> IEXTEN_{true};
+            std::optional<bool> ISIG_{std::nullopt};
+            std::optional<bool> ICANON_{std::nullopt};
+            std::optional<bool> XCASE_{std::nullopt};
+            std::optional<bool> ECHO_{std::nullopt};
+            std::optional<bool> ECHOE_{std::nullopt};
+            std::optional<bool> ECHOK_{std::nullopt};
+            std::optional<bool> ECHONL_{std::nullopt};
+            std::optional<bool> ECHOCTL_{std::nullopt};
+            std::optional<bool> ECHOPRT_{std::nullopt};
+            std::optional<bool> ECHOKE_{std::nullopt};
+            std::optional<bool> FLUSHO_{std::nullopt};
+            std::optional<bool> NOFLSH_{std::nullopt};
+            std::optional<bool> TOSTOP_{std::nullopt};
+            std::optional<bool> PENDIN_{std::nullopt};
+            std::optional<bool> IEXTEN_{std::nullopt};
 
             unsigned int assemble() const;
             void useDefaultsFrom(LocalFlags const& other);
+            LocalFlags saneDefaults() const
+            {
+                return LocalFlags{
+                    .ISIG_ = true,
+                    .ICANON_ = true,
+                    .XCASE_ = false,
+                    .ECHO_ = true,
+                    .ECHOE_ = true,
+                    .ECHOK_ = true,
+                    .ECHONL_ = false,
+                    .ECHOCTL_ = true,
+                    .ECHOPRT_ = false,
+                    .ECHOKE_ = true,
+                    .FLUSHO_ = false,
+                    .NOFLSH_ = false,
+                    .TOSTOP_ = false,
+                    .PENDIN_ = false,
+                    .IEXTEN_ = true};
+            }
         };
         std::optional<LocalFlags> localFlags{LocalFlags{}};
 

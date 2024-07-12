@@ -134,7 +134,15 @@ namespace PTY
     {
         auto term = PseudoTerminal{std::move(executor)};
 
-        Persistence::Termios saneTty{};
+        Persistence::Termios saneTty{
+            .inputFlags = Persistence::Termios::InputFlags{}.saneDefaults(),
+            .outputFlags = Persistence::Termios::OutputFlags{}.saneDefaults(),
+            .controlFlags = Persistence::Termios::ControlFlags{}.saneDefaults(),
+            .localFlags = Persistence::Termios::LocalFlags{}.saneDefaults(),
+            .cc = Persistence::Termios::CC{},
+            .iSpeed = 0,
+            .oSpeed = 0,
+        };
 
         termios ttyOptions{
             .c_iflag = termy.inputFlags ? termy.inputFlags->assemble() : saneTty.inputFlags->assemble(),

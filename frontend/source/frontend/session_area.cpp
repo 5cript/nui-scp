@@ -19,16 +19,12 @@ struct SessionArea::Implementation
     Implementation(Persistence::StateHolder* stateHolder)
         : stateHolder{stateHolder}
         , sessions{}
-    {
-        Nui::Console::log("SessionArea::Implementation()");
-    }
+    {}
 };
 
 SessionArea::SessionArea(Persistence::StateHolder* stateHolder)
     : impl_{std::make_unique<Implementation>(stateHolder)}
-{
-    Nui::Console::log("SessionArea::SessionArea()");
-}
+{}
 
 ROAR_PIMPL_SPECIAL_FUNCTIONS_IMPL(SessionArea);
 
