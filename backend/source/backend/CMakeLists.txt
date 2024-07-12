@@ -1,12 +1,13 @@
 target_sources(
     ${PROJECT_NAME}
     PRIVATE
-        main.cpp
+        events/event_context.cpp
+        password/password_prompter.cpp
         process/process.cpp
         process/process_store.cpp
         process/environment.cpp
         ssh/ssh_session_manager.cpp
-        password/password_prompter.cpp
+        main.cpp
 )
 
 if (WIN32)
