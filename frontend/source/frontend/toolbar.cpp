@@ -3,6 +3,10 @@
 #include <log/log.hpp>
 
 #include <ui5/components/toolbar.hpp>
+#include <ui5/components/toolbar_button.hpp>
+#include <ui5/components/toolbar_select.hpp>
+#include <ui5/components/toolbar_select_option.hpp>
+#include <ui5/components/select.hpp>
 
 #include <nui/frontend/elements.hpp>
 #include <nui/frontend/attributes.hpp>
@@ -64,16 +68,13 @@ Nui::ElementRenderer Toolbar::operator()()
         }(
             ui5::toolbar_select{
                 "change"_event = [](Nui::val event) {
-                    //Nui::Console::log("Selected: ", event["detail"]["selectedItem"]["text"]);
+                    Nui::Console::log("Selected: ", event["detail"]["selectedItem"]["text"]);
                 }
             }(
-                // range(impl_->terminalEngines),
-                // [](long long, auto& engine) -> Nui::ElementRenderer {
-                //     return ui5::toolbar_select_option{}(engine);
-                // }
-                ui5::toolbar_select_option{
-                    "selected"_prop = true
-                }("X")
+                range(impl_->terminalEngines),
+                [](long long, auto& engine) -> Nui::ElementRenderer {
+                    return ui5::toolbar_select_option{}(engine);
+                }
             ),
             ui5::toolbar_button{
                 "text"_prop = "New Session",
