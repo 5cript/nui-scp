@@ -7,14 +7,16 @@
 struct Sidebar::Implementation
 {
     Persistence::StateHolder* stateHolder;
+    FrontendEvents* events;
 
-    Implementation(Persistence::StateHolder* stateHolder)
+    Implementation(Persistence::StateHolder* stateHolder, FrontendEvents* events)
         : stateHolder{stateHolder}
+        , events{events}
     {}
 };
 
-Sidebar::Sidebar(Persistence::StateHolder* stateHolder)
-    : impl_(std::make_unique<Implementation>(stateHolder))
+Sidebar::Sidebar(Persistence::StateHolder* stateHolder, FrontendEvents* events)
+    : impl_(std::make_unique<Implementation>(stateHolder, events))
 {}
 
 ROAR_PIMPL_SPECIAL_FUNCTIONS_IMPL(Sidebar);

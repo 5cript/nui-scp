@@ -12,17 +12,18 @@
 struct MainPage::Implementation
 {
     Persistence::StateHolder* stateHolder;
+    FrontendEvents* events;
     Sidebar sidebar;
     Toolbar toolbar;
     SessionArea sessionArea;
     Nui::Observed<bool> darkMode;
     Nui::TimerHandle setupWait;
 
-    Implementation(Persistence::StateHolder* stateHolder)
+    Implementation(Persistence::StateHolder* stateHolder, FrontendEvents* events)
         : stateHolder{stateHolder}
-        , sidebar{stateHolder}
-        , toolbar{stateHolder}
-        , sessionArea{stateHolder}
+        , sidebar{stateHolder, events}
+        , toolbar{stateHolder, events}
+        , sessionArea{stateHolder, events}
         , darkMode{true}
         , setupWait{}
     {
@@ -31,12 +32,12 @@ struct MainPage::Implementation
 
     ~Implementation()
     {
-        Nui::Console::log("MainPage::Implementation() ~");
+        Nui::Console::log("MainPage::~Implementation()");
     }
 };
 
-MainPage::MainPage(Persistence::StateHolder* stateHolder)
-    : impl_{std::make_unique<Implementation>(stateHolder)}
+MainPage::MainPage(Persistence::StateHolder* stateHolder, FrontendEvents* events)
+    : impl_{std::make_unique<Implementation>(stateHolder, events)}
 {
     Log::setupFrontendLogger(
         [](std::chrono::system_clock::time_point const&, Log::Level, std::string const&) {

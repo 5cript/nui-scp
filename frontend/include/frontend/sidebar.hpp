@@ -1,5 +1,6 @@
 #pragma once
 
+#include <frontend/events/frontend_events.hpp>
 #include <persistence/state_holder.hpp>
 
 #include <nui/frontend/element_renderer.hpp>
@@ -8,7 +9,7 @@
 class Sidebar
 {
   public:
-    Sidebar(Persistence::StateHolder* stateHolder);
+    Sidebar(Persistence::StateHolder* stateHolder, FrontendEvents* events);
     ROAR_PIMPL_SPECIAL_FUNCTIONS(Sidebar);
 
     Nui::ElementRenderer operator()();

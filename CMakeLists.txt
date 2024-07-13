@@ -28,6 +28,7 @@ add_subdirectory("${CMAKE_SOURCE_DIR}/constants/source/constants")
 add_subdirectory("${CMAKE_SOURCE_DIR}/utility/source/utility")
 add_subdirectory("${CMAKE_SOURCE_DIR}/log/source/log")
 add_subdirectory("${CMAKE_SOURCE_DIR}/persistence/source/persistence")
+add_subdirectory("${CMAKE_SOURCE_DIR}/events/source/events")
 include("${CMAKE_CURRENT_LIST_DIR}/_cmake/dependencies.cmake")
 
 set(PREJS_FILE "${CMAKE_SOURCE_DIR}/frontend/source/frontend/js/module.js")

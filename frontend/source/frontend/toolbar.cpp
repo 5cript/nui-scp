@@ -1,6 +1,7 @@
 #include <frontend/toolbar.hpp>
 #include <frontend/classes.hpp>
 #include <log/log.hpp>
+#include <events/app_event_context.hpp>
 
 #include <ui5/components/toolbar.hpp>
 #include <ui5/components/toolbar_button.hpp>
@@ -8,17 +9,23 @@
 #include <ui5/components/toolbar_select_option.hpp>
 #include <ui5/components/select.hpp>
 
+#include <nui/event_system/observed_value.hpp>
 #include <nui/frontend/elements.hpp>
 #include <nui/frontend/attributes.hpp>
 
 struct Toolbar::Implementation
 {
     Persistence::StateHolder* stateHolder;
+    FrontendEvents* events;
     Nui::Observed<std::vector<std::string>> terminalEngines;
 
-    Implementation(Persistence::StateHolder* stateHolder)
+    Implementation(Persistence::StateHolder* stateHolder, FrontendEvents* events)
         : stateHolder{stateHolder}
-    {}
+        , events{events}
+        , terminalEngines{}
+    {
+        Nui::Console::log("Toolbar::Implementation()");
+    }
 
     void updateEnginesList();
 };
@@ -40,14 +47,16 @@ void Toolbar::Implementation::updateEnginesList()
             Nui::Console::log(Nui::convertToVal(engines));
             auto proxy = terminalEngines.modify();
             terminalEngines = std::move(engines);
+            events->onNewSession.value() = terminalEngines.value().front();
         }
         Nui::globalEventContext.executeActiveEventsImmediately();
     });
 }
 
-Toolbar::Toolbar(Persistence::StateHolder* stateHolder)
-    : impl_(std::make_unique<Implementation>(stateHolder))
+Toolbar::Toolbar(Persistence::StateHolder* stateHolder, FrontendEvents* events)
+    : impl_(std::make_unique<Implementation>(stateHolder, events))
 {
+    Nui::Console::log("Toolbar::Toolbar");
     impl_->updateEnginesList();
 }
 
@@ -67,8 +76,9 @@ Nui::ElementRenderer Toolbar::operator()()
             "design"_prop = "Solid",
         }(
             ui5::toolbar_select{
-                "change"_event = [](Nui::val event) {
-                    Nui::Console::log("Selected: ", event["detail"]["selectedItem"]["text"]);
+                "change"_event = [this](Nui::val event) {
+                    impl_->events->onNewSession.assignWithoutUpdate(
+                        event["detail"]["selectedOption"]["textContent"].as<std::string>());
                 }
             }(
                 range(impl_->terminalEngines),
@@ -78,8 +88,8 @@ Nui::ElementRenderer Toolbar::operator()()
             ),
             ui5::toolbar_button{
                 "text"_prop = "New Session",
-                "click"_event = [](Nui::val) {
-                    Nui::Console::log("New Session clicked");
+                "click"_event = [this](Nui::val) {
+                    impl_->events->onNewSession.modifyNow();
                 }
             }()
         )

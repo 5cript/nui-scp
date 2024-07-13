@@ -26,6 +26,7 @@ target_link_libraries(
         log
         persistence
         nlohmann_json::nlohmann_json
+        events
 )
 
 nui_prepare_emscripten_target(

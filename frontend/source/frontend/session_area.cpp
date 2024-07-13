@@ -2,6 +2,7 @@
 #include <frontend/session.hpp>
 #include <frontend/classes.hpp>
 #include <log/log.hpp>
+#include <events/app_event_context.hpp>
 
 #include <ui5/components/tab_container.hpp>
 
@@ -14,16 +15,23 @@
 struct SessionArea::Implementation
 {
     Persistence::StateHolder* stateHolder;
+    FrontendEvents* events;
     Nui::Observed<std::list<Session>> sessions;
 
-    Implementation(Persistence::StateHolder* stateHolder)
+    Implementation(Persistence::StateHolder* stateHolder, FrontendEvents* events)
         : stateHolder{stateHolder}
+        , events{events}
         , sessions{}
-    {}
+    {
+        listen<std::string>(appEventContext, events->onNewSession, [](std::string const& name) -> bool {
+            Log::info("New session event: {}", name);
+            return true;
+        });
+    }
 };
 
-SessionArea::SessionArea(Persistence::StateHolder* stateHolder)
-    : impl_{std::make_unique<Implementation>(stateHolder)}
+SessionArea::SessionArea(Persistence::StateHolder* stateHolder, FrontendEvents* events)
+    : impl_{std::make_unique<Implementation>(stateHolder, events)}
 {}
 
 ROAR_PIMPL_SPECIAL_FUNCTIONS_IMPL(SessionArea);

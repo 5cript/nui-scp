@@ -1,5 +1,6 @@
 #pragma once
 
+#include <frontend/events/frontend_events.hpp>
 #include <persistence/state_holder.hpp>
 
 #include <nui/frontend/element_renderer.hpp>
@@ -8,7 +9,7 @@
 class SessionArea
 {
   public:
-    SessionArea(Persistence::StateHolder* stateHolder);
+    SessionArea(Persistence::StateHolder* stateHolder, FrontendEvents* events);
     ROAR_PIMPL_SPECIAL_FUNCTIONS(SessionArea);
 
     Nui::ElementRenderer operator()();

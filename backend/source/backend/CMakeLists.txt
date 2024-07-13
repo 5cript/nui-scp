@@ -1,7 +1,6 @@
 target_sources(
     ${PROJECT_NAME}
     PRIVATE
-        events/event_context.cpp
         password/password_prompter.cpp
         process/process.cpp
         process/process_store.cpp
@@ -46,6 +45,7 @@ target_link_libraries(
         log
         persistence
         ssh
+        events
 )
 
 nui_set_target_output_directories(${PROJECT_NAME})
