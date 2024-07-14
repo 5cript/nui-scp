@@ -59,7 +59,7 @@ namespace Persistence
     {
         j = {
             {"type", engine.type},
-            {"options", engine.options},
+            {"terminalOptions", engine.terminalOptions},
             {"termios", engine.termios},
         };
 
@@ -74,19 +74,21 @@ namespace Persistence
             [&j](std::monostate) {
                 j["engine"] = nullptr;
             });
+
+        TO_JSON_OPTIONAL(j, engine, startupSession);
     }
     void from_json(nlohmann::json const& j, TerminalEngine& engine)
     {
         engine = {};
 
         if (j.contains("type"))
-            engine.type = j.at("type").get<std::string>();
+            j.at("type").get_to(engine.type);
 
         if (j.contains("termios"))
             j.at("termios").get_to(engine.termios);
 
-        if (j.contains("options"))
-            engine.options = j.at("options").get<TerminalOptions>();
+        if (j.contains("terminalOptions"))
+            j.at("terminalOptions").get_to(engine.terminalOptions);
 
         if (engine.type == "shell")
         {
@@ -104,6 +106,8 @@ namespace Persistence
         {
             engine.engine = std::monostate{};
         }
+
+        FROM_JSON_OPTIONAL(j, engine, startupSession);
     }
 
     ExecutingTerminalEngine defaultMsys2TerminalEngine()

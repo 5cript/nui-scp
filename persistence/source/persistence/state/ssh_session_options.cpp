@@ -10,6 +10,8 @@ namespace Persistence
             port = other.port;
         if (!user.has_value())
             user = other.user;
+        if (!sshKey.has_value())
+            sshKey = other.sshKey;
 
         sshOptions.useDefaultsFrom(other.sshOptions.value());
     }
@@ -20,6 +22,7 @@ namespace Persistence
 
         TO_JSON_OPTIONAL(j, options, port);
         TO_JSON_OPTIONAL(j, options, user);
+        TO_JSON_OPTIONAL(j, options, sshKey);
         j["sshOptions"] = options.sshOptions;
     }
     void from_json(nlohmann::json const& j, SshSessionOptions& options)
@@ -28,6 +31,7 @@ namespace Persistence
 
         FROM_JSON_OPTIONAL(j, options, port);
         FROM_JSON_OPTIONAL(j, options, user);
+        FROM_JSON_OPTIONAL(j, options, sshKey);
         if (j.contains("host"))
             j.at("host").get_to(options.host);
         if (j.contains("sshOptions"))

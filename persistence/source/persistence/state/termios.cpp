@@ -280,143 +280,147 @@ namespace Persistence
 #endif
     }
 
+#define TO_JSON_OPTIONAL_NO_UNDERSCORE(j, termios, field) TO_JSON_OPTIONAL_RENAME(j, termios, field##_, #field)
+
+#define FROM_JSON_OPTIONAL_NO_UNDERSCORE(j, termios, field) FROM_JSON_OPTIONAL_RENAME(j, termios, field##_, #field)
+
     void to_json(nlohmann::json& j, Termios::InputFlags const& inputFlags)
     {
-        TO_JSON_OPTIONAL(j, inputFlags, IGNBRK_);
-        TO_JSON_OPTIONAL(j, inputFlags, BRKINT_);
-        TO_JSON_OPTIONAL(j, inputFlags, IGNPAR_);
-        TO_JSON_OPTIONAL(j, inputFlags, PARMRK_);
-        TO_JSON_OPTIONAL(j, inputFlags, INPCK_);
-        TO_JSON_OPTIONAL(j, inputFlags, ISTRIP_);
-        TO_JSON_OPTIONAL(j, inputFlags, INLCR_);
-        TO_JSON_OPTIONAL(j, inputFlags, IGNCR_);
-        TO_JSON_OPTIONAL(j, inputFlags, ICRNL_);
-        TO_JSON_OPTIONAL(j, inputFlags, IUCLC_);
-        TO_JSON_OPTIONAL(j, inputFlags, IXON_);
-        TO_JSON_OPTIONAL(j, inputFlags, IXANY_);
-        TO_JSON_OPTIONAL(j, inputFlags, IXOFF_);
-        TO_JSON_OPTIONAL(j, inputFlags, IMAXBEL_);
-        TO_JSON_OPTIONAL(j, inputFlags, IUTF8_);
+        TO_JSON_OPTIONAL_NO_UNDERSCORE(j, inputFlags, IGNBRK);
+        TO_JSON_OPTIONAL_NO_UNDERSCORE(j, inputFlags, BRKINT);
+        TO_JSON_OPTIONAL_NO_UNDERSCORE(j, inputFlags, IGNPAR);
+        TO_JSON_OPTIONAL_NO_UNDERSCORE(j, inputFlags, PARMRK);
+        TO_JSON_OPTIONAL_NO_UNDERSCORE(j, inputFlags, INPCK);
+        TO_JSON_OPTIONAL_NO_UNDERSCORE(j, inputFlags, ISTRIP);
+        TO_JSON_OPTIONAL_NO_UNDERSCORE(j, inputFlags, INLCR);
+        TO_JSON_OPTIONAL_NO_UNDERSCORE(j, inputFlags, IGNCR);
+        TO_JSON_OPTIONAL_NO_UNDERSCORE(j, inputFlags, ICRNL);
+        TO_JSON_OPTIONAL_NO_UNDERSCORE(j, inputFlags, IUCLC);
+        TO_JSON_OPTIONAL_NO_UNDERSCORE(j, inputFlags, IXON);
+        TO_JSON_OPTIONAL_NO_UNDERSCORE(j, inputFlags, IXANY);
+        TO_JSON_OPTIONAL_NO_UNDERSCORE(j, inputFlags, IXOFF);
+        TO_JSON_OPTIONAL_NO_UNDERSCORE(j, inputFlags, IMAXBEL);
+        TO_JSON_OPTIONAL_NO_UNDERSCORE(j, inputFlags, IUTF8);
     }
     void from_json(nlohmann::json const& j, Termios::InputFlags& inputFlags)
     {
-        FROM_JSON_OPTIONAL(j, inputFlags, IGNBRK_);
-        FROM_JSON_OPTIONAL(j, inputFlags, BRKINT_);
-        FROM_JSON_OPTIONAL(j, inputFlags, IGNPAR_);
-        FROM_JSON_OPTIONAL(j, inputFlags, PARMRK_);
-        FROM_JSON_OPTIONAL(j, inputFlags, INPCK_);
-        FROM_JSON_OPTIONAL(j, inputFlags, ISTRIP_);
-        FROM_JSON_OPTIONAL(j, inputFlags, INLCR_);
-        FROM_JSON_OPTIONAL(j, inputFlags, IGNCR_);
-        FROM_JSON_OPTIONAL(j, inputFlags, ICRNL_);
-        FROM_JSON_OPTIONAL(j, inputFlags, IUCLC_);
-        FROM_JSON_OPTIONAL(j, inputFlags, IXON_);
-        FROM_JSON_OPTIONAL(j, inputFlags, IXANY_);
-        FROM_JSON_OPTIONAL(j, inputFlags, IXOFF_);
-        FROM_JSON_OPTIONAL(j, inputFlags, IMAXBEL_);
-        FROM_JSON_OPTIONAL(j, inputFlags, IUTF8_);
+        FROM_JSON_OPTIONAL_NO_UNDERSCORE(j, inputFlags, IGNBRK);
+        FROM_JSON_OPTIONAL_NO_UNDERSCORE(j, inputFlags, BRKINT);
+        FROM_JSON_OPTIONAL_NO_UNDERSCORE(j, inputFlags, IGNPAR);
+        FROM_JSON_OPTIONAL_NO_UNDERSCORE(j, inputFlags, PARMRK);
+        FROM_JSON_OPTIONAL_NO_UNDERSCORE(j, inputFlags, INPCK);
+        FROM_JSON_OPTIONAL_NO_UNDERSCORE(j, inputFlags, ISTRIP);
+        FROM_JSON_OPTIONAL_NO_UNDERSCORE(j, inputFlags, INLCR);
+        FROM_JSON_OPTIONAL_NO_UNDERSCORE(j, inputFlags, IGNCR);
+        FROM_JSON_OPTIONAL_NO_UNDERSCORE(j, inputFlags, ICRNL);
+        FROM_JSON_OPTIONAL_NO_UNDERSCORE(j, inputFlags, IUCLC);
+        FROM_JSON_OPTIONAL_NO_UNDERSCORE(j, inputFlags, IXON);
+        FROM_JSON_OPTIONAL_NO_UNDERSCORE(j, inputFlags, IXANY);
+        FROM_JSON_OPTIONAL_NO_UNDERSCORE(j, inputFlags, IXOFF);
+        FROM_JSON_OPTIONAL_NO_UNDERSCORE(j, inputFlags, IMAXBEL);
+        FROM_JSON_OPTIONAL_NO_UNDERSCORE(j, inputFlags, IUTF8);
     }
     void to_json(nlohmann::json& j, Termios::OutputFlags const& outputFlags)
     {
-        TO_JSON_OPTIONAL(j, outputFlags, OPOST_);
-        TO_JSON_OPTIONAL(j, outputFlags, OLCUC_);
-        TO_JSON_OPTIONAL(j, outputFlags, ONLCR_);
-        TO_JSON_OPTIONAL(j, outputFlags, OCRNL_);
-        TO_JSON_OPTIONAL(j, outputFlags, ONOCR_);
-        TO_JSON_OPTIONAL(j, outputFlags, ONLRET_);
-        TO_JSON_OPTIONAL(j, outputFlags, OFILL_);
-        TO_JSON_OPTIONAL(j, outputFlags, OFDEL_);
-        TO_JSON_OPTIONAL(j, outputFlags, NLDLY_);
-        TO_JSON_OPTIONAL(j, outputFlags, CRDLY_);
-        TO_JSON_OPTIONAL(j, outputFlags, TABDLY_);
-        TO_JSON_OPTIONAL(j, outputFlags, BSDLY_);
-        TO_JSON_OPTIONAL(j, outputFlags, VTDLY_);
-        TO_JSON_OPTIONAL(j, outputFlags, FFDLY_);
+        TO_JSON_OPTIONAL_NO_UNDERSCORE(j, outputFlags, OPOST);
+        TO_JSON_OPTIONAL_NO_UNDERSCORE(j, outputFlags, OLCUC);
+        TO_JSON_OPTIONAL_NO_UNDERSCORE(j, outputFlags, ONLCR);
+        TO_JSON_OPTIONAL_NO_UNDERSCORE(j, outputFlags, OCRNL);
+        TO_JSON_OPTIONAL_NO_UNDERSCORE(j, outputFlags, ONOCR);
+        TO_JSON_OPTIONAL_NO_UNDERSCORE(j, outputFlags, ONLRET);
+        TO_JSON_OPTIONAL_NO_UNDERSCORE(j, outputFlags, OFILL);
+        TO_JSON_OPTIONAL_NO_UNDERSCORE(j, outputFlags, OFDEL);
+        TO_JSON_OPTIONAL_NO_UNDERSCORE(j, outputFlags, NLDLY);
+        TO_JSON_OPTIONAL_NO_UNDERSCORE(j, outputFlags, CRDLY);
+        TO_JSON_OPTIONAL_NO_UNDERSCORE(j, outputFlags, TABDLY);
+        TO_JSON_OPTIONAL_NO_UNDERSCORE(j, outputFlags, BSDLY);
+        TO_JSON_OPTIONAL_NO_UNDERSCORE(j, outputFlags, VTDLY);
+        TO_JSON_OPTIONAL_NO_UNDERSCORE(j, outputFlags, FFDLY);
     }
     void from_json(nlohmann::json const& j, Termios::OutputFlags& outputFlags)
     {
-        FROM_JSON_OPTIONAL(j, outputFlags, OPOST_);
-        FROM_JSON_OPTIONAL(j, outputFlags, OLCUC_);
-        FROM_JSON_OPTIONAL(j, outputFlags, ONLCR_);
-        FROM_JSON_OPTIONAL(j, outputFlags, OCRNL_);
-        FROM_JSON_OPTIONAL(j, outputFlags, ONOCR_);
-        FROM_JSON_OPTIONAL(j, outputFlags, ONLRET_);
-        FROM_JSON_OPTIONAL(j, outputFlags, OFILL_);
-        FROM_JSON_OPTIONAL(j, outputFlags, OFDEL_);
-        FROM_JSON_OPTIONAL(j, outputFlags, NLDLY_);
-        FROM_JSON_OPTIONAL(j, outputFlags, CRDLY_);
-        FROM_JSON_OPTIONAL(j, outputFlags, TABDLY_);
-        FROM_JSON_OPTIONAL(j, outputFlags, BSDLY_);
-        FROM_JSON_OPTIONAL(j, outputFlags, VTDLY_);
-        FROM_JSON_OPTIONAL(j, outputFlags, FFDLY_);
+        FROM_JSON_OPTIONAL_NO_UNDERSCORE(j, outputFlags, OPOST);
+        FROM_JSON_OPTIONAL_NO_UNDERSCORE(j, outputFlags, OLCUC);
+        FROM_JSON_OPTIONAL_NO_UNDERSCORE(j, outputFlags, ONLCR);
+        FROM_JSON_OPTIONAL_NO_UNDERSCORE(j, outputFlags, OCRNL);
+        FROM_JSON_OPTIONAL_NO_UNDERSCORE(j, outputFlags, ONOCR);
+        FROM_JSON_OPTIONAL_NO_UNDERSCORE(j, outputFlags, ONLRET);
+        FROM_JSON_OPTIONAL_NO_UNDERSCORE(j, outputFlags, OFILL);
+        FROM_JSON_OPTIONAL_NO_UNDERSCORE(j, outputFlags, OFDEL);
+        FROM_JSON_OPTIONAL_NO_UNDERSCORE(j, outputFlags, NLDLY);
+        FROM_JSON_OPTIONAL_NO_UNDERSCORE(j, outputFlags, CRDLY);
+        FROM_JSON_OPTIONAL_NO_UNDERSCORE(j, outputFlags, TABDLY);
+        FROM_JSON_OPTIONAL_NO_UNDERSCORE(j, outputFlags, BSDLY);
+        FROM_JSON_OPTIONAL_NO_UNDERSCORE(j, outputFlags, VTDLY);
+        FROM_JSON_OPTIONAL_NO_UNDERSCORE(j, outputFlags, FFDLY);
     }
     void to_json(nlohmann::json& j, Termios::ControlFlags const& controlFlags)
     {
-        TO_JSON_OPTIONAL(j, controlFlags, CBAUD_);
-        TO_JSON_OPTIONAL(j, controlFlags, CBAUDEX_);
-        TO_JSON_OPTIONAL(j, controlFlags, CSIZE_);
-        TO_JSON_OPTIONAL(j, controlFlags, CSTOPB_);
-        TO_JSON_OPTIONAL(j, controlFlags, CREAD_);
-        TO_JSON_OPTIONAL(j, controlFlags, PARENB_);
-        TO_JSON_OPTIONAL(j, controlFlags, PARODD_);
-        TO_JSON_OPTIONAL(j, controlFlags, HUPCL_);
-        TO_JSON_OPTIONAL(j, controlFlags, CLOCAL_);
-        TO_JSON_OPTIONAL(j, controlFlags, LOBLK_);
-        TO_JSON_OPTIONAL(j, controlFlags, CIBAUD_);
-        TO_JSON_OPTIONAL(j, controlFlags, CMSPAR_);
-        TO_JSON_OPTIONAL(j, controlFlags, CRTSCTS_);
+        TO_JSON_OPTIONAL_NO_UNDERSCORE(j, controlFlags, CBAUD);
+        TO_JSON_OPTIONAL_NO_UNDERSCORE(j, controlFlags, CBAUDEX);
+        TO_JSON_OPTIONAL_NO_UNDERSCORE(j, controlFlags, CSIZE);
+        TO_JSON_OPTIONAL_NO_UNDERSCORE(j, controlFlags, CSTOPB);
+        TO_JSON_OPTIONAL_NO_UNDERSCORE(j, controlFlags, CREAD);
+        TO_JSON_OPTIONAL_NO_UNDERSCORE(j, controlFlags, PARENB);
+        TO_JSON_OPTIONAL_NO_UNDERSCORE(j, controlFlags, PARODD);
+        TO_JSON_OPTIONAL_NO_UNDERSCORE(j, controlFlags, HUPCL);
+        TO_JSON_OPTIONAL_NO_UNDERSCORE(j, controlFlags, CLOCAL);
+        TO_JSON_OPTIONAL_NO_UNDERSCORE(j, controlFlags, LOBLK);
+        TO_JSON_OPTIONAL_NO_UNDERSCORE(j, controlFlags, CIBAUD);
+        TO_JSON_OPTIONAL_NO_UNDERSCORE(j, controlFlags, CMSPAR);
+        TO_JSON_OPTIONAL_NO_UNDERSCORE(j, controlFlags, CRTSCTS);
     }
     void from_json(nlohmann::json const& j, Termios::ControlFlags& controlFlags)
     {
-        FROM_JSON_OPTIONAL(j, controlFlags, CBAUD_);
-        FROM_JSON_OPTIONAL(j, controlFlags, CBAUDEX_);
-        FROM_JSON_OPTIONAL(j, controlFlags, CSIZE_);
-        FROM_JSON_OPTIONAL(j, controlFlags, CSTOPB_);
-        FROM_JSON_OPTIONAL(j, controlFlags, CREAD_);
-        FROM_JSON_OPTIONAL(j, controlFlags, PARENB_);
-        FROM_JSON_OPTIONAL(j, controlFlags, PARODD_);
-        FROM_JSON_OPTIONAL(j, controlFlags, HUPCL_);
-        FROM_JSON_OPTIONAL(j, controlFlags, CLOCAL_);
-        FROM_JSON_OPTIONAL(j, controlFlags, LOBLK_);
-        FROM_JSON_OPTIONAL(j, controlFlags, CIBAUD_);
-        FROM_JSON_OPTIONAL(j, controlFlags, CMSPAR_);
-        FROM_JSON_OPTIONAL(j, controlFlags, CRTSCTS_);
+        FROM_JSON_OPTIONAL_NO_UNDERSCORE(j, controlFlags, CBAUD);
+        FROM_JSON_OPTIONAL_NO_UNDERSCORE(j, controlFlags, CBAUDEX);
+        FROM_JSON_OPTIONAL_NO_UNDERSCORE(j, controlFlags, CSIZE);
+        FROM_JSON_OPTIONAL_NO_UNDERSCORE(j, controlFlags, CSTOPB);
+        FROM_JSON_OPTIONAL_NO_UNDERSCORE(j, controlFlags, CREAD);
+        FROM_JSON_OPTIONAL_NO_UNDERSCORE(j, controlFlags, PARENB);
+        FROM_JSON_OPTIONAL_NO_UNDERSCORE(j, controlFlags, PARODD);
+        FROM_JSON_OPTIONAL_NO_UNDERSCORE(j, controlFlags, HUPCL);
+        FROM_JSON_OPTIONAL_NO_UNDERSCORE(j, controlFlags, CLOCAL);
+        FROM_JSON_OPTIONAL_NO_UNDERSCORE(j, controlFlags, LOBLK);
+        FROM_JSON_OPTIONAL_NO_UNDERSCORE(j, controlFlags, CIBAUD);
+        FROM_JSON_OPTIONAL_NO_UNDERSCORE(j, controlFlags, CMSPAR);
+        FROM_JSON_OPTIONAL_NO_UNDERSCORE(j, controlFlags, CRTSCTS);
     }
     void to_json(nlohmann::json& j, Termios::LocalFlags const& localFlags)
     {
-        TO_JSON_OPTIONAL(j, localFlags, ISIG_);
-        TO_JSON_OPTIONAL(j, localFlags, ICANON_);
-        TO_JSON_OPTIONAL(j, localFlags, XCASE_);
-        TO_JSON_OPTIONAL(j, localFlags, ECHO_);
-        TO_JSON_OPTIONAL(j, localFlags, ECHOE_);
-        TO_JSON_OPTIONAL(j, localFlags, ECHOK_);
-        TO_JSON_OPTIONAL(j, localFlags, ECHONL_);
-        TO_JSON_OPTIONAL(j, localFlags, ECHOCTL_);
-        TO_JSON_OPTIONAL(j, localFlags, ECHOPRT_);
-        TO_JSON_OPTIONAL(j, localFlags, ECHOKE_);
-        TO_JSON_OPTIONAL(j, localFlags, FLUSHO_);
-        TO_JSON_OPTIONAL(j, localFlags, NOFLSH_);
-        TO_JSON_OPTIONAL(j, localFlags, TOSTOP_);
-        TO_JSON_OPTIONAL(j, localFlags, PENDIN_);
-        TO_JSON_OPTIONAL(j, localFlags, IEXTEN_);
+        TO_JSON_OPTIONAL_NO_UNDERSCORE(j, localFlags, ISIG);
+        TO_JSON_OPTIONAL_NO_UNDERSCORE(j, localFlags, ICANON);
+        TO_JSON_OPTIONAL_NO_UNDERSCORE(j, localFlags, XCASE);
+        TO_JSON_OPTIONAL_NO_UNDERSCORE(j, localFlags, ECHO);
+        TO_JSON_OPTIONAL_NO_UNDERSCORE(j, localFlags, ECHOE);
+        TO_JSON_OPTIONAL_NO_UNDERSCORE(j, localFlags, ECHOK);
+        TO_JSON_OPTIONAL_NO_UNDERSCORE(j, localFlags, ECHONL);
+        TO_JSON_OPTIONAL_NO_UNDERSCORE(j, localFlags, ECHOCTL);
+        TO_JSON_OPTIONAL_NO_UNDERSCORE(j, localFlags, ECHOPRT);
+        TO_JSON_OPTIONAL_NO_UNDERSCORE(j, localFlags, ECHOKE);
+        TO_JSON_OPTIONAL_NO_UNDERSCORE(j, localFlags, FLUSHO);
+        TO_JSON_OPTIONAL_NO_UNDERSCORE(j, localFlags, NOFLSH);
+        TO_JSON_OPTIONAL_NO_UNDERSCORE(j, localFlags, TOSTOP);
+        TO_JSON_OPTIONAL_NO_UNDERSCORE(j, localFlags, PENDIN);
+        TO_JSON_OPTIONAL_NO_UNDERSCORE(j, localFlags, IEXTEN);
     }
     void from_json(nlohmann::json const& j, Termios::LocalFlags& localFlags)
     {
-        FROM_JSON_OPTIONAL(j, localFlags, ISIG_);
-        FROM_JSON_OPTIONAL(j, localFlags, ICANON_);
-        FROM_JSON_OPTIONAL(j, localFlags, XCASE_);
-        FROM_JSON_OPTIONAL(j, localFlags, ECHO_);
-        FROM_JSON_OPTIONAL(j, localFlags, ECHOE_);
-        FROM_JSON_OPTIONAL(j, localFlags, ECHOK_);
-        FROM_JSON_OPTIONAL(j, localFlags, ECHONL_);
-        FROM_JSON_OPTIONAL(j, localFlags, ECHOCTL_);
-        FROM_JSON_OPTIONAL(j, localFlags, ECHOPRT_);
-        FROM_JSON_OPTIONAL(j, localFlags, ECHOKE_);
-        FROM_JSON_OPTIONAL(j, localFlags, FLUSHO_);
-        FROM_JSON_OPTIONAL(j, localFlags, NOFLSH_);
-        FROM_JSON_OPTIONAL(j, localFlags, TOSTOP_);
-        FROM_JSON_OPTIONAL(j, localFlags, PENDIN_);
-        FROM_JSON_OPTIONAL(j, localFlags, IEXTEN_);
+        FROM_JSON_OPTIONAL_NO_UNDERSCORE(j, localFlags, ISIG);
+        FROM_JSON_OPTIONAL_NO_UNDERSCORE(j, localFlags, ICANON);
+        FROM_JSON_OPTIONAL_NO_UNDERSCORE(j, localFlags, XCASE);
+        FROM_JSON_OPTIONAL_NO_UNDERSCORE(j, localFlags, ECHO);
+        FROM_JSON_OPTIONAL_NO_UNDERSCORE(j, localFlags, ECHOE);
+        FROM_JSON_OPTIONAL_NO_UNDERSCORE(j, localFlags, ECHOK);
+        FROM_JSON_OPTIONAL_NO_UNDERSCORE(j, localFlags, ECHONL);
+        FROM_JSON_OPTIONAL_NO_UNDERSCORE(j, localFlags, ECHOCTL);
+        FROM_JSON_OPTIONAL_NO_UNDERSCORE(j, localFlags, ECHOPRT);
+        FROM_JSON_OPTIONAL_NO_UNDERSCORE(j, localFlags, ECHOKE);
+        FROM_JSON_OPTIONAL_NO_UNDERSCORE(j, localFlags, FLUSHO);
+        FROM_JSON_OPTIONAL_NO_UNDERSCORE(j, localFlags, NOFLSH);
+        FROM_JSON_OPTIONAL_NO_UNDERSCORE(j, localFlags, TOSTOP);
+        FROM_JSON_OPTIONAL_NO_UNDERSCORE(j, localFlags, PENDIN);
+        FROM_JSON_OPTIONAL_NO_UNDERSCORE(j, localFlags, IEXTEN);
     }
     void to_json(nlohmann::json& j, Termios::CC const& cc)
     {
@@ -522,5 +526,18 @@ namespace Persistence
             iSpeed = other.iSpeed;
         if (!oSpeed)
             oSpeed = other.oSpeed;
+    }
+
+    Termios Termios::saneDefaults()
+    {
+        Termios termios{};
+        termios.inputFlags = InputFlags::saneDefaults();
+        termios.outputFlags = OutputFlags::saneDefaults();
+        termios.controlFlags = ControlFlags::saneDefaults();
+        termios.localFlags = LocalFlags::saneDefaults();
+        termios.cc = CC{};
+        termios.iSpeed = 0;
+        termios.oSpeed = 0;
+        return termios;
     }
 }

@@ -26,7 +26,7 @@ class ExecutingTerminalEngine : public TerminalEngine
     ExecutingTerminalEngine(Settings settings);
     ROAR_PIMPL_SPECIAL_FUNCTIONS(ExecutingTerminalEngine);
 
-    void open(std::function<void(bool)> onOpen) override;
+    void open(std::function<void(bool, std::string const&)> onOpen) override;
     void dispose() override;
     void write(std::string const& data) override;
     void resize(int cols, int rows) override;

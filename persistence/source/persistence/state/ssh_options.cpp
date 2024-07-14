@@ -4,8 +4,6 @@ namespace Persistence
 {
     void to_json(nlohmann::json& j, SshOptions const& options)
     {
-        TO_JSON_OPTIONAL(j, options, bindAddr);
-        TO_JSON_OPTIONAL(j, options, sshKey);
         TO_JSON_OPTIONAL(j, options, sshDirectory);
         TO_JSON_OPTIONAL(j, options, tryAgentForAuthentication);
         TO_JSON_OPTIONAL(j, options, knownHostsFile);
@@ -28,8 +26,6 @@ namespace Persistence
     }
     void from_json(nlohmann::json const& j, SshOptions& options)
     {
-        FROM_JSON_OPTIONAL(j, options, bindAddr);
-        FROM_JSON_OPTIONAL(j, options, sshKey);
         FROM_JSON_OPTIONAL(j, options, sshDirectory);
         FROM_JSON_OPTIONAL(j, options, tryAgentForAuthentication);
         FROM_JSON_OPTIONAL(j, options, knownHostsFile);
@@ -53,10 +49,6 @@ namespace Persistence
 
     void SshOptions::useDefaultsFrom(SshOptions const& other)
     {
-        if (!bindAddr.has_value())
-            bindAddr = other.bindAddr;
-        if (!sshKey.has_value())
-            sshKey = other.sshKey;
         if (!sshDirectory.has_value())
             sshDirectory = other.sshDirectory;
         if (!knownHostsFile.has_value())

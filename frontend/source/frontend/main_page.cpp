@@ -27,49 +27,19 @@ struct MainPage::Implementation
         , darkMode{true}
         , setupWait{}
     {
-        Nui::Console::log("MainPage::Implementation()");
+        Log::info("MainPage::Implementation()");
     }
 
     ~Implementation()
     {
-        Nui::Console::log("MainPage::~Implementation()");
+        Log::info("MainPage::~Implementation()");
     }
 };
 
 MainPage::MainPage(Persistence::StateHolder* stateHolder, FrontendEvents* events)
     : impl_{std::make_unique<Implementation>(stateHolder, events)}
 {
-    Log::setupFrontendLogger(
-        [](std::chrono::system_clock::time_point const&, Log::Level, std::string const&) {
-
-        },
-        [this, once = false](Log::Level) mutable {
-            Nui::Console::info("Log available");
-            if (!once)
-            {
-                once = true;
-
-                Nui::setInterval(
-                    200,
-                    [this]() {
-                        if (!Nui::val::global("terminalUtility").isUndefined())
-                        {
-                            if (impl_->setupWait.hasActiveTimer())
-                                impl_->setupWait.stop();
-                            onSetupComplete();
-                        }
-                        else
-                        {
-                            Log::info("Waiting for terminalUtility to be available.");
-                        }
-                    },
-                    [this](Nui::TimerHandle&& t) {
-                        impl_->setupWait = std::move(t);
-                    });
-            }
-        });
-
-    Nui::Console::log("MainPage::MainPage()");
+    Log::info("MainPage::MainPage()");
 }
 
 void MainPage::onSetupComplete()
@@ -86,14 +56,12 @@ Nui::ElementRenderer MainPage::render()
     using namespace Nui::Attributes;
     using Nui::Elements::div; // because of the global div.
 
-    Nui::Console::log("MainPage::render()");
+    Log::info("MainPage::render()");
 
     // clang-format off
-    return body{
+    return div{
         style = "background-color: var(--sapBackgroundColor); color: var(--sapTextColor);",
-        class_ = classes(
-                "w-full h-screen grid grid-cols-[min-content_auto]",
-                "grid-rows-[min-content_auto] [grid-template-areas:'Toolbar_Toolbar''Sidebar_SessionArea']")            
+        class_ = "main-page",            
     }
     (
         impl_->toolbar(),

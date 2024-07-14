@@ -48,7 +48,7 @@ ExecutingTerminalEngine::~ExecutingTerminalEngine()
 
 ROAR_PIMPL_SPECIAL_FUNCTIONS_IMPL_NO_DTOR(ExecutingTerminalEngine);
 
-void ExecutingTerminalEngine::open(std::function<void(bool)> onOpen)
+void ExecutingTerminalEngine::open(std::function<void(bool, std::string const&)> onOpen)
 {
     impl_->stdoutReceiver =
         Nui::RpcClient::autoRegisterFunction("execTerminalStdout_" + impl_->id, [this](Nui::val val) {
@@ -59,7 +59,7 @@ void ExecutingTerminalEngine::open(std::function<void(bool)> onOpen)
                     impl_->stdoutHandler(data);
             }
             else
-                Nui::Console::log("execTerminalStdout_" + impl_->id + " received an empty message");
+                Log::error("execTerminalStdout_" + impl_->id + " received an empty message");
         });
 
     impl_->stderrReceiver =
@@ -71,7 +71,7 @@ void ExecutingTerminalEngine::open(std::function<void(bool)> onOpen)
                     impl_->stderrHandler(data);
             }
             else
-                Nui::Console::error("execTerminalStderr_" + impl_->id + " received an empty message");
+                Log::error("execTerminalStderr_" + impl_->id + " received an empty message");
         });
 
     Nui::val obj = Nui::val::object();
@@ -129,19 +129,17 @@ void ExecutingTerminalEngine::open(std::function<void(bool)> onOpen)
     Nui::RpcClient::callWithBackChannel(
         "ProcessStore::spawn",
         [this, onOpen = std::move(onOpen)](Nui::val val) {
-            Nui::Console::log("ProcessStore::spawn callback", val);
-
             if (!val.hasOwnProperty("uuid"))
             {
-                Nui::Console::error("ProcessStore::spawn callback did not return a uuid");
+                Log::error("ProcessStore::spawn callback did not return a uuid");
                 if (val.hasOwnProperty("error"))
-                    Nui::Console::error(val["error"].as<std::string>());
-                return onOpen(false);
+                    Log::error(val["error"].as<std::string>());
+                return onOpen(false, val["error"].as<std::string>());
             }
             std::string uuid = val["uuid"].as<std::string>();
             impl_->processId = uuid;
 
-            onOpen(true);
+            onOpen(true, "");
             updatePtyProcs();
         },
         obj);

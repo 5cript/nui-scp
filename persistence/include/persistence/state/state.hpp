@@ -1,5 +1,6 @@
 #pragma once
 
+#include <log/level.hpp>
 #include <persistence/state_core.hpp>
 
 #include <persistence/state/terminal_engine.hpp>
@@ -15,6 +16,8 @@ namespace Persistence
         std::unordered_map<std::string, Termios> termios{};
         std::unordered_map<std::string, SshOptions> sshOptions{};
         std::unordered_map<std::string, TerminalEngine> terminalEngines{};
+        std::unordered_map<std::string, SshSessionOptions> sshSessionOptions{};
+        Log::Level logLevel{Log::Level::Info};
     };
 
     void to_json(nlohmann::json& j, State const& state);

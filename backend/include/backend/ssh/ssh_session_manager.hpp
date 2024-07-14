@@ -27,10 +27,10 @@ class SshSessionManager
 
     SshSessionManager();
 
-    void registerRpc(Nui::RpcHub& rpcHub);
+    void registerRpc(Nui::Window& wnd, Nui::RpcHub& rpcHub);
 
     void addPasswordProvider(int priority, PasswordProvider* provider);
-    bool addSession(Persistence::SshTerminalEngine const& engine);
+    std::optional<std::string> addSession(Persistence::SshTerminalEngine const& engine);
 
     friend int askPassDefault(char const* prompt, char* buf, std::size_t length, int echo, int verify, void* userdata);
 

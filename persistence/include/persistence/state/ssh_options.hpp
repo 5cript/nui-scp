@@ -6,11 +6,10 @@ namespace Persistence
 {
     struct SshOptions
     {
-        std::optional<std::string> bindAddr{std::nullopt};
-        std::optional<std::string> sshKey{std::nullopt};
         std::optional<std::filesystem::path> sshDirectory{std::nullopt};
         std::optional<std::filesystem::path> knownHostsFile{std::nullopt};
         std::optional<bool> tryAgentForAuthentication{true};
+        std::optional<bool> usePublicKeyAutoAuth{std::nullopt};
         std::optional<std::string> logVerbosity{std::nullopt};
         std::optional<std::string> keyExchangeAlgorithms{std::nullopt};
         std::optional<std::string> compressionClientToServer{std::nullopt};
@@ -23,7 +22,6 @@ namespace Persistence
         std::optional<bool> gssapiDelegateCredentials{std::nullopt};
         std::optional<bool> noDelay{std::nullopt};
         std::optional<bool> bypassConfig{std::nullopt};
-        std::optional<bool> usePublicKeyAutoAuth{std::nullopt};
         std::optional<std::string> identityAgent{std::nullopt};
         std::optional<int> connectTimeoutSeconds{std::nullopt};
         std::optional<int> connectTimeoutUSeconds{std::nullopt};

@@ -15,6 +15,7 @@ namespace Persistence
         std::string host{};
         std::optional<int> port{std::nullopt};
         std::optional<std::string> user{std::nullopt};
+        std::optional<std::string> sshKey{std::nullopt};
 
         Referenceable<SshOptions> sshOptions{};
         void useDefaultsFrom(SshSessionOptions const& other);

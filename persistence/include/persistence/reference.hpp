@@ -53,6 +53,43 @@ namespace Persistence
         {
             value_.useDefaultsFrom(other);
         }
+        T& operator*()
+        {
+            return value_;
+        }
+        T const& operator*() const
+        {
+            return value_;
+        }
+        T* operator->()
+        {
+            return &value_;
+        }
+        T const* operator->() const
+        {
+            return &value_;
+        }
+        template <typename MapType, typename MergerFunction>
+        bool resolveWith(MapType const& map, MergerFunction const& merge)
+        {
+            // No need to resolve if there is no reference
+            if (!hasReference())
+                return true;
+
+            auto iter = map.find(ref());
+            if (iter == end(map))
+                return false; // not found in map
+
+            merge(value_, iter->second);
+            return true;
+        }
+        template <typename MapType>
+        bool resolveWith(MapType const& map)
+        {
+            return resolveWith(map, [](auto& value, auto const& other) {
+                value.useDefaultsFrom(other);
+            });
+        }
 
         ReferenceAndImpl() = default;
         ReferenceAndImpl(Reference ref)
@@ -135,6 +172,22 @@ namespace Persistence
         {
             value_->useDefaultsFrom(*other);
         }
+        T& operator*()
+        {
+            return *value_;
+        }
+        T const& operator*() const
+        {
+            return *value_;
+        }
+        T* operator->()
+        {
+            return value_.get();
+        }
+        T const* operator->() const
+        {
+            return value_.get();
+        }
 
         ReferenceAndImpl() = default;
         ReferenceAndImpl(Reference ref)
@@ -198,6 +251,8 @@ namespace Persistence
     template <typename T>
     void to_json(nlohmann::json& obj, Referenceable<T> const& ref)
     {
+        obj = nlohmann::json::object();
+
         if (ref.hasReference())
             obj["$ref"] = ref.ref();
 

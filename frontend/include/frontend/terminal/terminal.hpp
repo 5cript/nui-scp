@@ -13,7 +13,10 @@ class Terminal
     ROAR_PIMPL_SPECIAL_FUNCTIONS(Terminal);
 
     bool isOpen() const;
-    void open(Nui::val element, Persistence::TerminalOptions const& options);
+    void open(
+        Nui::val element,
+        Persistence::TerminalOptions const& options,
+        std::function<void(bool, std::string const&)> onOpen);
     void dispose();
     void write(std::string const& data, bool isUserInput);
 

@@ -1,3 +1,18 @@
 @import "./tailwind.css";
+@import "./main_page.css";
 @import "./session_area.css";
 @import "./session.css";
+@import "./sidebar.css";
+@import "./toolbar.css";
+
+*,
+*::before,
+*::after {
+    box-sizing: border-box;
+}
+
+body {
+    height: 100dvh;
+    width: 100%;
+    margin: 0;
+}

@@ -13,6 +13,10 @@ namespace Persistence
         j["terminalEngines"] = state.terminalEngines;
         j["termios"] = state.termios;
         j["sshOptions"] = state.sshOptions;
+        j["sshSessionOptions"] = state.sshSessionOptions;
+        j["logLevel"] = [&]() {
+            return Log::levelToString(state.logLevel);
+        }();
     }
     void from_json(nlohmann::json const& j, State& state)
     {
@@ -27,5 +31,11 @@ namespace Persistence
 
         if (j.contains("sshOptions"))
             j.at("sshOptions").get_to(state.sshOptions);
+
+        if (j.contains("sshSessionOptions"))
+            j.at("sshSessionOptions").get_to(state.sshSessionOptions);
+
+        if (j.contains("logLevel"))
+            state.logLevel = Log::levelFromString(j.at("logLevel").get<std::string>());
     }
 }

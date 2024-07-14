@@ -1,3 +1,13 @@
+.session-area {
+    grid-area: SessionArea;
+    display: flex;
+    flex-direction: column;
+}
+
+.session-area-content {
+    flex: 1;
+}
+
 .session-area-tabs::part(content) {
     padding: 0;
 }

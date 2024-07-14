@@ -1,4 +1,5 @@
 #include <persistence/state_holder.hpp>
+#include <log/log.hpp>
 
 #include <nui/frontend/api/console.hpp>
 
@@ -8,7 +9,6 @@ namespace Persistence
     {
         Nui::RpcClient::getRemoteCallableWithBackChannel(
             "StateHolder::load", [this, onLoad](Nui::val const& jsonStringOrError) {
-                Nui::Console::log(jsonStringOrError);
                 if (jsonStringOrError.hasOwnProperty("error"))
                 {
                     onLoad(false, *this);
@@ -21,7 +21,7 @@ namespace Persistence
                 }
                 catch (std::exception const& e)
                 {
-                    Nui::Console::log("Failed to parse state from json: {}", e.what());
+                    Log::info("Failed to parse state from json: {}", e.what());
                     onLoad(false, *this);
                     return;
                 }

@@ -28,6 +28,6 @@ Nui::ElementRenderer Sidebar::operator()()
     using namespace Nui::Attributes;
     using Nui::Elements::div; // because of the global div.
 
-    return div{class_ = classes("p-4 [grid-area:Sidebar]")}(
+    return div{class_ = "sidebar"}(
         h1{class_ = "text-3xl font-bold"}("Sidebar"), p{class_ = "text-lg"}("This is the sidebar."));
 }

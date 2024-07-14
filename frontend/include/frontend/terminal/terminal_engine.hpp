@@ -6,7 +6,7 @@
 class TerminalEngine
 {
   public:
-    virtual void open(std::function<void(bool)> onOpen) = 0;
+    virtual void open(std::function<void(bool, std::string const&)> onOpen) = 0;
     virtual void dispose(/* parameters? */) = 0;
     virtual void write(std::string const& data) = 0;
     virtual void resize(int cols, int rows) = 0;

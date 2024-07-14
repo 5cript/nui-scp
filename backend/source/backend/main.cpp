@@ -151,7 +151,14 @@ Main::Main(int const, char const* const* argv)
     , hub_{window_}
     , processes_{window_.getExecutor()}
     , sshSessionManager_{}
-{}
+{
+    stateHolder_.load([](bool success, Persistence::StateHolder& holder) {
+        if (!success)
+            return;
+
+        Log::setLevel(holder.stateCache().logLevel);
+    });
+}
 Main::~Main() = default;
 
 void Main::registerRpc()
@@ -166,12 +173,12 @@ void Main::registerRpc()
     Log::setupBackendRpcHub(&hub_);
     stateHolder_.registerRpc(hub_);
     processes_.registerRpc(window_, hub_);
-    sshSessionManager_.registerRpc(hub_);
+    sshSessionManager_.registerRpc(window_, hub_);
 }
 
 void Main::show()
 {
-    window_.setSize(2300, 1300, Nui::WebViewHint::WEBVIEW_HINT_NONE);
+    window_.setSize(1600, 900, Nui::WebViewHint::WEBVIEW_HINT_NONE);
     window_.centerOnPrimaryDisplay();
     // window_.setHtml(index());
     window_.navigate("nui://app.example/index.html");

@@ -91,10 +91,15 @@ namespace Persistence
         const auto after = nlohmann::json(stateCache_);
         bool mustSave = !nlohmann::json::diff(before, after).empty();
 
+        if (mustSave)
+        {
+            Log::warn("Config diff: {}", nlohmann::json::diff(before, after).dump());
+        }
+
         if (stateCache_.termios.empty())
         {
             Log::warn("Config file misses termios, adding defaults.");
-            stateCache_.termios["default"] = Termios{};
+            stateCache_.termios["default"] = Termios::saneDefaults();
             mustSave = true;
         }
 
@@ -131,7 +136,7 @@ namespace Persistence
 #else
             stateCache_.terminalEngines["bash_default"] = TerminalEngine{
                 .type = "shell",
-                .options = Reference{.ref = "default"},
+                .terminalOptions = Reference{.ref = "default"},
                 .termios = Reference{.ref = "default"},
                 .engine = defaultBashTerminalEngine(),
             };

@@ -11,6 +11,8 @@ target_sources(
         session.cpp
         terminal/terminal.cpp
         terminal/executing_engine.cpp
+        terminal/ssh_engine.cpp
+        terminal/user_control_engine.cpp
 )
 
 target_include_directories(${PROJECT_NAME} PRIVATE ${CMAKE_SOURCE_DIR}/frontend/include)

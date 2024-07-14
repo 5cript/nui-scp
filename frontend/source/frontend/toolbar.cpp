@@ -24,7 +24,7 @@ struct Toolbar::Implementation
         , events{events}
         , terminalEngines{}
     {
-        Nui::Console::log("Toolbar::Implementation()");
+        Log::info("Toolbar::Implementation()");
     }
 
     void updateEnginesList();
@@ -44,7 +44,6 @@ void Toolbar::Implementation::updateEnginesList()
 
         {
             Log::debug("Updating terminal engines list.");
-            Nui::Console::log(Nui::convertToVal(engines));
             auto proxy = terminalEngines.modify();
             terminalEngines = std::move(engines);
             events->onNewSession.value() = terminalEngines.value().front();
@@ -56,7 +55,7 @@ void Toolbar::Implementation::updateEnginesList()
 Toolbar::Toolbar(Persistence::StateHolder* stateHolder, FrontendEvents* events)
     : impl_(std::make_unique<Implementation>(stateHolder, events))
 {
-    Nui::Console::log("Toolbar::Toolbar");
+    Log::info("Toolbar::Toolbar");
     impl_->updateEnginesList();
 }
 
@@ -70,7 +69,7 @@ Nui::ElementRenderer Toolbar::operator()()
     using Nui::Elements::div; // because of the global div.
 
     // clang-format off
-    return div{class_ = classes("[grid-area:Toolbar] p-4")}(
+    return div{class_ = "toolbar"}(
         ui5::toolbar{
             "alignContent"_prop = "Start",
             "design"_prop = "Solid",

@@ -39,4 +39,5 @@ target_link_libraries(
         log
         roar-include-only
         core-target
+        reflect-json
 )

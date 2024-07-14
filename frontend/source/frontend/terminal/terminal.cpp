@@ -48,8 +48,6 @@ globalThis.terminalUtility.createTerminal = (host, options) => {
         rows: 30
     };
 
-    console.log('Terminal Options', defaultedOptions);
-
     const terminal = new Terminal(defaultedOptions);
     const addons = {
         fitAddon: new FitAddon(),
@@ -80,17 +78,28 @@ globalThis.terminalUtility.createTerminal = (host, options) => {
     return id;
 };
 globalThis.terminalUtility.getTerminal = (id) => {
-    return globalThis.terminalUtility.get(id).terminal;
+    if (!globalThis.terminalUtility.terminals.has(id))
+        return undefined;
+    const obtained = globalThis.terminalUtility.terminals.get(id);
+    if (!obtained.hasOwnProperty("terminal"))
+        return undefined;
+    return obtained.terminal;
 };
 globalThis.terminalUtility.refitTerminal = (id) => {
+    if (!globalThis.terminalUtility.terminals.has(id))
+        return;
+
     const terminalStuff = globalThis.terminalUtility.get(id);
     terminalStuff.addons.fitAddon.fit();
 };
 globalThis.terminalUtility.disposeTerminal = (id) => {
+    if (!globalThis.terminalUtility.terminals.has(id))
+        return;
+
     const terminalStuff = globalThis.terminalUtility.get(id);
     terminalStuff.addons.resizeObserver.disconnect();
     terminalStuff.terminal.dispose();
-    globalThis.terminalUtility.delete(id);
+    globalThis.terminalUtility.terminals.delete(id);
 };
 globalThis.terminalUtility.set = (id, terminal, addons) => {
     globalThis.terminalUtility.terminals.set(id, {
@@ -99,6 +108,8 @@ globalThis.terminalUtility.set = (id, terminal, addons) => {
     });
 };
 globalThis.terminalUtility.get = (id) => {
+    if (!globalThis.terminalUtility.terminals.has(id))
+        return undefined;
     return globalThis.terminalUtility.terminals.get(id);
 };
 // @endinline
@@ -154,84 +165,56 @@ struct Terminal::Implementation
     std::string termId;
     std::string command;
     std::unique_ptr<TerminalEngine> engine;
+    std::vector<std::pair<std::string, bool>> writeCache;
+    std::function<void(std::string const&, bool)> doWrite;
+
     Nui::val terminal() const
     {
         return terminalUtility().call<Nui::val>("getTerminal", termId);
     }
 
+    void writeRespectingCache(std::string const& data, bool isUserInput);
+    void writeAfterCache(std::string const& data, bool isUserInput);
+
     Implementation(std::unique_ptr<TerminalEngine> engine)
         : termId{}
         , command{}
         , engine{std::move(engine)}
+        , writeCache{}
+        , doWrite{}
     {}
 };
 
-Terminal::Terminal(std::unique_ptr<TerminalEngine> engine)
-    : impl_{std::make_unique<Implementation>(std::move(engine))}
+void Terminal::Implementation::writeRespectingCache(std::string const& data, bool isUserInput)
 {
-    impl_->engine->setStdoutHandler([this](std::string const& data) {
-        write(data, false);
-    });
-    impl_->engine->setStderrHandler([this](std::string const& data) {
-        // TODO: Add stderr styling mode
-        write(data, false);
-    });
-}
-
-bool Terminal::isOpen() const
-{
-    return !impl_->termId.empty();
-}
-void Terminal::open(Nui::val element, Persistence::TerminalOptions const& options)
-{
-    if (isOpen())
-        return;
-    Log::info("Opening terminal");
-    impl_->termId = terminalUtility().call<std::string>("createTerminal", element, asVal(options));
-    impl_->engine->open([this](bool success) {
-        if (!success)
-        {
-            Log::error("Failed to open terminal");
-        }
-        Log::info("Terminal opened");
-
-        impl_->terminal().call<void>(
-            "onData",
-            Nui::bind(
-                [this](Nui::val data, Nui::val) {
-                    write(data.as<std::string>(), true);
-                },
-                std::placeholders::_1,
-                std::placeholders::_2));
-
-        impl_->terminal().call<void>(
-            "onResize",
-            Nui::bind(
-                [this](Nui::val obj, Nui::val) {
-                    Log::debug("Terminal resized {}:{}. ", obj["cols"].as<int>(), obj["rows"].as<int>());
-                    impl_->engine->resize(obj["cols"].as<int>(), obj["rows"].as<int>());
-                },
-                std::placeholders::_1,
-                std::placeholders::_2));
-    });
-}
-void Terminal::dispose()
-{
-    if (!impl_->termId.empty())
+    if (termId.empty())
     {
-        impl_->terminal().call<void>("disposeTerminal", impl_->termId);
+        if (!data.empty())
+            writeCache.emplace_back(data, isUserInput);
+        return;
     }
-    impl_->termId.clear();
-    impl_->engine->dispose();
+
+    doWrite = [this](std::string const& cacheData, bool cacheIsUserInput) {
+        writeAfterCache(cacheData, cacheIsUserInput);
+    };
+
+    if (!writeCache.empty())
+    {
+        for (auto const& [cacheData, cacheIsUserInput] : writeCache)
+            doWrite(cacheData, cacheIsUserInput);
+        writeCache.clear();
+    }
+
+    doWrite(data, isUserInput);
 }
-void Terminal::write(std::string const& data, bool isUserInput)
+void Terminal::Implementation::writeAfterCache(std::string const& data, bool isUserInput)
 {
     if (data.empty())
         return;
 
     if (isUserInput)
     {
-        impl_->engine->write(data);
+        engine->write(data);
     }
     else
     {
@@ -254,8 +237,106 @@ void Terminal::write(std::string const& data, bool isUserInput)
             nlFixedData += c;
         }
         debugPrintTerminalWrite(nlFixedData, isUserInput);
-        impl_->terminal().call<void>("write", nlFixedData);
+        auto term = terminal();
+        if (term.isUndefined())
+        {
+            Log::error("Failed to get terminal with id to write to it: '{}", termId);
+            return;
+        }
+        term.call<void>("write", nlFixedData);
     }
+}
+
+Terminal::Terminal(std::unique_ptr<TerminalEngine> engine)
+    : impl_{std::make_unique<Implementation>(std::move(engine))}
+{
+    impl_->doWrite = [this](std::string const& data, bool isUserInput) {
+        impl_->writeRespectingCache(data, isUserInput);
+    };
+
+    impl_->engine->setStdoutHandler([this](std::string const& data) {
+        write(data, false);
+    });
+    impl_->engine->setStderrHandler([this](std::string const& data) {
+        // TODO: Add stderr styling mode
+        write(data, false);
+    });
+}
+
+bool Terminal::isOpen() const
+{
+    return !impl_->termId.empty();
+}
+void Terminal::open(
+    Nui::val element,
+    Persistence::TerminalOptions const& options,
+    std::function<void(bool, std::string const&)> onOpen)
+{
+    if (isOpen())
+        return;
+    Log::info("Opening terminal");
+    impl_->engine->open([this, onOpen = std::move(onOpen), element, options](bool success, std::string const& info) {
+        if (!success)
+        {
+            Log::error("Failed to open terminal: '{}'", info);
+            dispose();
+            onOpen(false, info);
+            return;
+        };
+
+        impl_->termId = terminalUtility().call<std::string>("createTerminal", element, asVal(options));
+        auto term = impl_->terminal();
+        if (term.isUndefined())
+        {
+            Log::error("Failed to get terminal with id: '{}", impl_->termId);
+            dispose();
+            onOpen(false, "Failed to get terminal");
+            return;
+        }
+        Log::info("Terminal opened with id: '{}", impl_->termId);
+
+        term.call<void>(
+            "onData",
+            Nui::bind(
+                [this](Nui::val data, Nui::val) {
+                    write(data.as<std::string>(), true);
+                },
+                std::placeholders::_1,
+                std::placeholders::_2));
+
+        term.call<void>(
+            "onResize",
+            Nui::bind(
+                [this](Nui::val obj, Nui::val) {
+                    Log::debug("Terminal resized {}:{}. ", obj["cols"].as<int>(), obj["rows"].as<int>());
+                    impl_->engine->resize(obj["cols"].as<int>(), obj["rows"].as<int>());
+                },
+                std::placeholders::_1,
+                std::placeholders::_2));
+
+        if (!impl_->writeCache.empty())
+            write("", false);
+        onOpen(true, info);
+    });
+}
+void Terminal::dispose()
+{
+    impl_->engine->dispose();
+    if (!impl_->termId.empty())
+    {
+        auto term = impl_->terminal();
+        if (term.isUndefined())
+        {
+            Log::error("Failed to get terminal with id to dispose it: '{}", impl_->termId);
+            return;
+        }
+        terminalUtility().call<void>("disposeTerminal", impl_->termId);
+    }
+    impl_->termId.clear();
+}
+void Terminal::write(std::string const& data, bool isUserInput)
+{
+    impl_->doWrite(data, isUserInput);
 }
 Terminal::~Terminal()
 {

@@ -29,7 +29,7 @@ namespace Persistence
 
             unsigned int assemble() const;
             void useDefaultsFrom(InputFlags const& other);
-            InputFlags saneDefaults() const
+            static InputFlags saneDefaults()
             {
                 return InputFlags{
                     .IGNBRK_ = false,
@@ -70,7 +70,7 @@ namespace Persistence
 
             unsigned int assemble() const;
             void useDefaultsFrom(OutputFlags const& other);
-            OutputFlags saneDefaults() const
+            static OutputFlags saneDefaults()
             {
                 return OutputFlags{
                     .OPOST_ = true,
@@ -109,7 +109,7 @@ namespace Persistence
 
             unsigned int assemble() const;
             void useDefaultsFrom(ControlFlags const& other);
-            ControlFlags saneDefaults() const
+            static ControlFlags saneDefaults()
             {
                 return ControlFlags{
                     .CBAUD_ = 0,
@@ -149,7 +149,7 @@ namespace Persistence
 
             unsigned int assemble() const;
             void useDefaultsFrom(LocalFlags const& other);
-            LocalFlags saneDefaults() const
+            static LocalFlags saneDefaults()
             {
                 return LocalFlags{
                     .ISIG_ = true,
@@ -201,6 +201,7 @@ namespace Persistence
         std::optional<unsigned int> oSpeed{0};
 
         void useDefaultsFrom(Termios const& other);
+        static Termios saneDefaults();
     };
     void to_json(nlohmann::json& j, Termios::InputFlags const& inputFlags);
     void from_json(nlohmann::json const& j, Termios::InputFlags& inputFlags);

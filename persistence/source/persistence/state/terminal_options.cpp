@@ -4,8 +4,6 @@ namespace Persistence
 {
     void to_json(nlohmann::json& j, TerminalOptions const& engine)
     {
-        j = nlohmann::json::object();
-
         TO_JSON_OPTIONAL(j, engine, fontFamily);
         TO_JSON_OPTIONAL(j, engine, fontSize);
         TO_JSON_OPTIONAL(j, engine, lineHeight);

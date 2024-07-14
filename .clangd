@@ -1,8 +1,8 @@
 CompileFlags:
-  CompilationDatabase: "./build/clang_debug/compile_commands.json"
-  Add:
-  - "-I./utility/include"
-  - "-I./persistence/include"
-  - "-I./backend/include"
-  - "-I./frontend/include"
-  - "-I./frontend/include"
+  CompilationDatabase: "build/clang_debug"
+---
+If:
+  PathMatch: ".*frontend/.*"
+CompileFlags:
+  CompilationDatabase: "build/clang_debug/module_nui-scp"
+  Add: [-D__EMSCRIPTEN__]

@@ -82,6 +82,10 @@ int askPassDefault(char const* prompt, char* buf, std::size_t length, int, int, 
     }};
 
     const auto pw = pwPromise.get_future().get();
+
+    if (t.joinable())
+        t.join();
+
     if (pw.has_value())
     {
         std::memset(buf, 0, length);
@@ -95,8 +99,91 @@ SshSessionManager::SshSessionManager()
     : sessions_{}
 {}
 
-void SshSessionManager::registerRpc(Nui::RpcHub&)
-{}
+void SshSessionManager::registerRpc(Nui::Window& wnd, Nui::RpcHub& hub)
+{
+    hub.registerFunction(
+        "SshSessionManager::connect",
+        [this, hub = &hub, wnd = &wnd](std::string const& responseId, nlohmann::json const& parameters) {
+            try
+            {
+                Log::info("Connecting to ssh server with parameters: {}", parameters.dump(4));
+                if (!parameters.contains("engine"))
+                {
+                    Log::error("No engine specified for ssh connection");
+                    hub->callRemote(responseId, nlohmann::json{{"error", "No engine specified for ssh connection"}});
+                    return;
+                }
+
+                const auto engine = parameters["engine"].get<Persistence::SshTerminalEngine>();
+                const auto maybeId = addSession(engine);
+                if (!maybeId)
+                {
+                    Log::error("Failed to connect to ssh server");
+                    hub->callRemote(responseId, nlohmann::json{{"error", "Failed to connect to ssh server"}});
+                    return;
+                }
+
+                hub->callRemote(responseId, nlohmann::json{{"uuid", maybeId.value()}});
+            }
+            catch (std::exception const& e)
+            {
+                Log::error("Error connecting to ssh server: {}", e.what());
+                hub->callRemote(responseId, nlohmann::json{{"error", e.what()}});
+                return;
+            }
+        });
+
+    hub.registerFunction(
+        "SshSessionManager::disconnect",
+        [this, hub = &hub, wnd = &wnd](std::string const& responseId, std::string const& uuid) {
+            try
+            {
+                if (sessions_.find(uuid) == sessions_.end())
+                {
+                    // Do not log this, because multi delete is not an error
+                    hub->callRemote(responseId, nlohmann::json{{"error", "No session found with id"}});
+                    return;
+                }
+                Log::info("Disconnecting from ssh server with id: {}", uuid);
+            }
+            catch (std::exception const& e)
+            {
+                Log::error("Error disconnecting to ssh server: {}", e.what());
+                hub->callRemote(responseId, nlohmann::json{{"error", e.what()}});
+                return;
+            }
+        });
+
+    hub.registerFunction(
+        "SshSessionManager::write",
+        [this, hub = &hub](std::string const& responseId, std::string const& uuid, std::string const& data) {
+            try
+            {
+                // TOOD:
+            }
+            catch (std::exception const& e)
+            {
+                Log::error("Error writing to pty: {}", e.what());
+                hub->callRemote(responseId, nlohmann::json{{"error", e.what()}});
+                return;
+            }
+        });
+
+    hub.registerFunction(
+        "SshSessionManager::ptyResize",
+        [this, hub = &hub](std::string const& responseId, std::string const& uuid, int cols, int rows) {
+            try
+            {
+                // TODO:
+            }
+            catch (std::exception const& e)
+            {
+                Log::error("Error resizing pty: {}", e.what());
+                hub->callRemote(responseId, nlohmann::json{{"error", e.what()}});
+                return;
+            }
+        });
+}
 
 void SshSessionManager::addPasswordProvider(int priority, PasswordProvider* provider)
 {
@@ -104,7 +191,7 @@ void SshSessionManager::addPasswordProvider(int priority, PasswordProvider* prov
     passwordProviders_.emplace(priority, provider);
 }
 
-bool SshSessionManager::addSession(Persistence::SshTerminalEngine const& engine)
+std::optional<std::string> SshSessionManager::addSession(Persistence::SshTerminalEngine const& engine)
 {
     auto session = std::make_unique<Session>();
 
@@ -128,11 +215,6 @@ bool SshSessionManager::addSession(Persistence::SshTerminalEngine const& engine)
         },
         [&] {
             return session->session.setOption(SSH_OPTIONS_HOST, sessionOptions.host.c_str());
-        },
-        [&] {
-            if (sshOptions.bindAddr.has_value())
-                return session->session.setOption(SSH_OPTIONS_BINDADDR, sshOptions.bindAddr.value().c_str());
-            return 0;
         },
         [&] {
             if (sessionOptions.user.has_value())
@@ -232,7 +314,7 @@ bool SshSessionManager::addSession(Persistence::SshTerminalEngine const& engine)
             return 0;
         },
         [&] {
-            if (sshOptions.sshKey)
+            if (sessionOptions.sshKey)
             {
                 int pubkeyAuth = 1;
                 return session->session.setOption(SSH_OPTIONS_PUBKEY_AUTH, &pubkeyAuth);
@@ -292,7 +374,7 @@ bool SshSessionManager::addSession(Persistence::SshTerminalEngine const& engine)
         });
 
     if (result.result == SSH_AUTH_ERROR)
-        return false;
+        return std::nullopt;
 
     if (result.result != SSH_AUTH_SUCCESS && sshOptions.usePublicKeyAutoAuth && sshOptions.usePublicKeyAutoAuth.value())
     {
@@ -301,9 +383,9 @@ bool SshSessionManager::addSession(Persistence::SshTerminalEngine const& engine)
         });
     }
 
-    if (result.result != SSH_AUTH_SUCCESS && sshOptions.sshKey)
+    if (result.result != SSH_AUTH_SUCCESS && sessionOptions.sshKey)
     {
-        const auto sshKey = sshOptions.sshKey.value();
+        const auto sshKey = sessionOptions.sshKey.value();
 
         ssh_key key{nullptr};
         result = sequential(
@@ -329,8 +411,20 @@ bool SshSessionManager::addSession(Persistence::SshTerminalEngine const& engine)
         });
     }
 
+    if (result.result != SSH_AUTH_SUCCESS)
+    {
+        Log::error("Failed to authenticate: {}", result.result);
+        return std::nullopt;
+    }
+
     std::stringstream sstr;
     sstr << boost::uuids::random_generator()();
-    sessions_[sstr.str()] = std::move(session);
-    return result.success();
+    const auto uuid = sstr.str();
+    if (sessions_.find(uuid) != sessions_.end())
+    {
+        Log::error("Failed to generate unique session id?!");
+        throw std::runtime_error("Failed to generate unique session id");
+    }
+    sessions_[uuid] = std::move(session);
+    return uuid;
 }

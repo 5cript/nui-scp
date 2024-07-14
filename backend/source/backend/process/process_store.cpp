@@ -126,7 +126,7 @@ void ProcessStore::registerRpc(Nui::Window& wnd, Nui::RpcHub& hub)
         [this, hub = &hub, wnd = &wnd](std::string const& responseId, nlohmann::json const& parameters) {
             try
             {
-                Log::info("Spawning process with parameters: {}", parameters.dump(4));
+                Log::debug("Spawning process with parameters: {}", parameters.dump(4));
 
                 const auto command = parameters.at("command").get<std::string>();
                 const auto arguments = parameters.at("arguments").get<std::vector<std::string>>();

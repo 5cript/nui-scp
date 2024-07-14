@@ -11,28 +11,41 @@
 #include <nui/frontend/attributes.hpp>
 
 #include <list>
+#include <variant>
 
 struct SessionArea::Implementation
 {
     Persistence::StateHolder* stateHolder;
     FrontendEvents* events;
-    Nui::Observed<std::list<Session>> sessions;
+    Nui::Observed<std::vector<std::unique_ptr<Session>>> sessions;
 
     Implementation(Persistence::StateHolder* stateHolder, FrontendEvents* events)
         : stateHolder{stateHolder}
         , events{events}
         , sessions{}
-    {
-        listen<std::string>(appEventContext, events->onNewSession, [](std::string const& name) -> bool {
-            Log::info("New session event: {}", name);
-            return true;
-        });
-    }
+    {}
 };
 
 SessionArea::SessionArea(Persistence::StateHolder* stateHolder, FrontendEvents* events)
     : impl_{std::make_unique<Implementation>(stateHolder, events)}
-{}
+{
+    listen(appEventContext, events->onNewSession, [this](std::string const& name) -> void {
+        addSession(name);
+    });
+
+    stateHolder->load([this](bool success, Persistence::StateHolder& holder) {
+        if (!success)
+            return;
+
+        auto const& state = holder.stateCache();
+
+        for (auto const& [name, engine] : state.terminalEngines)
+        {
+            if (engine.startupSession && engine.startupSession.value())
+                addSession(name);
+        }
+    });
+}
 
 ROAR_PIMPL_SPECIAL_FUNCTIONS_IMPL(SessionArea);
 
@@ -44,59 +57,60 @@ void SessionArea::addSession(std::string const& name)
 
         auto const& state = holder.stateCache();
 
-        auto engine = state.terminalEngines.find(name);
-        if (engine == end(state.terminalEngines))
+        auto iter = state.terminalEngines.find(name);
+        if (iter == end(state.terminalEngines))
         {
             Log::error("No engine found for name: {}", name);
             return;
         }
 
-        auto options = engine->second.options;
-        if (options.hasReference())
+        auto [engineKey, engine] = *iter;
+
+        if (!engine.terminalOptions.resolveWith(state.terminalOptions))
+            Log::warn("Failed to resolve ref options for engine: {}", name);
+
+        if (!engine.termios.resolveWith(state.termios))
+            Log::warn("Failed to resolve ref termios for engine: {}", name);
+
+        if (std::holds_alternative<Persistence::SshTerminalEngine>(engine.engine))
         {
-            Log::debug("Inheriting options from: {}", options.ref());
-            auto parent = state.terminalOptions.find(options.ref());
+            auto& sshEngine = std::get<Persistence::SshTerminalEngine>(engine.engine);
+            auto& sshSessionOptions = sshEngine.sshSessionOptions;
 
-            if (parent == end(state.terminalOptions))
-            {
-                Log::warn("Parent option not found for id: {}", options.ref());
-                return;
-            }
+            if (!sshSessionOptions.resolveWith(state.sshSessionOptions))
+                Log::warn("Failed to resolve ref ssh session options for engine: {}", name);
 
-            options.useDefaultsFrom(parent->second);
+            if (!sshSessionOptions->sshOptions.resolveWith(state.sshOptions))
+                Log::warn("Failed to resolve ref ssh options for engine: {}", name);
         }
 
-        const auto termios = [&]() {
-            auto termios = engine->second.termios;
-            if (!engine->second.termios.hasReference())
-            {
-                Log::debug("Inheriting termios from: {}", engine->second.termios.ref());
-                auto parent = state.termios.find(engine->second.termios.ref());
-
-                if (parent == end(state.termios))
-                {
-                    Log::warn("Parent termios not found for id: {}", engine->second.termios.ref());
-                    return termios;
-                }
-
-                termios.useDefaultsFrom(parent->second);
-            }
-            return termios;
-        }();
-
         Log::info("Adding session: {}", name);
-        impl_->sessions.emplace_back(
+        impl_->sessions.emplace_back(std::make_unique<Session>(
             impl_->stateHolder,
-            engine->second,
-            termios.value(),
-            options.value(),
+            engine,
             name,
             [this](Session const*, std::string const&) {
                 {
                     impl_->sessions.modify();
                 }
                 Nui::globalEventContext.executeActiveEventsImmediately();
-            });
+            },
+            [this](Session const& session) {
+                for (auto iter = begin(impl_->sessions); iter != end(impl_->sessions); ++iter)
+                {
+                    if ((*iter.getWrapped()).get() == &session)
+                    {
+                        if (session.visible() && impl_->sessions.size() > 1)
+                        {
+                            impl_->sessions.value()[0]->visible(true);
+                        }
+                        impl_->sessions.erase(iter);
+                        break;
+                    }
+                }
+                Nui::globalEventContext.executeActiveEventsImmediately();
+            },
+            impl_->sessions.size() == 0));
         Nui::globalEventContext.executeActiveEventsImmediately();
     });
 }
@@ -108,22 +122,43 @@ Nui::ElementRenderer SessionArea::operator()()
     using namespace Nui::Attributes;
     using Nui::Elements::div; // because of the global div.
 
-    Nui::Console::log("SessionArea::operator()");
+    Log::info("SessionArea::operator()");
 
     // clang-format off
     return div{
-        class_ = classes("session-area", "[grid-area:SessionArea]")
+        class_ = "session-area"
     }(
         ui5::tabcontainer{
-            style = "height: calc(100% - 10px);display: block",
+            style = "width: 100%; display: block",
             class_ = "session-area-tabs",
+            "tab-select"_event = [this](Nui::val event){
+                const auto index = event["detail"]["tabIndex"].as<int>();
+                if (index >= 0 && index < static_cast<int>(impl_->sessions.size()))
+                {
+                    // Could do some logic, but this is easier when tabs are getting deleted.
+                    for (auto const& session : impl_->sessions.value())
+                    {
+                        if (session->visible())
+                            session->visible(false);
+                    }
+                    impl_->sessions.value()[index]->visible(true);
+                }
+            },
             "fixed"_prop = true,
         }(
             range(impl_->sessions),
             [](long long, auto& session) -> Nui::ElementRenderer {
-                return ui5::tab{"text"_prop = session.tabTitle()}(
-                    session()
-                );
+                // tabs dont actually reside here:
+                return ui5::tab{"text"_prop = session->tabTitle()}();
+            }
+        ),
+        div{
+            style = "position: relative; width: 100%; height: calc(100% - 30px); display: block",
+            class_ = "session-area-content"
+        }(
+            range(impl_->sessions),
+            [](long long, auto& session) -> Nui::ElementRenderer {
+                return session->operator()();
             }
         )
     );
