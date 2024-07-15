@@ -28,7 +28,6 @@ struct Session::Implementation
     Nui::Delocalized<int> stable;
     std::string initialName;
     std::string tabTitle;
-    std::function<void()> delayedOnOpenTask;
     std::function<void(Session const& self)> closeSelf;
     Nui::Observed<bool> isVisible;
 
@@ -45,7 +44,6 @@ struct Session::Implementation
         , stable{}
         , initialName{std::move(initialName)}
         , tabTitle{this->initialName}
-        , delayedOnOpenTask{}
         , closeSelf{std::move(closeSelf)}
         , isVisible{visible}
     {}
@@ -167,6 +165,10 @@ void Session::onOpen(bool success, std::string const& info)
             false);
         Nui::globalEventContext.executeActiveEventsImmediately();
     }
+    else
+    {
+        impl_->terminal.value()->focus();
+    }
 }
 
 std::optional<std::string> Session::getProcessIdIfExecutingEngine() const
@@ -195,9 +197,11 @@ void Session::visible(bool value)
 {
     impl_->isVisible = value;
     Nui::globalEventContext.executeActiveEventsImmediately();
+    if (value)
+        impl_->terminal.value()->focus();
 }
 
-Nui::ElementRenderer Session::operator()()
+Nui::ElementRenderer Session::operator()(bool visible)
 {
     using namespace Nui;
     using namespace Nui::Elements;
@@ -205,6 +209,8 @@ Nui::ElementRenderer Session::operator()()
     using Nui::Elements::div; // because of the global div.
 
     Log::info("Session::operator()");
+
+    impl_->isVisible = visible;
 
     // clang-format off
     return div{

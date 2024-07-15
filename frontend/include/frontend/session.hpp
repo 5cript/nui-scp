@@ -22,7 +22,7 @@ class Session
         bool visible);
     ROAR_PIMPL_SPECIAL_FUNCTIONS(Session);
 
-    Nui::ElementRenderer operator()();
+    Nui::ElementRenderer operator()(bool visible);
 
     std::string name() const;
     std::string tabTitle() const;

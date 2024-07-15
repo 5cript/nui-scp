@@ -73,16 +73,23 @@ void SessionArea::removeSession(std::function<bool(Session const&)> const& predi
         if (predicate(**iter.getWrapped()))
         {
             if ((*iter.getWrapped())->visible() && impl_->sessions.size() > 1)
-            {
-                impl_->selected = std::max(0, i - 1);
-                (*iter.getWrapped())->visible(false);
-                impl_->sessions.value()[impl_->selected]->visible(true);
-                Nui::globalEventContext.executeActiveEventsImmediately();
-            }
+                setSelected(std::max(0, i - 1));
             impl_->sessions.erase(iter);
             break;
         }
     }
+}
+
+void SessionArea::setSelected(int index)
+{
+    if (impl_->selected >= 0 && impl_->selected < static_cast<int>(impl_->sessions.size()))
+        impl_->sessions.value()[impl_->selected]->visible(false);
+    if (index >= 0 && index < static_cast<int>(impl_->sessions.size()))
+    {
+        impl_->sessions.value()[index]->visible(true);
+        impl_->selected = index;
+    }
+    Nui::globalEventContext.executeActiveEventsImmediately();
 }
 
 void SessionArea::addSession(std::string const& name)
@@ -121,7 +128,6 @@ void SessionArea::addSession(std::string const& name)
         }
 
         Log::info("Adding session: {}", name);
-        impl_->selected = impl_->sessions.size();
         impl_->sessions.emplace_back(std::make_unique<Session>(
             impl_->stateHolder,
             engine,
@@ -138,6 +144,9 @@ void SessionArea::addSession(std::string const& name)
                 });
             },
             impl_->sessions.size() == 0));
+        if (impl_->selected >= 0 && impl_->selected < static_cast<int>(impl_->sessions.size()))
+            impl_->sessions.value()[impl_->selected]->visible(false);
+        impl_->selected = impl_->sessions.size() - 1;
         Nui::globalEventContext.executeActiveEventsImmediately();
     });
 }
@@ -187,8 +196,8 @@ Nui::ElementRenderer SessionArea::operator()()
             class_ = "session-area-content"
         }(
             range(impl_->sessions),
-            [](long long, auto& session) -> Nui::ElementRenderer {
-                return session->operator()();
+            [this](long long i, auto& session) -> Nui::ElementRenderer {
+                return session->operator()(i == impl_->selected);
             }
         )
     );

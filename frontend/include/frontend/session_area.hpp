@@ -18,6 +18,7 @@ class SessionArea
     void addSession(std::string const& name);
     void registerRpc();
     void removeSession(std::function<bool(Session const&)> const& predicate);
+    void setSelected(int index);
 
   private:
     struct Implementation;

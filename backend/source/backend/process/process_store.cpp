@@ -380,7 +380,7 @@ void ProcessStore::registerRpc(Nui::Window& wnd, Nui::RpcHub& hub)
         [this, hub = &hub](std::string const& responseId, std::string const& uuid, int cols, int rows) {
             try
             {
-                Log::info("Resizing PTY with UUID: {} to cols: {}, rows: {}", uuid, cols, rows);
+                Log::debug("Resizing PTY with UUID: {} to cols: {}, rows: {}", uuid, cols, rows);
                 auto process = processes_.find(uuid);
                 if (process == processes_.end())
                 {

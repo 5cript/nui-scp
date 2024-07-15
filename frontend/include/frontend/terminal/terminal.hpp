@@ -20,6 +20,7 @@ class Terminal
     void dispose();
     void write(std::string const& data, bool isUserInput);
     TerminalEngine& engine();
+    void focus();
 
   private:
     struct Implementation;

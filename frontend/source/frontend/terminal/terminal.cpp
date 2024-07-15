@@ -74,6 +74,7 @@ globalThis.terminalUtility.createTerminal = (host, options) => {
     addons.resizeObserver = resizeObserver;
     addons.resizeObserver.observe(host);
 
+    terminal.focus();
     globalThis.terminalUtility.set(id, terminal, addons);
     return id;
 };
@@ -323,6 +324,18 @@ void Terminal::open(
             write("", false);
         onOpen(true, info);
     });
+}
+void Terminal::focus()
+{
+    if (!isOpen())
+        return;
+    auto term = impl_->terminal();
+    if (term.isUndefined())
+    {
+        Log::error("Failed to get terminal with id to focus it: '{}", impl_->termId);
+        return;
+    }
+    term.call<void>("focus");
 }
 void Terminal::dispose()
 {
