@@ -42,6 +42,17 @@ void PasswordPrompter::closeDialog(std::string const& password)
     Nui::RpcClient::call("PasswordPrompter::promptDone", password);
 }
 
+void PasswordPrompter::confirm()
+{
+    if (auto input = impl_->input.lock())
+    {
+        closeDialog(input->val()["value"].as<std::string>());
+        input->val().set("value", "");
+    }
+    else
+        closeDialog("");
+}
+
 Nui::ElementRenderer PasswordPrompter::dialog()
 {
     using namespace Nui::Elements;
@@ -51,7 +62,7 @@ Nui::ElementRenderer PasswordPrompter::dialog()
     // clang-format off
     return ui5::dialog{
         id = "PasswordPrompter", 
-        "header-text"_prop = "Enter Password",
+        "headerText"_prop = "Enter Password",
         reference = impl_->dialog,
     }(
         section{class_ = "prompter-form"}(
@@ -61,6 +72,9 @@ Nui::ElementRenderer PasswordPrompter::dialog()
                     id = "PasswordPrompterInput", 
                     "type"_prop = "Password",
                     reference = impl_->input,
+                    "change"_event = [this](Nui::val) {
+                        confirm();
+                    }
                 }()
             )
         ),
@@ -78,10 +92,7 @@ Nui::ElementRenderer PasswordPrompter::dialog()
             ui5::button{
                 "design"_prop = "Emphasized",
                 "click"_event = [this](){
-                    if (auto input = impl_->input.lock())
-                        closeDialog(input->val()["value"].as<std::string>());
-                    else
-                        closeDialog("");
+                    confirm();
                 }
             }("Ok")
         )

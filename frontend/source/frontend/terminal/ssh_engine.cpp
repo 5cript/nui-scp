@@ -16,6 +16,7 @@ struct SshTerminalEngine::Implementation
 
     Nui::RpcClient::AutoUnregister stdoutReceiver;
     Nui::RpcClient::AutoUnregister stderrReceiver;
+    Nui::RpcClient::AutoUnregister onExitReceiver;
 
     std::string sshSessionId;
 
@@ -27,6 +28,7 @@ struct SshTerminalEngine::Implementation
         , id{Nui::val::global("generateId")().as<std::string>()}
         , stdoutReceiver{}
         , stderrReceiver{}
+        , onExitReceiver{}
         , sshSessionId{}
         , stdoutHandler{}
         , stderrHandler{}
@@ -72,10 +74,21 @@ void SshTerminalEngine::open(std::function<void(bool, std::string const&)> onOpe
                 Log::error("sshTerminalStderr_" + impl_->id + " received an empty message");
         });
 
+    impl_->onExitReceiver = Nui::RpcClient::autoRegisterFunction("sshTerminalOnExit_" + impl_->id, [this](Nui::val) {
+        Nui::RpcClient::callWithBackChannel(
+            "SshSessionManager::disconnect",
+            [this](Nui::val) {
+                if (impl_->settings.onExit)
+                    impl_->settings.onExit();
+            },
+            impl_->sshSessionId);
+    });
+
     Nui::val obj = Nui::val::object();
     obj.set("engine", asVal(impl_->settings.engineOptions));
     obj.set("stdout", "sshTerminalStdout_"s + impl_->id);
     obj.set("stderr", "sshTerminalStderr_"s + impl_->id);
+    obj.set("onExit", "sshTerminalOnExit_"s + impl_->id);
 
     Nui::RpcClient::callWithBackChannel(
         "SshSessionManager::connect",
@@ -83,9 +96,10 @@ void SshTerminalEngine::open(std::function<void(bool, std::string const&)> onOpe
             if (!val.hasOwnProperty("uuid"))
             {
                 Log::error("SshSessionManager::connect callback did not return a uuid");
+                std::string error = "";
                 if (val.hasOwnProperty("error"))
-                    Log::error(val["error"].as<std::string>());
-                return onOpen(false, val["error"].as<std::string>());
+                    error = val["error"].as<std::string>();
+                return onOpen(false, error);
             }
             std::string uuid = val["uuid"].as<std::string>();
             impl_->sshSessionId = uuid;

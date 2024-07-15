@@ -81,6 +81,13 @@ Session::Session(
     {
         impl_->terminal = std::make_unique<Terminal>(std::make_unique<SshTerminalEngine>(SshTerminalEngine::Settings{
             .engineOptions = std::get<Persistence::SshTerminalEngine>(impl_->engine.engine),
+            .onExit =
+                [this]() {
+                    // TODO: this is harsh, when the connection dropped unexpectedly, so keep the terminal open and
+                    // print a disconnect warning.
+                    if (impl_->closeSelf)
+                        impl_->closeSelf(*this);
+                },
         }));
 
         const auto user = std::get<Persistence::SshTerminalEngine>(impl_->engine.engine)

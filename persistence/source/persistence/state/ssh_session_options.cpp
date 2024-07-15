@@ -23,6 +23,7 @@ namespace Persistence
         TO_JSON_OPTIONAL(j, options, port);
         TO_JSON_OPTIONAL(j, options, user);
         TO_JSON_OPTIONAL(j, options, sshKey);
+        TO_JSON_OPTIONAL(j, options, environment);
         j["sshOptions"] = options.sshOptions;
     }
     void from_json(nlohmann::json const& j, SshSessionOptions& options)

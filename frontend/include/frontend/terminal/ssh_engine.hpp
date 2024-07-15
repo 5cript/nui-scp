@@ -17,6 +17,7 @@ class SshTerminalEngine : public TerminalEngine
     struct Settings
     {
         Persistence::SshTerminalEngine engineOptions;
+        std::function<void()> onExit;
     };
 
   public:

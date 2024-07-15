@@ -15,6 +15,7 @@ class PasswordPrompter
 
   private:
     void closeDialog(std::string const& password);
+    void confirm();
 
   private:
     struct Implementation;

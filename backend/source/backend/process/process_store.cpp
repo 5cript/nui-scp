@@ -191,6 +191,8 @@ void ProcessStore::registerRpc(Nui::Window& wnd, Nui::RpcHub& hub)
                 using PtyType = PTY::PseudoTerminal;
 #endif
 
+                hub->callRemote(responseId, nlohmann::json{{"uuid", processId}});
+
                 if (processes_[processId]->getState<ProcessInfo>(ProcessAttachedState::ProcessInfo).isPty)
                 {
                     Log::info("Starting PTY reading");
@@ -232,8 +234,6 @@ void ProcessStore::registerRpc(Nui::Window& wnd, Nui::RpcHub& hub)
                             return true;
                         });
                 }
-
-                hub->callRemote(responseId, nlohmann::json{{"uuid", processId}});
             }
             catch (std::exception const& e)
             {
