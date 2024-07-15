@@ -22,6 +22,8 @@ struct Process::Implementation
 
     std::function<bool(std::string_view)> onStdout;
     std::function<bool(std::string_view)> onStderr;
+    // Only used on Windows:
+    std::function<void()> onExit;
 
     std::vector<char> stdoutBuffer;
     std::vector<char> stderrBuffer;
@@ -36,13 +38,14 @@ struct Process::Implementation
 
     std::map<int, std::unique_ptr<void, void (*)(void*)>> stateCache;
 
-    Implementation(boost::asio::any_io_executor executor)
+    Implementation(boost::asio::any_io_executor executor, std::function<void()> onExit)
         : executor{std::move(executor)}
         , exitWaitTimer{this->executor}
         , defaultExitWaitTimeout{10}
         , exitCode{}
         , onStdout{}
         , onStderr{}
+        , onExit{std::move(onExit)}
         , stdoutBuffer(4096)
         , stderrBuffer(4096)
         , stdoutPipe{this->executor}
@@ -126,8 +129,8 @@ struct Process::Implementation
     }
 };
 
-Process::Process(boost::asio::any_io_executor executor)
-    : impl_{std::make_unique<Implementation>(std::move(executor))}
+Process::Process(boost::asio::any_io_executor executor, std::function<void()> onExit)
+    : impl_{std::make_unique<Implementation>(std::move(executor), std::move(onExit))}
 {}
 Process::~Process()
 {
@@ -301,6 +304,28 @@ void Process::spawn(
     {
         impl_->child = launcher(impl_->executor, executable, arguments, env);
     }
+
+#ifdef _WIN32
+    if (impl_->child->running())
+    {
+        impl_->child->async_wait([weak = weak_from_this()](auto ec, auto code) {
+            auto self = weak.lock();
+            if (!self)
+                return;
+
+            if (ec)
+            {
+                // Likely right?
+                return;
+            }
+
+            self->impl_->exitCode = code;
+            self->impl_->notifyExit();
+            if (self->impl_->onExit)
+                self->impl_->onExit();
+        });
+    }
+#endif
 }
 
 void Process::startReading(

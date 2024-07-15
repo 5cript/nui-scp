@@ -68,10 +68,9 @@ Nui::ElementRenderer MainPage::render()
         impl_->prompter.dialog(),
         div{
             style = "background-color: var(--sapBackgroundColor); color: var(--sapTextColor);",
-            class_ = "main-page",            
+            class_ = "main-page",
         }(
             impl_->toolbar(),
-            impl_->sidebar(),
             impl_->sessionArea()
         )
     );

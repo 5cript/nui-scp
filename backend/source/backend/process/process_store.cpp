@@ -30,8 +30,10 @@ namespace
     };
 }
 
-ProcessStore::ProcessStore(boost::asio::any_io_executor executor)
+ProcessStore::ProcessStore(boost::asio::any_io_executor executor, Nui::Window& wnd, Nui::RpcHub& hub)
     : executor_{std::move(executor)}
+    , wnd_{&wnd}
+    , hub_{&hub}
     , processes_{}
     , uuidGenerator_{}
 {}
@@ -51,7 +53,11 @@ std::string ProcessStore::emplace(
     std::chrono::seconds defaultExitWaitTimeout)
 {
     const auto processId = boost::uuids::to_string(uuidGenerator_());
-    processes_[processId] = std::make_shared<Process>(executor_);
+    processes_[processId] = std::make_shared<Process>(executor_, [this, processId]() {
+        wnd_->runInJavascriptThread([this, processId]() {
+            notifyChildExit(*hub_, processId);
+        });
+    });
     processes_[processId]->attachState(ProcessAttachedState::ProcessInfo, ProcessInfo{isPty});
 
     if (isPty)
@@ -119,6 +125,20 @@ void ProcessStore::pruneDeadProcesses()
             ++iter;
         }
     }
+}
+
+void ProcessStore::notifyChildExit(Nui::RpcHub& hub, std::string const& uuid)
+{
+    auto process = processes_.find(uuid);
+    if (process == processes_.end())
+    {
+        Log::error("Process not found");
+        return;
+    }
+
+    process->second->exit();
+    processes_.erase(process);
+    hub.callRemote("SessionArea::processDied", nlohmann::json{{"uuid", uuid}});
 }
 
 void ProcessStore::notifyChildExit(Nui::RpcHub& hub, long long pid)

@@ -19,7 +19,7 @@
 class Process : public std::enable_shared_from_this<Process>
 {
   public:
-    Process(boost::asio::any_io_executor executor);
+    Process(boost::asio::any_io_executor executor, std::function<void()> onExit);
     ROAR_PIMPL_SPECIAL_FUNCTIONS(Process);
 
     void spawn(

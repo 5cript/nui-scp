@@ -18,7 +18,7 @@
 class ProcessStore
 {
   public:
-    ProcessStore(boost::asio::any_io_executor executor);
+    ProcessStore(boost::asio::any_io_executor executor, Nui::Window& wnd, Nui::RpcHub& hub);
     ~ProcessStore();
 
     void registerRpc(Nui::Window& wnd, Nui::RpcHub& hub);
@@ -40,11 +40,14 @@ class ProcessStore
     }
 
     void notifyChildExit(Nui::RpcHub& hub, long long pid);
+    void notifyChildExit(Nui::RpcHub& hub, std::string const& uuid);
 
     void pruneDeadProcesses();
 
   private:
     boost::asio::any_io_executor executor_;
+    Nui::Window* wnd_;
+    Nui::RpcHub* hub_;
     std::unordered_map<std::string, std::shared_ptr<Process>> processes_;
     boost::uuids::random_generator uuidGenerator_;
 };

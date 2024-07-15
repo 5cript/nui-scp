@@ -159,7 +159,7 @@ Main::Main(int const, char const* const* argv)
           },
       }
     , hub_{window_}
-    , processes_{window_.getExecutor()}
+    , processes_{window_.getExecutor(), window_, hub_}
     , prompter_{hub_}
     , sshSessionManager_{}
     , shuttingDown_{false}

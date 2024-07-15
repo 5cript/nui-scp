@@ -2,7 +2,7 @@
     display: grid;
     grid-template-areas:
         "Toolbar Toolbar"
-        "Sidebar SessionArea";
+        "SessionArea SessionArea";
     grid-template-columns: 200px auto;
     grid-template-rows: min-content auto;
     height: 100%;
