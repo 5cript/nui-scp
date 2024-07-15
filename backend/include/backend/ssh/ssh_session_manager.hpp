@@ -12,6 +12,7 @@
 #include <unordered_map>
 #include <map>
 #include <mutex>
+#include <thread>
 
 class SshSessionManager
 {
@@ -26,11 +27,19 @@ class SshSessionManager
     };
 
     SshSessionManager();
+    ~SshSessionManager();
+    SshSessionManager(SshSessionManager const&) = delete;
+    SshSessionManager& operator=(SshSessionManager const&) = delete;
+    SshSessionManager(SshSessionManager&&) = delete;
+    SshSessionManager& operator=(SshSessionManager&&) = delete;
 
     void registerRpc(Nui::Window& wnd, Nui::RpcHub& rpcHub);
 
     void addPasswordProvider(int priority, PasswordProvider* provider);
-    std::optional<std::string> addSession(Persistence::SshTerminalEngine const& engine);
+    void joinSessionAdder();
+    void addSession(
+        Persistence::SshTerminalEngine const& engine,
+        std::function<void(std::optional<std::string> const&)> onComplete);
 
     friend int askPassDefault(char const* prompt, char* buf, std::size_t length, int echo, int verify, void* userdata);
 
@@ -38,6 +47,8 @@ class SshSessionManager
     std::unordered_map<std::string, std::unique_ptr<Session>> sessions_;
     std::mutex passwordProvidersMutex_;
     std::map<int, PasswordProvider*> passwordProviders_;
+    std::mutex addSessionMutex_;
+    std::unique_ptr<std::thread> addSessionThread_;
 };
 
 int askPassDefault(char const* prompt, char* buf, std::size_t length, int echo, int verify, void* userdata);

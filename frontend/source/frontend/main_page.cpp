@@ -3,9 +3,9 @@
 #include <frontend/toolbar.hpp>
 #include <frontend/classes.hpp>
 #include <frontend/session_area.hpp>
+#include <frontend/password_prompter.hpp>
 #include <nui/frontend/api/timer.hpp>
 #include <log/log.hpp>
-
 #include <nui/frontend/elements.hpp>
 #include <nui/frontend/attributes.hpp>
 
@@ -13,6 +13,7 @@ struct MainPage::Implementation
 {
     Persistence::StateHolder* stateHolder;
     FrontendEvents* events;
+    PasswordPrompter prompter;
     Sidebar sidebar;
     Toolbar toolbar;
     SessionArea sessionArea;
@@ -21,6 +22,8 @@ struct MainPage::Implementation
 
     Implementation(Persistence::StateHolder* stateHolder, FrontendEvents* events)
         : stateHolder{stateHolder}
+        , events{events}
+        , prompter{}
         , sidebar{stateHolder, events}
         , toolbar{stateHolder, events}
         , sessionArea{stateHolder, events}
@@ -60,13 +63,17 @@ Nui::ElementRenderer MainPage::render()
 
     // clang-format off
     return div{
-        style = "background-color: var(--sapBackgroundColor); color: var(--sapTextColor);",
-        class_ = "main-page",            
-    }
-    (
-        impl_->toolbar(),
-        impl_->sidebar(),
-        impl_->sessionArea()
+        class_ = "main-page-wrap"
+    }(
+        impl_->prompter.dialog(),
+        div{
+            style = "background-color: var(--sapBackgroundColor); color: var(--sapTextColor);",
+            class_ = "main-page",            
+        }(
+            impl_->toolbar(),
+            impl_->sidebar(),
+            impl_->sessionArea()
+        )
     );
     // clang-format on
 }

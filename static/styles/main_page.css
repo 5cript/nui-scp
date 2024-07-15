@@ -6,4 +6,10 @@
     grid-template-columns: 200px auto;
     grid-template-rows: min-content auto;
     height: 100%;
+    width: 100%;
+}
+
+.main-page-wrap {
+    width: 100%;
+    height: 100%;
 }

@@ -9,6 +9,7 @@ target_sources(
         toolbar.cpp
         session_area.cpp
         session.cpp
+        password_prompter.cpp
         terminal/terminal.cpp
         terminal/executing_engine.cpp
         terminal/ssh_engine.cpp

@@ -9,8 +9,10 @@
 
 // #define NUI_ENABLE_LIVE_RELOAD
 // #include <nui/frontend/live_styling.hpp>
+
 #include <nui/frontend/dom/dom.hpp>
 #include <nui/frontend/elements.hpp>
+#include <nui/frontend/attributes.hpp>
 
 #include <memory>
 
@@ -31,6 +33,7 @@ bool tryLoad(std::shared_ptr<Nui::TimerHandle> const& setupWait)
         frontendEvents = std::make_unique<FrontendEvents>();
         mainPage = std::make_unique<MainPage>(persistence.get(), frontendEvents.get());
         dom = std::make_unique<Nui::Dom::Dom>();
+
         dom->setBody(Nui::Elements::body{}(mainPage->render()));
     }
     else

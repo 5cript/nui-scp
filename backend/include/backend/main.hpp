@@ -4,6 +4,7 @@
 #include <backend/process/process_store.hpp>
 #include <backend/ssh/ssh_session_manager.hpp>
 #include <persistence/state_holder.hpp>
+#include <backend/password/password_prompter.hpp>
 
 #include <boost/asio/steady_timer.hpp>
 #include <nui/core.hpp>
@@ -36,6 +37,7 @@ class Main
     Nui::Window window_;
     Nui::RpcHub hub_;
     ProcessStore processes_;
+    PasswordPrompter prompter_;
     SshSessionManager sshSessionManager_;
     std::atomic_bool shuttingDown_;
 #ifdef __linux__

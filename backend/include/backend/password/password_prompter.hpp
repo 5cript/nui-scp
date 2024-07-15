@@ -13,4 +13,5 @@ class PasswordPrompter : public PasswordProvider
 
   private:
     Nui::RpcHub* rpcHub_;
+    std::function<void(std::optional<std::string>)> ready_;
 };

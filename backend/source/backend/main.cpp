@@ -157,10 +157,13 @@ Main::Main(int const, char const* const* argv)
       }
     , hub_{window_}
     , processes_{window_.getExecutor()}
+    , prompter_{hub_}
     , sshSessionManager_{}
     , shuttingDown_{false}
     , childSignalTimer_{window_.getExecutor()}
 {
+    sshSessionManager_.addPasswordProvider(-99, &prompter_);
+
     stateHolder_.load([](bool success, Persistence::StateHolder& holder) {
         if (!success)
             return;
