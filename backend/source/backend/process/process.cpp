@@ -143,20 +143,29 @@ Process::~Process()
 }
 ROAR_PIMPL_SPECIAL_FUNCTIONS_IMPL_NO_DTOR(Process);
 
-std::optional<int> Process::exitSync(std::chrono::seconds exitWaitTimeout)
+std::optional<int> Process::exitSync(std::optional<std::chrono::seconds> exitWaitTimeout)
 {
-    if (!exit(exitWaitTimeout))
+    const auto waitTimeout = exitWaitTimeout.value_or(impl_->defaultExitWaitTimeout);
+    if (!exit(waitTimeout))
         return impl_->exitCode;
+
     {
         std::unique_lock lock{impl_->awaitExit};
-        impl_->exitCondition.wait_for(lock, exitWaitTimeout * 2, [this] {
+        impl_->exitCondition.wait_for(lock, waitTimeout * 2, [this] {
             return impl_->exited;
         });
     }
     return impl_->exitCode;
 }
 
-bool Process::exit(std::chrono::seconds exitWaitTimeout)
+boost::process::v2::pid_type Process::pid() const
+{
+    if (!impl_->child)
+        return 0;
+    return impl_->child->id();
+}
+
+bool Process::exit(std::optional<std::chrono::seconds> exitWaitTimeout)
 {
     if (!impl_->child)
         return false;
@@ -164,7 +173,8 @@ bool Process::exit(std::chrono::seconds exitWaitTimeout)
     {
         if (!impl_->exitCode)
         {
-            impl_->child->wait();
+            boost::system::error_code ec;
+            impl_->child->wait(ec);
             impl_->exitCode = impl_->child->exit_code();
             return false;
         }
@@ -177,7 +187,7 @@ bool Process::exit(std::chrono::seconds exitWaitTimeout)
     }
 
     impl_->child->request_exit();
-    impl_->exitWaitTimer.expires_after(exitWaitTimeout);
+    impl_->exitWaitTimer.expires_after(exitWaitTimeout.value_or(impl_->defaultExitWaitTimeout));
     impl_->exitWaitTimer.async_wait([weak = weak_from_this()](boost::system::error_code ec) {
         if (ec)
             return;

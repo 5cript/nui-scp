@@ -9,6 +9,7 @@
 #include <nui/frontend/api/console.hpp>
 #include <nui/frontend/elements.hpp>
 #include <nui/frontend/attributes.hpp>
+#include <nui/rpc.hpp>
 
 #include <list>
 #include <variant>
@@ -18,11 +19,13 @@ struct SessionArea::Implementation
     Persistence::StateHolder* stateHolder;
     FrontendEvents* events;
     Nui::Observed<std::vector<std::unique_ptr<Session>>> sessions;
+    int selected;
 
     Implementation(Persistence::StateHolder* stateHolder, FrontendEvents* events)
         : stateHolder{stateHolder}
         , events{events}
         , sessions{}
+        , selected{0}
     {}
 };
 
@@ -45,9 +48,42 @@ SessionArea::SessionArea(Persistence::StateHolder* stateHolder, FrontendEvents* 
                 addSession(name);
         }
     });
+
+    registerRpc();
 }
 
 ROAR_PIMPL_SPECIAL_FUNCTIONS_IMPL(SessionArea);
+
+void SessionArea::registerRpc()
+{
+    Nui::RpcClient::registerFunction("SessionArea::processDied", [this](Nui::val val) {
+        auto const processId = val["uuid"].as<std::string>();
+        Log::info("Process with id '{}' terminated.", processId);
+        removeSession([processId](Session const& session) {
+            return session.getProcessIdIfExecutingEngine().value_or("") == processId;
+        });
+    });
+}
+
+void SessionArea::removeSession(std::function<bool(Session const&)> const& predicate)
+{
+    int i = 0;
+    for (auto iter = begin(impl_->sessions); iter != end(impl_->sessions); ++iter, ++i)
+    {
+        if (predicate(**iter.getWrapped()))
+        {
+            if ((*iter.getWrapped())->visible() && impl_->sessions.size() > 1)
+            {
+                impl_->selected = std::max(0, i - 1);
+                (*iter.getWrapped())->visible(false);
+                impl_->sessions.value()[impl_->selected]->visible(true);
+                Nui::globalEventContext.executeActiveEventsImmediately();
+            }
+            impl_->sessions.erase(iter);
+            break;
+        }
+    }
+}
 
 void SessionArea::addSession(std::string const& name)
 {
@@ -85,6 +121,7 @@ void SessionArea::addSession(std::string const& name)
         }
 
         Log::info("Adding session: {}", name);
+        impl_->selected = impl_->sessions.size();
         impl_->sessions.emplace_back(std::make_unique<Session>(
             impl_->stateHolder,
             engine,
@@ -96,19 +133,9 @@ void SessionArea::addSession(std::string const& name)
                 Nui::globalEventContext.executeActiveEventsImmediately();
             },
             [this](Session const& session) {
-                for (auto iter = begin(impl_->sessions); iter != end(impl_->sessions); ++iter)
-                {
-                    if ((*iter.getWrapped()).get() == &session)
-                    {
-                        if (session.visible() && impl_->sessions.size() > 1)
-                        {
-                            impl_->sessions.value()[0]->visible(true);
-                        }
-                        impl_->sessions.erase(iter);
-                        break;
-                    }
-                }
-                Nui::globalEventContext.executeActiveEventsImmediately();
+                removeSession([&session](Session const& s) {
+                    return &s == &session;
+                });
             },
             impl_->sessions.size() == 0));
         Nui::globalEventContext.executeActiveEventsImmediately();
@@ -144,12 +171,15 @@ Nui::ElementRenderer SessionArea::operator()()
                     impl_->sessions.value()[index]->visible(true);
                 }
             },
-            "fixed"_prop = true,
+            "fixed"_prop = true
         }(
             range(impl_->sessions),
-            [](long long, auto& session) -> Nui::ElementRenderer {
+            [this](long long i, auto& session) -> Nui::ElementRenderer {
                 // tabs dont actually reside here:
-                return ui5::tab{"text"_prop = session->tabTitle()}();
+                return ui5::tab{
+                    "text"_prop = session->tabTitle(),
+                    "selected"_prop = i == impl_->selected
+                }();
             }
         ),
         div{

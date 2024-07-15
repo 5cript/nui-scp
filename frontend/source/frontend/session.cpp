@@ -106,10 +106,7 @@ Session::Session(
     Nui::globalEventContext.executeActiveEventsImmediately();
 }
 
-Session::~Session()
-{
-    Log::info("???");
-}
+Session::~Session() = default;
 
 ROAR_PIMPL_SPECIAL_FUNCTIONS_IMPL_NO_DTOR(Session);
 
@@ -170,6 +167,13 @@ void Session::onOpen(bool success, std::string const& info)
             false);
         Nui::globalEventContext.executeActiveEventsImmediately();
     }
+}
+
+std::optional<std::string> Session::getProcessIdIfExecutingEngine() const
+{
+    if (std::holds_alternative<Persistence::ExecutingTerminalEngine>(impl_->engine.engine))
+        return static_cast<ExecutingTerminalEngine&>(impl_->terminal.value()->engine()).id();
+    return std::nullopt;
 }
 
 std::string Session::name() const

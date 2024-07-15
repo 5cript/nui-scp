@@ -23,10 +23,17 @@
 #include <string_view>
 #include <memory>
 #include <unordered_map>
+#include <iostream>
+
+#ifdef __linux__
+#    include <signal.h>
+#endif
 
 using namespace std::string_literals;
 using namespace std::chrono_literals;
 using namespace Nui;
+
+volatile sig_atomic_t sigchld[10] = {0};
 
 namespace
 {
@@ -151,6 +158,8 @@ Main::Main(int const, char const* const* argv)
     , hub_{window_}
     , processes_{window_.getExecutor()}
     , sshSessionManager_{}
+    , shuttingDown_{false}
+    , childSignalTimer_{window_.getExecutor()}
 {
     stateHolder_.load([](bool success, Persistence::StateHolder& holder) {
         if (!success)
@@ -159,7 +168,11 @@ Main::Main(int const, char const* const* argv)
         Log::setLevel(holder.stateCache().logLevel);
     });
 }
-Main::~Main() = default;
+Main::~Main()
+{
+    shuttingDown_ = true;
+    childSignalTimer_.cancel();
+}
 
 void Main::registerRpc()
 {
@@ -186,9 +199,61 @@ void Main::show()
     window_.run();
 }
 
+void Main::startChildSignalTimer()
+{
+    if (shuttingDown_)
+        return;
+
+#ifdef __linux__
+    childSignalTimer_.expires_after(200ms);
+    childSignalTimer_.async_wait([this](boost::system::error_code const& ec) {
+        if (ec)
+            return;
+
+        for (auto& i : sigchld)
+        {
+            if (i > 0)
+            {
+                window_.runInJavascriptThread([i, this]() {
+                    processes_.notifyChildExit(hub_, i);
+                });
+                i = 0;
+            }
+        }
+
+        startChildSignalTimer();
+    });
+#endif
+}
+
 int main(int const argc, char const* const* argv)
 {
+#ifdef __linux__
+    struct sigaction sa
+    {
+        .sa_sigaction =
+            +[](int, siginfo_t* info, void*) {
+                const pid_t pid = info->si_pid;
+                if (pid > 0)
+                {
+                    for (auto& i : sigchld)
+                    {
+                        if (i == 0)
+                        {
+                            i = pid;
+                            break;
+                        }
+                    }
+                }
+            },
+        .sa_mask = {}, .sa_flags = SA_SIGINFO, .sa_restorer = nullptr,
+    };
+
+    sigaction(SIGCHLD, &sa, nullptr);
+#endif
+
     Main m{argc, argv};
     m.registerRpc();
+    m.startChildSignalTimer();
     m.show();
 }

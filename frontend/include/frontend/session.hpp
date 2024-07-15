@@ -29,6 +29,8 @@ class Session
     void visible(bool value);
     bool visible() const;
 
+    std::optional<std::string> getProcessIdIfExecutingEngine() const;
+
   private:
     void createTerminalElement();
     void onOpen(bool success, std::string const& info);

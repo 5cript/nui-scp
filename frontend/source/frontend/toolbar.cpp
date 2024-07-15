@@ -43,7 +43,7 @@ void Toolbar::Implementation::updateEnginesList()
             engines.push_back(name);
 
         {
-            Log::debug("Updating terminal engines list.");
+            Log::info("Updating terminal engines list.");
             auto proxy = terminalEngines.modify();
             terminalEngines = std::move(engines);
             events->onNewSession.value() = terminalEngines.value().front();

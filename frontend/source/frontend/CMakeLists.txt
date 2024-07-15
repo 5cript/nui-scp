@@ -38,6 +38,7 @@ nui_prepare_emscripten_target(
         --no-optimize
     PREJS
         ${PREJS_FILE}
+    LEAN_INDEX_HTML
     NPM_INSTALL_ARGS
         ${NUISCP_NPM_INSTALL_ARGS}
     EMSCRIPTEN_LINK_OPTIONS

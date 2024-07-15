@@ -200,6 +200,11 @@ void ExecutingTerminalEngine::updatePtyProcs()
     }
 }
 
+std::string ExecutingTerminalEngine::id() const
+{
+    return impl_->processId;
+}
+
 void ExecutingTerminalEngine::write(std::string const& data)
 {
     if (!data.empty() && (data.back() == '\r' || data.back() == '\n'))

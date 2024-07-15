@@ -5,11 +5,15 @@
 #include <backend/ssh/ssh_session_manager.hpp>
 #include <persistence/state_holder.hpp>
 
+#include <boost/asio/steady_timer.hpp>
 #include <nui/core.hpp>
 #include <nui/rpc.hpp>
 #include <nui/window.hpp>
 #include <roar/mime_type.hpp>
 #include <efsw/efsw.hpp>
+
+#include <filesystem>
+#include <atomic>
 
 class Main
 {
@@ -24,6 +28,7 @@ class Main
 
     void registerRpc();
     void show();
+    void startChildSignalTimer();
 
   private:
     std::filesystem::path programDir_;
@@ -32,4 +37,8 @@ class Main
     Nui::RpcHub hub_;
     ProcessStore processes_;
     SshSessionManager sshSessionManager_;
+    std::atomic_bool shuttingDown_;
+#ifdef __linux__
+    boost::asio::steady_timer childSignalTimer_;
+#endif
 };

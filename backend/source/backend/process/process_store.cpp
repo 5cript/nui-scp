@@ -119,6 +119,21 @@ void ProcessStore::pruneDeadProcesses()
     }
 }
 
+void ProcessStore::notifyChildExit(Nui::RpcHub& hub, long long pid)
+{
+    for (auto& [uuid, process] : processes_)
+    {
+        if (process->pid() == pid)
+        {
+            process->exit();
+            const auto idCopy = uuid;
+            processes_.erase(uuid);
+            hub.callRemote("SessionArea::processDied", nlohmann::json{{"uuid", idCopy}, {"pid", pid}});
+            return;
+        }
+    }
+}
+
 void ProcessStore::registerRpc(Nui::Window& wnd, Nui::RpcHub& hub)
 {
     hub.registerFunction(
@@ -265,7 +280,7 @@ void ProcessStore::registerRpc(Nui::Window& wnd, Nui::RpcHub& hub)
                     return;
                 }
 
-                process->second->exit(3s);
+                process->second->exit();
                 processes_.erase(process);
                 hub->callRemote(responseId, nlohmann::json{{"success", true}});
             }

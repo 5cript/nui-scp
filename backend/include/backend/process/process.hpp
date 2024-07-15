@@ -41,8 +41,8 @@ class Process : public std::enable_shared_from_this<Process>
      * @return true
      * @return false
      */
-    bool exit(std::chrono::seconds exitWaitTimeout = std::chrono::seconds{10});
-    std::optional<int> exitSync(std::chrono::seconds exitWaitTimeout = std::chrono::seconds{10});
+    bool exit(std::optional<std::chrono::seconds> exitWaitTimeout = std::nullopt);
+    std::optional<int> exitSync(std::optional<std::chrono::seconds> exitWaitTimeout = std::nullopt);
 
     void terminate();
 
@@ -51,6 +51,7 @@ class Process : public std::enable_shared_from_this<Process>
 #endif
 
     std::optional<int> exitCode() const;
+    boost::process::v2::pid_type pid() const;
 
     bool running() const;
 

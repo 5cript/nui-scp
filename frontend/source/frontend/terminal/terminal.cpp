@@ -263,6 +263,11 @@ Terminal::Terminal(std::unique_ptr<TerminalEngine> engine)
     });
 }
 
+TerminalEngine& Terminal::engine()
+{
+    return *impl_->engine;
+}
+
 bool Terminal::isOpen() const
 {
     return !impl_->termId.empty();

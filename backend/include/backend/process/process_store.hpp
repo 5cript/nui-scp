@@ -39,6 +39,8 @@ class ProcessStore
         return iter->second;
     }
 
+    void notifyChildExit(Nui::RpcHub& hub, long long pid);
+
     void pruneDeadProcesses();
 
   private:

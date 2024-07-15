@@ -19,6 +19,7 @@ class Terminal
         std::function<void(bool, std::string const&)> onOpen);
     void dispose();
     void write(std::string const& data, bool isUserInput);
+    TerminalEngine& engine();
 
   private:
     struct Implementation;

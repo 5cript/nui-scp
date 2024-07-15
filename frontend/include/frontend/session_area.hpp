@@ -1,5 +1,6 @@
 #pragma once
 
+#include <frontend/session.hpp>
 #include <frontend/events/frontend_events.hpp>
 #include <persistence/state_holder.hpp>
 
@@ -15,6 +16,8 @@ class SessionArea
     Nui::ElementRenderer operator()();
 
     void addSession(std::string const& name);
+    void registerRpc();
+    void removeSession(std::function<bool(Session const&)> const& predicate);
 
   private:
     struct Implementation;

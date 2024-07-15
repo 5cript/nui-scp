@@ -30,6 +30,7 @@ class ExecutingTerminalEngine : public TerminalEngine
     void dispose() override;
     void write(std::string const& data) override;
     void resize(int cols, int rows) override;
+    std::string id() const;
 
     void setStdoutHandler(std::function<void(std::string const&)> handler) override;
     void setStderrHandler(std::function<void(std::string const&)> handler) override;
