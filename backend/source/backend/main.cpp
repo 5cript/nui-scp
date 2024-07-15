@@ -34,7 +34,9 @@ using namespace std::string_literals;
 using namespace std::chrono_literals;
 using namespace Nui;
 
+#ifdef __linux__
 volatile sig_atomic_t sigchld[10] = {0};
+#endif
 
 namespace
 {

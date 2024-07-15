@@ -40,7 +40,5 @@ class Main
     PasswordPrompter prompter_;
     SshSessionManager sshSessionManager_;
     std::atomic_bool shuttingDown_;
-#ifdef __linux__
     boost::asio::steady_timer childSignalTimer_;
-#endif
 };

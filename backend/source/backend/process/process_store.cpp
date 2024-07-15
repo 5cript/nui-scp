@@ -43,7 +43,7 @@ std::string ProcessStore::emplace(
     std::vector<std::string> const& arguments,
     Environment const& environment,
 #ifdef _WIN32
-    Persistence::Termios const&
+    Persistence::Termios const&,
 #else
     Persistence::Termios const& termios,
 #endif
@@ -61,6 +61,7 @@ std::string ProcessStore::emplace(
         auto pty = createPseudoConsole();
         processes_[processId]->attachState(0, std::move(pty));
 
+        bp2::windows::default_launcher launcher;
         auto& pty2 = processes_[processId]->getState<ConPTY::PseudoConsole>(ProcessAttachedState::PseudoConsole);
         pty2.prepareProcessLauncher(launcher);
         processes_[processId]->spawn(
@@ -68,9 +69,10 @@ std::string ProcessStore::emplace(
             arguments,
             environment,
             defaultExitWaitTimeout,
-            [](auto executor, auto const& executable, auto const& arguments, auto const& env) {
-                bp2::windows::default_launcher launcher;
-                return std::make_unique<bp2::process>(launcher(executor, executable, arguments, env));
+            [launcher = std::move(launcher)](
+                auto executor, auto const& executable, auto const& arguments, auto const& env) mutable {
+                return std::make_unique<bp2::process>(
+                    launcher(executor, executable, arguments, bp2::process_environment{env}));
             });
         pty2.closeOtherPipeEnd();
 #else
@@ -345,6 +347,9 @@ void ProcessStore::registerRpc(Nui::Window& wnd, Nui::RpcHub& hub)
 
                 if (process->second->getState<ProcessInfo>(ProcessAttachedState::ProcessInfo).isPty)
                 {
+#ifdef _WIN32
+                    hub->callRemote(responseId, nlohmann::json{{"error", "Not implemented"}});
+#else
                     auto& pty = process->second->getState<PtyType>(ProcessAttachedState::PseudoConsole);
                     const auto procs = pty.listProcessesUnderPty();
                     if (procs.empty())
@@ -366,6 +371,7 @@ void ProcessStore::registerRpc(Nui::Window& wnd, Nui::RpcHub& hub)
                         });
                     }
                     hub->callRemote(responseId, j);
+#endif
                 }
             }
             catch (std::exception const& e)

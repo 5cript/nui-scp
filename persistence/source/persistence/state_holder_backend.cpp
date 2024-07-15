@@ -127,7 +127,7 @@ namespace Persistence
 #ifdef _WIN32
             stateCache_.terminalEngines["msys2_default"] = TerminalEngine{
                 .type = "shell",
-                .options = Reference{.ref = "default"},
+                .terminalOptions = Reference{.ref = "default"},
                 .termios = Reference{.ref = "default"},
                 .engine = defaultMsys2TerminalEngine(),
             };

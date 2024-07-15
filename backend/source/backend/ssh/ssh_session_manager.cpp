@@ -138,8 +138,8 @@ void SshSessionManager::Session::doProcessing()
     constexpr static int bufferSize = 1024;
     char buffer[bufferSize];
 
-    auto readOne = [this, &buffer](bool stdout) {
-        auto rdy = ssh_channel_poll_timeout(ptyChannel_->getCChannel(), 100, stdout ? 0 : 1);
+    auto readOne = [this, &buffer](bool stdout_) {
+        auto rdy = ssh_channel_poll_timeout(ptyChannel_->getCChannel(), 100, stdout_ ? 0 : 1);
         if (rdy < 0)
             return -1;
 
@@ -149,12 +149,12 @@ void SshSessionManager::Session::doProcessing()
         while (rdy > 0)
         {
             const auto toRead = std::min(bufferSize, rdy);
-            const auto bytesRead = ssh_channel_read(ptyChannel_->getCChannel(), buffer, toRead, stdout ? 0 : 1);
+            const auto bytesRead = ssh_channel_read(ptyChannel_->getCChannel(), buffer, toRead, stdout_ ? 0 : 1);
             if (bytesRead <= 0)
                 return -1;
 
             std::string data{buffer, static_cast<std::size_t>(bytesRead)};
-            if (stdout)
+            if (stdout_)
                 onStdout_(data);
             else
                 onStderr_(data);
@@ -512,13 +512,13 @@ void SshSessionManager::addSession(
             [&] {
                 if (sshOptions.sshDirectory.has_value())
                     static_cast<ssh::Session&>(*session).setOption(
-                        SSH_OPTIONS_SSH_DIR, sshOptions.sshDirectory.value().c_str());
+                        SSH_OPTIONS_SSH_DIR, sshOptions.sshDirectory.value().generic_string().c_str());
                 return 0;
             },
             [&] {
                 if (sshOptions.knownHostsFile.has_value())
                     static_cast<ssh::Session&>(*session).setOption(
-                        SSH_OPTIONS_KNOWNHOSTS, sshOptions.knownHostsFile.value().c_str());
+                        SSH_OPTIONS_KNOWNHOSTS, sshOptions.knownHostsFile.value().generic_string().c_str());
                 return 0;
             },
             [&] {
