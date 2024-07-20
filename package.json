@@ -21,6 +21,12 @@
     "distDir": "../bin"
   },
   "dependencies": {
+    "@lumino/commands": "^2.3.1",
+    "@lumino/datagrid": "^2.4.0",
+    "@lumino/default-theme": "^2.1.6",
+    "@lumino/dragdrop": "^2.1.5",
+    "@lumino/messaging": "^2.0.2",
+    "@lumino/widgets": "^2.4.0",
     "@ui5/webcomponents": "^1.24.6",
     "@ui5/webcomponents-fiori": "^1.24.6",
     "@ui5/webcomponents-icons": "^1.24.6",

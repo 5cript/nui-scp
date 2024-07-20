@@ -32,7 +32,7 @@ struct SessionArea::Implementation
 SessionArea::SessionArea(Persistence::StateHolder* stateHolder, FrontendEvents* events)
     : impl_{std::make_unique<Implementation>(stateHolder, events)}
 {
-    listen(appEventContext, events->onNewSession, [this](std::string const& name) -> void {
+    listen(events->onNewSession, [this](std::string const& name) -> void {
         addSession(name);
     });
 
@@ -132,12 +132,6 @@ void SessionArea::addSession(std::string const& name)
             impl_->stateHolder,
             engine,
             name,
-            [this](Session const*, std::string const&) {
-                {
-                    impl_->sessions.modify();
-                }
-                Nui::globalEventContext.executeActiveEventsImmediately();
-            },
             [this](Session const& session) {
                 removeSession([&session](Session const& s) {
                     return &s == &session;

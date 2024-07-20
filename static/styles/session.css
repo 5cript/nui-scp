@@ -6,6 +6,11 @@
     height: 100%;
 }
 
+.terminal-session>div {
+    height: 100%;
+    width: 100%;
+}
+
 .terminal-session-visible {
     /* display: block; */
     z-index: 1;
