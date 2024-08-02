@@ -10,6 +10,10 @@ import {
 class ContentPanelManager {
     panels: Map<string, ContentPanel>;
 
+    constructor() {
+        this.panels = new Map<string, ContentPanel>();
+    }
+
     addPanel(host: HTMLElement, id: string, terminalFactory: () => HTMLElement) {
         console.log("1");
         let term = new Terminal('Terminal', terminalFactory);
