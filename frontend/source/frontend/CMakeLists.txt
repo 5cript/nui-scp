@@ -45,6 +45,7 @@ nui_prepare_emscripten_target(
     EMSCRIPTEN_LINK_OPTIONS
         -sEXPORTED_FUNCTIONS=_frontendMain
         -sALLOW_MEMORY_GROWTH=1
+        -fexceptions
         # -O2
         -g
         # or other options, see emscripten docs.
