@@ -13,7 +13,7 @@ option(BUILD_STATIC_LIBS "Build static libraries" ON)
 include (${CMAKE_CURRENT_LIST_DIR}/_cmake/common_options.cmake)
 
 # Nui Dependency
-add_subdirectory("${CMAKE_SOURCE_DIR}/dependencies/nui")
+add_subdirectory("${CMAKE_SOURCE_DIR}/dependencies/Nui")
 
 # Add executable (sources are added later, depending on frontend/backend)
 add_executable(${PROJECT_NAME})
@@ -23,7 +23,7 @@ target_link_libraries(${PROJECT_NAME} PUBLIC core-target)
 add_library(roar-include-only INTERFACE)
 target_include_directories(roar-include-only INTERFACE "${CMAKE_CURRENT_LIST_DIR}/dependencies/roar/include")
 
-include("${CMAKE_CURRENT_LIST_DIR}/dependencies/nui/cmake/dependencies/nlohmann_json.cmake")
+include("${CMAKE_CURRENT_LIST_DIR}/dependencies/Nui/cmake/dependencies/nlohmann_json.cmake")
 add_subdirectory("${CMAKE_SOURCE_DIR}/constants/source/constants")
 add_subdirectory("${CMAKE_SOURCE_DIR}/utility/source/utility")
 add_subdirectory("${CMAKE_SOURCE_DIR}/log/source/log")

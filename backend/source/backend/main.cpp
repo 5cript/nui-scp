@@ -2,10 +2,6 @@
 
 #include <backend/process/process_store.hpp>
 
-#ifndef __WIN32
-#    include <boost/process/v2/src.hpp>
-#endif
-
 #include <nui/core.hpp>
 #include <nui/rpc.hpp>
 #include <nui/window.hpp>
@@ -235,6 +231,8 @@ void Main::startChildSignalTimer()
 int main(int const argc, char const* const* argv)
 {
 #ifdef __linux__
+#    pragma clang diagnostic push
+#    pragma clang diagnostic ignored "-Wc99-designator"
     struct sigaction sa
     {
         .sa_sigaction =
@@ -256,6 +254,7 @@ int main(int const argc, char const* const* argv)
     };
 
     sigaction(SIGCHLD, &sa, nullptr);
+#    pragma clang diagnostic pop
 #endif
 
     ssh_init();
