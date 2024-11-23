@@ -23,11 +23,21 @@ static std::unique_ptr<Nui::Dom::Dom> dom{};
 
 bool tryLoad(std::shared_ptr<Nui::TimerHandle> const& setupWait)
 {
+    static int counter = 0;
+    ++counter;
     const bool terminalUtilityAvailable = !Nui::val::global("terminalUtility").isUndefined();
-    if (terminalUtilityAvailable)
+    if (terminalUtilityAvailable || counter > 20)
     {
         if (setupWait->hasActiveTimer())
             setupWait->stop();
+
+        if (counter > 20)
+        {
+            Log::error("Failed to load terminalUtility");
+            Nui::Console::log(Nui::val::global("terminalUtility"));
+        }
+        else
+            Log::info("terminalUtility available.");
 
         persistence = std::make_unique<Persistence::StateHolder>();
         frontendEvents = std::make_unique<FrontendEvents>();

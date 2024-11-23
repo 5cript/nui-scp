@@ -9,15 +9,21 @@ import {
 
 class ContentPanelManager {
     panels: Map<string, ContentPanel>;
+    fileExplorerFactory: () => HTMLElement | undefined;
+    fileExplorerDelete: () => any | undefined;
 
     constructor() {
         this.panels = new Map<string, ContentPanel>();
+        this.fileExplorerDelete = () => { return undefined; };
+        this.fileExplorerFactory = () => { return undefined; };
     }
 
-    addPanel(host: HTMLElement, id: string, terminalFactory: () => HTMLElement) {
-        console.log("1");
+    addPanel(host: HTMLElement, id: string, terminalFactory: () => HTMLElement, fileExplorerFactory: () => HTMLElement, fileExplorerDelete: () => any) {
+        this.fileExplorerFactory = fileExplorerFactory;
+        this.fileExplorerDelete = fileExplorerDelete;
+
         let term = new Terminal('Terminal', terminalFactory);
-        let explorer = new FileExplorer('FileExplorer');
+        let explorer = new FileExplorer('FileExplorer', fileExplorerFactory, fileExplorerDelete);
 
         console.log("a");
         let dock = new DockPanel();

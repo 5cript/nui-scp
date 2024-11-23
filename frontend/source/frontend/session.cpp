@@ -5,6 +5,8 @@
 #include <frontend/terminal/user_control_engine.hpp>
 #include <frontend/terminal/ssh_engine.hpp>
 #include <frontend/classes.hpp>
+#include <nui-file-explorer/file_grid.hpp>
+#include <nui-file-explorer/inline_css.hpp>
 #include <persistence/state_holder.hpp>
 #include <log/log.hpp>
 
@@ -33,6 +35,8 @@ struct Session::Implementation
     std::function<void(Session const& self)> closeSelf;
     Nui::Observed<bool> isVisible;
     std::shared_ptr<Nui::Dom::Element> terminalElement;
+    NuiFileExplorer::FileGrid fileGrid;
+    std::shared_ptr<Nui::Dom::Element> fileExplorer;
 
     Implementation(
         Persistence::StateHolder* stateHolder,
@@ -50,7 +54,40 @@ struct Session::Implementation
         , closeSelf{std::move(closeSelf)}
         , isVisible{visible}
         , terminalElement{}
-    {}
+        , fileGrid{}
+        , fileExplorer{}
+    {
+        fileGrid.items({
+            NuiFileExplorer::FileGrid::Item{
+                .path = "hello",
+                .icon = "nui://app.example/icons/folder_main.png",
+            },
+            NuiFileExplorer::FileGrid::Item{
+                .path = "world",
+                .icon = "nui://app.example/icons/folder_main.png",
+            },
+            NuiFileExplorer::FileGrid::Item{
+                .path = "world2",
+                .icon = "nui://app.example/icons/folder_main.png",
+            },
+            NuiFileExplorer::FileGrid::Item{
+                .path = "world3",
+                .icon = "nui://app.example/icons/folder_main.png",
+            },
+            NuiFileExplorer::FileGrid::Item{
+                .path = "world4",
+                .icon = "nui://app.example/icons/folder_main.png",
+            },
+            NuiFileExplorer::FileGrid::Item{
+                .path = "world5",
+                .icon = "nui://app.example/icons/folder_main.png",
+            },
+            NuiFileExplorer::FileGrid::Item{
+                .path = "world6",
+                .icon = "nui://app.example/icons/folder_main.png",
+            },
+        });
+    }
 };
 
 auto Session::makeTerminalElement() -> Nui::ElementRenderer
@@ -59,9 +96,9 @@ auto Session::makeTerminalElement() -> Nui::ElementRenderer
 
     // clang-format off
     return div{}(
-        // observe(impl_->terminal),
-        // [this]() -> Nui::ElementRenderer {
-            div{
+        observe(impl_->terminal),
+        [this]() -> Nui::ElementRenderer {
+            return div{
                 style = "height: 100%; width: 100%",
                 reference.onMaterialize([this](Nui::val element) {
                     Log::info("Terminal materialized");
@@ -73,8 +110,22 @@ auto Session::makeTerminalElement() -> Nui::ElementRenderer
                             std::bind(&Session::onOpen, this, std::placeholders::_1, std::placeholders::_2));
                     }
                 })
-            }()
-        //}
+            }();
+        }
+    );
+    // clang-format on
+}
+
+auto Session::makeFileExplorerElement() -> Nui::ElementRenderer
+{
+    using Nui::Elements::div; // because of the global div.
+    using namespace Nui::Attributes;
+
+    // clang-format off
+    return div{
+        style = "width: 100%; height: auto; display: block",
+    }(
+        impl_->fileGrid()
     );
     // clang-format on
 }
@@ -221,15 +272,33 @@ Nui::ElementRenderer Session::operator()(bool visible)
             }),
         },
         !reference.onMaterialize([this](Nui::val element){
-            Nui::val::global("contentPanelManager").call<void>("X", element, impl_->id, Nui::bind([this](){
+            Nui::val::global("contentPanelManager").call<void>("addPanel", element, impl_->id, Nui::bind([this]() -> Nui::val {
                 Nui::Console::log("terminal factory content panel manager");
-                // if (impl_->terminalElement)
-                // {
-                //     Log::critical("Terminal element already exists - make sure that the session is not recreated");
-                // }
-                // impl_->terminalElement = Nui::Dom::makeStandaloneElement(makeTerminalElement());
-                // return impl_->terminalElement->val();
-                return Nui::val::global("document").call<Nui::val>("createElement", std::string{"div"});
+                if (impl_->terminalElement)
+                {
+                    Log::critical("Terminal element already exists - make sure that the session is not recreated");
+                    return Nui::val::undefined();
+                }
+                impl_->terminalElement = Nui::Dom::makeStandaloneElement(makeTerminalElement());
+                return impl_->terminalElement->val();
+            }), Nui::bind([this]() -> Nui::val {
+                // OpenFileExplorer
+                if (impl_->fileExplorer)
+                {
+                    Log::warn("There is already a file explorer, cannot open another one");
+                    return Nui::val::undefined();
+                }
+                impl_->fileExplorer = Nui::Dom::makeStandaloneElement(makeFileExplorerElement());
+                return impl_->fileExplorer->val();
+            }), Nui::bind([this]() -> Nui::val {
+                // Remove FileExplorer
+                if (!impl_->fileExplorer)
+                {
+                    Log::warn("There is no file explorer to remove");
+                    return Nui::val::undefined();
+                }
+                impl_->fileExplorer.reset();
+                return Nui::val::undefined();
             }));
         })
     }();

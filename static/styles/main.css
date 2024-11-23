@@ -41,4 +41,10 @@ body {
     color: var(--sapTextColor);
     --resizeHandleColor: #707070;
     --brighterBackground: #404040;
+
+    --nui-file-grid-item-highlight: rgba(255, 255, 255, 0.3);
+    --nui-file-grid-border-color: var(--sapTextColor);
+    --nui-file-grid-filter-background: var(--sapBackgroundColor);
+    --nui-file-grid-filter-color: var(--sapTextColor);
+    --nui-file-grid-filter-border-radius: 0.25rem;
 }

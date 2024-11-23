@@ -23,6 +23,7 @@ target_link_libraries(
     ${PROJECT_NAME}
     PRIVATE
         nui-frontend
+        nui-file-explorer
         ui5
         roar-include-only
         utility

@@ -30,6 +30,7 @@ class Session
 
     std::optional<std::string> getProcessIdIfExecutingEngine() const;
     auto makeTerminalElement() -> Nui::ElementRenderer;
+    auto makeFileExplorerElement() -> Nui::ElementRenderer;
 
   private:
     void onOpen(bool success, std::string const& info);

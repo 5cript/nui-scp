@@ -4,14 +4,12 @@ import {
 
 class FileExplorer extends Widget {
     static menuFocus: FileExplorer | null;
+    deleter: () => any | undefined;
 
-    static createNode(): HTMLElement {
-        let node = document.createElement('div');
-        return node;
-    }
+    constructor(name: string, factory: () => HTMLElement, deleter: () => any) {
+        super({ node: factory() });
+        this.deleter = deleter;
 
-    constructor(name: string) {
-        super({ node: FileExplorer.createNode() });
         this.setFlag(Widget.Flag.DisallowLayout);
         this.title.label = name;
         this.title.closable = true;
@@ -25,6 +23,7 @@ class FileExplorer extends Widget {
     }
 
     protected onBeforeDetach(msg: Message): void {
+        this.deleter();
         if (FileExplorer.menuFocus === this) {
             FileExplorer.menuFocus = null;
         }

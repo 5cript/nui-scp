@@ -74,22 +74,32 @@ void SessionArea::removeSession(std::function<bool(Session const&)> const& predi
         {
             if ((*iter.getWrapped())->visible() && impl_->sessions.size() > 1)
                 setSelected(std::max(0, i - 1));
+            Log::info("Removing session: {}", (*iter.getWrapped())->name());
             impl_->sessions.erase(iter);
             break;
         }
     }
+    Nui::globalEventContext.executeActiveEventsImmediately();
 }
 
 void SessionArea::setSelected(int index)
 {
-    if (impl_->selected >= 0 && impl_->selected < static_cast<int>(impl_->sessions.size()))
-        impl_->sessions.value()[impl_->selected]->visible(false);
-    if (index >= 0 && index < static_cast<int>(impl_->sessions.size()))
-    {
-        impl_->sessions.value()[index]->visible(true);
-        impl_->selected = index;
-    }
-    Nui::globalEventContext.executeActiveEventsImmediately();
+    const auto wasAnythingSelected = [this, index]() {
+        if (impl_->selected >= 0 && impl_->selected < static_cast<int>(impl_->sessions.size()))
+        {
+            impl_->sessions.value()[impl_->selected]->visible(false);
+        }
+        if (index >= 0 && index < static_cast<int>(impl_->sessions.size()))
+        {
+            impl_->sessions.value()[index]->visible(true);
+            impl_->selected = index;
+            return true;
+        }
+        return false;
+    }();
+
+    if (wasAnythingSelected)
+        Nui::globalEventContext.executeActiveEventsImmediately();
 }
 
 void SessionArea::addSession(std::string const& name)
