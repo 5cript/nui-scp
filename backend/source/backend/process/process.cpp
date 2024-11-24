@@ -1,6 +1,6 @@
 #include <backend/process/process.hpp>
 
-#include <boost/process/v2.hpp>
+#include <backend/process/boost_process.hpp>
 #include <boost/asio.hpp>
 
 #include <mutex>
@@ -59,9 +59,9 @@ struct Process::Implementation
 
     void read(
         std::shared_ptr<Process> proc,
-        boost::asio::readable_pipe Process::Implementation::*pipe,
-        std::function<bool(std::string_view)> Process::Implementation::*onRead,
-        std::vector<char> Process::Implementation::*buffer)
+        boost::asio::readable_pipe Process::Implementation::* pipe,
+        std::function<bool(std::string_view)> Process::Implementation::* onRead,
+        std::vector<char> Process::Implementation::* buffer)
     {
         auto& pipeRef = proc->impl_.get()->*pipe;
         pipeRef.async_read_some(

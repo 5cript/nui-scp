@@ -23,3 +23,4 @@ cd "$SCRIPT_DIR/dependencies" || exit 1
 checkout_or_update "OS-Folder-Icons" "https://github.com/shariati/OS-Folder-Icons.git"
 checkout_or_update "Nui" "https://github.com/NuiCpp/Nui.git"
 checkout_or_update "roar" "https://github.com/5cript/roar.git"
+checkout_or_update "process" "https://github.com/5cript/process.git"

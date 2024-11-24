@@ -42,6 +42,7 @@ else()
     include("${CMAKE_CURRENT_LIST_DIR}/_cmake/resource_copy.cmake")
 	add_subdirectory("${CMAKE_SOURCE_DIR}/backend/source/backend")
     add_subdirectory("${CMAKE_SOURCE_DIR}/dependencies/roar")
+    add_subdirectory("${CMAKE_SOURCE_DIR}/dependencies/process")
 
     # If msys2, copy dynamic libraries to executable directory, visual studio does this automatically.
     # And there is no need on linux.

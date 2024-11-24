@@ -1,8 +1,4 @@
-#ifdef _WIN32
-#    include <winsock2.h>
-#endif
-
-#include <boost/process/v2.hpp>
+#include <backend/process/boost_process.hpp>
 
 #include <backend/process/environment.hpp>
 
