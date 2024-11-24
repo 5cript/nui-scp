@@ -92,6 +92,8 @@ nui_prepare_emscripten_target(
         "${CMAKE_SOURCE_DIR}/static/styles/lumino/widgets/widget.css"
         "${CMAKE_SOURCE_DIR}/static/styles/lumino/widgets"
         "${CMAKE_SOURCE_DIR}/static/styles/lumino"
+        # File Explorer Inline CSS
+        "${CMAKE_SOURCE_DIR}/nui-file-explorer/include/nui-file-explorer/inline_css.hpp"
 )
 
 add_dependencies(theme_compilation ${PROJECT_NAME}-npm-install)
