@@ -24,7 +24,7 @@ else()
     )
 endif()
 
-find_package(Boost CONFIG 1.81.0 REQUIRED COMPONENTS system filesystem process)
+find_package(Boost CONFIG 1.86.0 REQUIRED COMPONENTS system filesystem asio)
 
 target_include_directories(${PROJECT_NAME} PRIVATE "${CMAKE_SOURCE_DIR}/backend/include")
 
@@ -39,6 +39,8 @@ target_link_libraries(
         nui-backend
         efsw-static
         Boost::filesystem
+        Boost::asio
+        Boost::system
         Boost::process
         utility
         log
