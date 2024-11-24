@@ -122,6 +122,8 @@ namespace
                         };
                     }
 
+                    Log::debug("Serving file: '{}'", file.string());
+
                     // Read file
                     auto content = readFile(file);
 
@@ -233,8 +235,7 @@ int main(int const argc, char const* const* argv)
 #ifdef __linux__
 #    pragma clang diagnostic push
 #    pragma clang diagnostic ignored "-Wc99-designator"
-    struct sigaction sa
-    {
+    struct sigaction sa{
         .sa_sigaction =
             +[](int, siginfo_t* info, void*) {
                 const pid_t pid = info->si_pid;
@@ -250,7 +251,9 @@ int main(int const argc, char const* const* argv)
                     }
                 }
             },
-        .sa_mask = {}, .sa_flags = SA_SIGINFO, .sa_restorer = nullptr,
+        .sa_mask = {},
+        .sa_flags = SA_SIGINFO,
+        .sa_restorer = nullptr,
     };
 
     sigaction(SIGCHLD, &sa, nullptr);

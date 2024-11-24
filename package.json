@@ -23,7 +23,7 @@
         "@lumino/messaging": "^2.0.2",
         "@lumino/widgets": "^2.4.0",
         "@ui5/webcomponents": "^1.24.6",
-        "@ui5/webcomponents-fiori": "^1.24.6",
+        "@ui5/webcomponents-fiori": "^1.24.13",
         "@ui5/webcomponents-icons": "^1.24.6",
         "@xterm/addon-canvas": "^0.7.0",
         "@xterm/addon-fit": "^0.10.0",

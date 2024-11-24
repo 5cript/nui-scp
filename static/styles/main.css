@@ -1,6 +1,5 @@
-@import './lumino/index.css';
+@import "./lumino/index.css";
 
-@import "./tailwind.css";
 @import "./main_page.css";
 @import "./session_area.css";
 @import "./session.css";
@@ -10,41 +9,41 @@
 *,
 *::before,
 *::after {
-    box-sizing: border-box;
+  box-sizing: border-box;
 }
 
 .prompter-form {
-    display: flex;
-    flex-direction: column;
-    justify-content: space-evenly;
-    align-items: flex-start;
-    margin: 3rem 6rem;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-evenly;
+  align-items: flex-start;
+  margin: 3rem 6rem;
 }
 
-.login-form>div {
-    display: grid;
-    width: 15rem;
-    margin-bottom: .5rem;
+.login-form > div {
+  display: grid;
+  width: 15rem;
+  margin-bottom: 0.5rem;
 }
 
-@media(max-width: 600px) {
-    .login-form {
-        margin: 3rem 1rem;
-    }
+@media (max-width: 600px) {
+  .login-form {
+    margin: 3rem 1rem;
+  }
 }
 
 body {
-    height: 100dvh;
-    width: 100%;
-    margin: 0;
-    background-color: var(--sapBackgroundColor);
-    color: var(--sapTextColor);
-    --resizeHandleColor: #707070;
-    --brighterBackground: #404040;
+  height: 100dvh;
+  width: 100%;
+  margin: 0;
+  background-color: var(--sapBackgroundColor);
+  color: var(--sapTextColor);
+  --resizeHandleColor: #707070;
+  --brighterBackground: #404040;
 
-    --nui-file-grid-item-highlight: rgba(255, 255, 255, 0.3);
-    --nui-file-grid-border-color: var(--sapTextColor);
-    --nui-file-grid-filter-background: var(--sapBackgroundColor);
-    --nui-file-grid-filter-color: var(--sapTextColor);
-    --nui-file-grid-filter-border-radius: 0.25rem;
+  --nui-file-grid-item-highlight: rgba(255, 255, 255, 0.3);
+  --nui-file-grid-border-color: var(--sapTextColor);
+  --nui-file-grid-filter-background: var(--sapBackgroundColor);
+  --nui-file-grid-filter-color: var(--sapTextColor);
+  --nui-file-grid-filter-border-radius: 0.25rem;
 }

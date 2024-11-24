@@ -13,10 +13,9 @@ import { ContentPanelManager } from "./content_panel_manager.ts";
     globalThis.generateId = () => {
         return crypto.randomUUID();
     }
-
     globalThis.contentPanelManager = new ContentPanelManager();
 
-    setTheme("dark");
     // app.example is intentional, because of windows dns timeouts
     setThemeRoot("nui://app.example/");
+    setTheme("dark");
 })();
