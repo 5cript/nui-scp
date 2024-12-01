@@ -1,4 +1,5 @@
 #include <nui-file-explorer/file_grid.hpp>
+#include <nui-file-explorer/dropdown_menu.hpp>
 
 #include <nui/event_system/observed_value.hpp>
 
@@ -50,6 +51,67 @@ namespace NuiFileExplorer
         Nui::Observed<std::vector<ItemWithInternals>> items{};
         Nui::Observed<FileGridFlavor> flavor{FileGridFlavor::Icons};
         Nui::Observed<unsigned int> iconSize{static_cast<unsigned int>(IconSize::Medium)};
+        DropdownMenu newItemMenu{
+            {
+                "File",
+                "Folder",
+                // Soft Link ?
+                // Hard Link ?
+            },
+            [](std::string const& item) {
+                Nui::Console::log("New clicked: ", item);
+                // TODO:
+            },
+            [this]() {
+                sortMenu.close();
+                viewMenu.close();
+            },
+            "New",
+        };
+        DropdownMenu sortMenu{
+            {
+                "Name",
+                // More...
+            },
+            [this](std::string const& item) {
+                if (item == "Name")
+                {
+                    auto& items = this->items.value();
+                    std::sort(items.begin(), items.end(), [](auto const& lhs, auto const& rhs) {
+                        if (lhs.item.isDirectory != rhs.item.isDirectory)
+                            return lhs.item.isDirectory > rhs.item.isDirectory;
+                        return lhs.item.path.filename().string() < rhs.item.path.filename().string();
+                    });
+                    this->items.modifyNow();
+                }
+            },
+            [this]() {
+                newItemMenu.close();
+                viewMenu.close();
+            },
+            "Sort",
+        };
+        DropdownMenu viewMenu{
+            {
+                "Icons",
+                "Table",
+                "Tiles",
+            },
+            [this](std::string const& item) {
+                if (item == "Icons")
+                    flavor = FileGridFlavor::Icons;
+                if (item == "Table")
+                    flavor = FileGridFlavor::Table;
+                if (item == "Tiles")
+                    flavor = FileGridFlavor::Tiles;
+                Nui::globalEventContext.executeActiveEventsImmediately();
+            },
+            [this]() {
+                newItemMenu.close();
+                sortMenu.close();
+            },
+            "View",
+        };
     };
 
     FileGrid::FileGrid()
@@ -182,57 +244,9 @@ namespace NuiFileExplorer
         return div {
             class_ = "nui-file-grid-head"
         }(
-            div{
-                class_ = "nui-file-grid-head-dropdown",
-                onClick = [](){
-                    Nui::Console::log("New clicked");
-                }
-            }(
-                div{
-                    class_ = "nui-file-grid-head-dropdown-text"
-                }(
-                    "New"
-                ),
-                div{
-                    class_ = "nui-file-grid-head-dropdown-button"
-                }(
-                    div{
-                        class_ = "nui-file-grid-head-dropdown-button-arrow"
-                    }()
-                )
-            ),
-            div{
-                class_ = "nui-file-grid-head-dropdown"
-            }(
-                div{
-                    class_ = "nui-file-grid-head-dropdown-text"
-                }(
-                    "Sort"
-                ),
-                div{
-                    class_ = "nui-file-grid-head-dropdown-button"
-                }(
-                    div{
-                        class_ = "nui-file-grid-head-dropdown-button-arrow"
-                    }()
-                )
-            ),
-            div{
-                class_ = "nui-file-grid-head-dropdown"
-            }(
-                div{
-                    class_ = "nui-file-grid-head-dropdown-text"
-                }(
-                    "View"
-                ),
-                div{
-                    class_ = "nui-file-grid-head-dropdown-button"
-                }(
-                    div{
-                        class_ = "nui-file-grid-head-dropdown-button-arrow"
-                    }()
-                )
-            ),
+            impl_->newItemMenu(),
+            impl_->sortMenu(),
+            impl_->viewMenu(),
             filter()
         );
         // clang-format on
@@ -255,7 +269,6 @@ namespace NuiFileExplorer
                 style = "filter: invert(100%) sepia(3%) saturate(183%) hue-rotate(281deg) brightness(120%) contrast(100%)",
             }(),
             input{
-
                 type = "text",
                 placeHolder = "Filter"
             }()

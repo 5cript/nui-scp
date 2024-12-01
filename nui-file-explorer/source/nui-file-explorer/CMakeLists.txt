@@ -2,6 +2,7 @@ add_library(
     nui-file-explorer
     STATIC
         "${CMAKE_CURRENT_LIST_DIR}/file_grid.cpp"
+        "${CMAKE_CURRENT_LIST_DIR}/dropdown_menu.cpp"
 )
 
 target_link_libraries(

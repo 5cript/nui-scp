@@ -145,7 +145,7 @@ namespace ConPTY
         if (!si.lpAttributeList)
             return false;
 
-        Nui::ScopeExit cleanupLpAttributeList{[&si]() {
+        Nui::ScopeExit cleanupLpAttributeList{[&si]() noexcept {
             HeapFree(GetProcessHeap(), 0, si.lpAttributeList);
         }};
 

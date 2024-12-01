@@ -36,10 +36,10 @@ class ContentPanelManager {
         main.id = 'main_' + id;
         main.addWidget(dock);
 
-        // host.onresize = () => {
-        //     console.log("resize");
-        //     main.update();
-        // };
+        const resizeObserver = new ResizeObserver(() => {
+            main.update();
+        });
+        resizeObserver.observe(host);
 
         console.log("c");
         console.log(host.isConnected);

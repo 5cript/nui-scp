@@ -5,6 +5,8 @@
 @import "./session.css";
 @import "./sidebar.css";
 @import "./toolbar.css";
+@import "../../../../../nui-file-explorer/styles/file_grid.css";
+@import "../../../../../nui-file-explorer/styles/dropdown_menu.css";
 
 *,
 *::before,
@@ -52,4 +54,5 @@ body {
   --nui-file-grid-button-background: var(--sapButton_Background);
   --nui-file-grid-border-width: 1px;
   --nui-file-grid-dropdown-color: var(--sapButton_TextColor);
+  --nui-file-grid-dropdown-item-color: var(--sapTextColor);
 }

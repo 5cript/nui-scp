@@ -25,6 +25,7 @@
         "@ui5/webcomponents": "^1.24.6",
         "@ui5/webcomponents-fiori": "^1.24.13",
         "@ui5/webcomponents-icons": "^1.24.6",
+        "@viselect/vanilla": "^3.7.0",
         "@xterm/addon-canvas": "^0.7.0",
         "@xterm/addon-fit": "^0.10.0",
         "@xterm/addon-webgl": "^0.18.0",

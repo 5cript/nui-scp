@@ -6,7 +6,6 @@
 #include <frontend/terminal/ssh_engine.hpp>
 #include <frontend/classes.hpp>
 #include <nui-file-explorer/file_grid.hpp>
-#include <nui-file-explorer/inline_css.hpp>
 #include <persistence/state_holder.hpp>
 #include <log/log.hpp>
 
@@ -59,7 +58,11 @@ struct Session::Implementation
     {
         fileGrid.items({
             NuiFileExplorer::FileGrid::Item{
-                .path = "hello",
+                .path = "G",
+                .icon = "nui://app.example/icons/folder_main.png",
+            },
+            NuiFileExplorer::FileGrid::Item{
+                .path = "A",
                 .icon = "nui://app.example/icons/folder_main.png",
             },
             NuiFileExplorer::FileGrid::Item{
@@ -71,7 +74,7 @@ struct Session::Implementation
                 .icon = "nui://app.example/icons/folder_main.png",
             },
             NuiFileExplorer::FileGrid::Item{
-                .path = "world3",
+                .path = "world77",
                 .icon = "nui://app.example/icons/folder_main.png",
             },
             NuiFileExplorer::FileGrid::Item{
