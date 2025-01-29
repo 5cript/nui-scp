@@ -169,6 +169,14 @@ namespace NuiFileExplorer
             Nui::globalEventContext.executeActiveEventsImmediately();
     }
 
+    void FileGrid::selectAll(bool rerender)
+    {
+        for (auto& item : impl_->items.value())
+            *item.selected = true;
+        if (rerender)
+            Nui::globalEventContext.executeActiveEventsImmediately();
+    }
+
     Nui::ElementRenderer FileGrid::iconFlavor()
     {
         using namespace Nui;
@@ -275,7 +283,7 @@ namespace NuiFileExplorer
                             }
                             else
                             {
-                                *item.selected = true;
+                                selectAll();
                             }
                         }
                         else

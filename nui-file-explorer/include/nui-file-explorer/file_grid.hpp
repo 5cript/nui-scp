@@ -67,6 +67,8 @@ namespace NuiFileExplorer
 
         void deselectAll(bool rerender = false);
 
+        void selectAll(bool rerender = false);
+
         Nui::ElementRenderer operator()(std::vector<Nui::Attribute>&& attributes = {});
 
       private:
