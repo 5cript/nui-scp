@@ -65,6 +65,8 @@ namespace NuiFileExplorer
         void iconSize(unsigned int value);
         unsigned int iconSize() const;
 
+        void deselectAll(bool rerender = false);
+
         Nui::ElementRenderer operator()(std::vector<Nui::Attribute>&& attributes = {});
 
       private:

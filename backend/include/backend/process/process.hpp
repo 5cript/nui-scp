@@ -2,7 +2,17 @@
 
 #include <backend/process/environment.hpp>
 
+#ifdef __clang__
+#    pragma clang diagnostic push
+#    pragma clang diagnostic ignored "-Weverything"
+#endif
+
 #include <backend/process/boost_process.hpp>
+
+#ifdef __clang__
+#    pragma clang diagnostic pop
+#endif
+
 #include <boost/asio/any_io_executor.hpp>
 #include <roar/detail/pimpl_special_functions.hpp>
 #include <nui/utility/move_detector.hpp>

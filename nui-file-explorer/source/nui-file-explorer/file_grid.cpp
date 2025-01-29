@@ -1,3 +1,4 @@
+#include "nui/event_system/event_context.hpp"
 #include <nui-file-explorer/file_grid.hpp>
 #include <nui-file-explorer/dropdown_menu.hpp>
 
@@ -160,6 +161,14 @@ namespace NuiFileExplorer
         return Nui::Elements::div{}();
     }
 
+    void FileGrid::deselectAll(bool rerender)
+    {
+        for (auto& item : impl_->items.value())
+            *item.selected = false;
+        if (rerender)
+            Nui::globalEventContext.executeActiveEventsImmediately();
+    }
+
     Nui::ElementRenderer FileGrid::iconFlavor()
     {
         using namespace Nui;
@@ -176,6 +185,9 @@ namespace NuiFileExplorer
                         "px, 1fr))";
                 })
             },
+            onClick = [this](Nui::val) {
+                deselectAll();
+            }
         }(
             impl_->items.map([this](auto, auto const& item){
                 return div{
@@ -184,8 +196,93 @@ namespace NuiFileExplorer
                             return "nui-file-grid-item-icons selected";
                         return "nui-file-grid-item-icons";
                     }),
-                    onClick = [this, &item](){
+                    onClick = [this, &item](Nui::val event){
+                        event.call<void>("stopPropagation");
 
+                        if (event["ctrlKey"].as<bool>())
+                        {
+                            *item.selected = !item.selected->value();
+                        }
+                        else if (event["shiftKey"].as<bool>())
+                        {
+                            // find self:
+                            auto self = std::find_if(impl_->items.value().begin(), impl_->items.value().end(), [&item](auto const& i){
+                                return i.item.path == item.item.path;
+                            });
+
+                            // go backwards and forwards until we find another selected item:
+                            auto forwardSeeker = self + 1;
+                            auto backwardSeeker = self - 1;
+                            decltype(self) otherSelected = impl_->items.value().end();
+
+                            if (self == impl_->items.value().end())
+                                return;
+                            if (self == impl_->items.value().begin())
+                                backwardSeeker = impl_->items.value().begin();
+                            else if (self == impl_->items.value().end() - 1)
+                                forwardSeeker = impl_->items.value().end() - 1;
+
+                            while (forwardSeeker != impl_->items.value().end() && backwardSeeker != impl_->items.value().begin())
+                            {
+                                if (forwardSeeker->selected->value())
+                                {
+                                    otherSelected = forwardSeeker;
+                                    break;
+                                }
+                                if (backwardSeeker->selected->value())
+                                {
+                                    otherSelected = backwardSeeker;
+                                    break;
+                                }
+                                ++forwardSeeker;
+                                --backwardSeeker;
+                            }
+
+                            if (otherSelected == impl_->items.value().end() && forwardSeeker != impl_->items.value().end())
+                            {
+                                for (;forwardSeeker != impl_->items.value().end(); ++forwardSeeker)
+                                {
+                                    if (forwardSeeker->selected->value())
+                                    {
+                                        otherSelected = forwardSeeker;
+                                        break;
+                                    }
+                                }
+                            }
+                            else if (otherSelected == impl_->items.value().end() && backwardSeeker != impl_->items.value().begin())
+                            {
+                                for (;backwardSeeker != impl_->items.value().begin(); --backwardSeeker)
+                                {
+                                    if (backwardSeeker->selected->value())
+                                    {
+                                        otherSelected = backwardSeeker;
+                                        break;
+                                    }
+                                }
+                                if (backwardSeeker == impl_->items.value().begin() && otherSelected == impl_->items.value().end() && backwardSeeker->selected->value())
+                                    otherSelected = impl_->items.value().begin();
+                            }
+
+                            for (auto& item : impl_->items.value())
+                                *item.selected = false;
+                            if (otherSelected != impl_->items.value().end())
+                            {
+                                auto start = std::min(self, otherSelected);
+                                auto end = std::max(self, otherSelected);
+                                auto offset = (end != impl_->items.value().end()) ? 1 : 0;
+                                for (auto it = start; it != end + offset; ++it)
+                                    *it->selected = true;
+                            }
+                            else
+                            {
+                                *item.selected = true;
+                            }
+                        }
+                        else
+                        {
+                            deselectAll();
+                            *item.selected = true;
+                        }
                     }
                 }(
                     img{
