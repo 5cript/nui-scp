@@ -2,10 +2,6 @@
 
 #include <backend/process/process_store.hpp>
 
-#ifndef __WIN32
-#    include <boost/process/v2/src.hpp>
-#endif
-
 #include <nui/core.hpp>
 #include <nui/rpc.hpp>
 #include <nui/window.hpp>
@@ -22,7 +18,6 @@
 #include <fstream>
 #include <string>
 #include <string_view>
-#include <memory>
 #include <unordered_map>
 #include <iostream>
 
@@ -125,6 +120,8 @@ namespace
                             .body = "Not Found: "s + file.string(),
                         };
                     }
+
+                    Log::debug("Serving file: '{}'", file.string());
 
                     // Read file
                     auto content = readFile(file);
@@ -235,8 +232,9 @@ void Main::startChildSignalTimer()
 int main(int const argc, char const* const* argv)
 {
 #ifdef __linux__
-    struct sigaction sa
-    {
+#    pragma clang diagnostic push
+#    pragma clang diagnostic ignored "-Wc99-designator"
+    struct sigaction sa{
         .sa_sigaction =
             +[](int, siginfo_t* info, void*) {
                 const pid_t pid = info->si_pid;
@@ -252,10 +250,13 @@ int main(int const argc, char const* const* argv)
                     }
                 }
             },
-        .sa_mask = {}, .sa_flags = SA_SIGINFO, .sa_restorer = nullptr,
+        .sa_mask = {},
+        .sa_flags = SA_SIGINFO,
+        .sa_restorer = nullptr,
     };
 
     sigaction(SIGCHLD, &sa, nullptr);
+#    pragma clang diagnostic pop
 #endif
 
     ssh_init();

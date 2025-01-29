@@ -32,7 +32,7 @@ struct SessionArea::Implementation
 SessionArea::SessionArea(Persistence::StateHolder* stateHolder, FrontendEvents* events)
     : impl_{std::make_unique<Implementation>(stateHolder, events)}
 {
-    listen(appEventContext, events->onNewSession, [this](std::string const& name) -> void {
+    listen(events->onNewSession, [this](std::string const& name) -> void {
         addSession(name);
     });
 
@@ -74,22 +74,32 @@ void SessionArea::removeSession(std::function<bool(Session const&)> const& predi
         {
             if ((*iter.getWrapped())->visible() && impl_->sessions.size() > 1)
                 setSelected(std::max(0, i - 1));
+            Log::info("Removing session: {}", (*iter.getWrapped())->name());
             impl_->sessions.erase(iter);
             break;
         }
     }
+    Nui::globalEventContext.executeActiveEventsImmediately();
 }
 
 void SessionArea::setSelected(int index)
 {
-    if (impl_->selected >= 0 && impl_->selected < static_cast<int>(impl_->sessions.size()))
-        impl_->sessions.value()[impl_->selected]->visible(false);
-    if (index >= 0 && index < static_cast<int>(impl_->sessions.size()))
-    {
-        impl_->sessions.value()[index]->visible(true);
-        impl_->selected = index;
-    }
-    Nui::globalEventContext.executeActiveEventsImmediately();
+    const auto wasAnythingSelected = [this, index]() {
+        if (impl_->selected >= 0 && impl_->selected < static_cast<int>(impl_->sessions.size()))
+        {
+            impl_->sessions.value()[impl_->selected]->visible(false);
+        }
+        if (index >= 0 && index < static_cast<int>(impl_->sessions.size()))
+        {
+            impl_->sessions.value()[index]->visible(true);
+            impl_->selected = index;
+            return true;
+        }
+        return false;
+    }();
+
+    if (wasAnythingSelected)
+        Nui::globalEventContext.executeActiveEventsImmediately();
 }
 
 void SessionArea::addSession(std::string const& name)
@@ -132,12 +142,6 @@ void SessionArea::addSession(std::string const& name)
             impl_->stateHolder,
             engine,
             name,
-            [this](Session const*, std::string const&) {
-                {
-                    impl_->sessions.modify();
-                }
-                Nui::globalEventContext.executeActiveEventsImmediately();
-            },
             [this](Session const& session) {
                 removeSession([&session](Session const& s) {
                     return &s == &session;

@@ -23,6 +23,7 @@ target_link_libraries(
     ${PROJECT_NAME}
     PRIVATE
         nui-frontend
+        nui-file-explorer
         ui5
         roar-include-only
         utility
@@ -45,12 +46,52 @@ nui_prepare_emscripten_target(
     EMSCRIPTEN_LINK_OPTIONS
         -sEXPORTED_FUNCTIONS=_frontendMain
         -sALLOW_MEMORY_GROWTH=1
+        -fexceptions
         # -O2
         -g
         # or other options, see emscripten docs.
     EMSCRIPTEN_COMPILE_OPTIONS
         # -O3
         -g
+    OBSERVED_BUNDLE_FILES
+        "${CMAKE_SOURCE_DIR}/static/source/content_panels/file_explorer.ts"
+        "${CMAKE_SOURCE_DIR}/static/source/content_panels/terminal.ts"
+        "${CMAKE_SOURCE_DIR}/static/source/content_panel_manager.ts"
+        "${CMAKE_SOURCE_DIR}/static/source/index.js"
+        "${CMAKE_SOURCE_DIR}/static/styles/main_page.css"
+        "${CMAKE_SOURCE_DIR}/static/styles/main.css"
+        "${CMAKE_SOURCE_DIR}/static/styles/session_area.css"
+        "${CMAKE_SOURCE_DIR}/static/styles/session.css"
+        "${CMAKE_SOURCE_DIR}/static/styles/sidebar.css"
+        "${CMAKE_SOURCE_DIR}/static/styles/toolbar.css"
+        "${CMAKE_SOURCE_DIR}/static/styles/images/caretdown.png"
+        "${CMAKE_SOURCE_DIR}/static/styles/images/caretleft.png"
+        "${CMAKE_SOURCE_DIR}/static/styles/images/caretright.png"
+        "${CMAKE_SOURCE_DIR}/static/styles/images/caretup.png"
+        "${CMAKE_SOURCE_DIR}/static/styles/lumino/accordionpanel.css"
+        "${CMAKE_SOURCE_DIR}/static/styles/lumino/commandpalette.css"
+        "${CMAKE_SOURCE_DIR}/static/styles/lumino/datagrid.css"
+        "${CMAKE_SOURCE_DIR}/static/styles/lumino/dockpanel.css"
+        "${CMAKE_SOURCE_DIR}/static/styles/lumino/dragdrop/index.css"
+        "${CMAKE_SOURCE_DIR}/static/styles/lumino/dragdrop"
+        "${CMAKE_SOURCE_DIR}/static/styles/lumino/index.css"
+        "${CMAKE_SOURCE_DIR}/static/styles/lumino/menu.css"
+        "${CMAKE_SOURCE_DIR}/static/styles/lumino/menubar.css"
+        "${CMAKE_SOURCE_DIR}/static/styles/lumino/scrollbar.css"
+        "${CMAKE_SOURCE_DIR}/static/styles/lumino/tabbar.css"
+        "${CMAKE_SOURCE_DIR}/static/styles/lumino/widgets/accordionpanel.css"
+        "${CMAKE_SOURCE_DIR}/static/styles/lumino/widgets/commandpalette.css"
+        "${CMAKE_SOURCE_DIR}/static/styles/lumino/widgets/dockpanel.css"
+        "${CMAKE_SOURCE_DIR}/static/styles/lumino/widgets/index.css"
+        "${CMAKE_SOURCE_DIR}/static/styles/lumino/widgets/menu.css"
+        "${CMAKE_SOURCE_DIR}/static/styles/lumino/widgets/menubar.css"
+        "${CMAKE_SOURCE_DIR}/static/styles/lumino/widgets/scrollbar.css"
+        "${CMAKE_SOURCE_DIR}/static/styles/lumino/widgets/splitpanel.css"
+        "${CMAKE_SOURCE_DIR}/static/styles/lumino/widgets/tabbar.css"
+        "${CMAKE_SOURCE_DIR}/static/styles/lumino/widgets/tabpanel.css"
+        "${CMAKE_SOURCE_DIR}/static/styles/lumino/widgets/widget.css"
+        "${CMAKE_SOURCE_DIR}/static/styles/lumino/widgets"
+        "${CMAKE_SOURCE_DIR}/static/styles/lumino"
 )
 
 add_dependencies(theme_compilation ${PROJECT_NAME}-npm-install)

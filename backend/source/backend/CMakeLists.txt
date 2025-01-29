@@ -6,6 +6,8 @@ target_sources(
         process/process_store.cpp
         process/environment.cpp
         ssh/ssh_session_manager.cpp
+        ssh/session.cpp
+        ssh/sftp_session.cpp
         main.cpp
 )
 
@@ -22,15 +24,13 @@ else()
         PRIVATE
             pty/linux/pty.cpp
     )
-
-    target_compile_definitions(${PROJECT_NAME} PRIVATE -DBOOST_PROCESS_V2_SEPARATE_COMPILATION)
 endif()
 
-find_package(Boost CONFIG 1.81.0 REQUIRED COMPONENTS system filesystem)
+find_package(Boost CONFIG 1.86.0 REQUIRED COMPONENTS system filesystem asio)
 
 target_include_directories(${PROJECT_NAME} PRIVATE "${CMAKE_SOURCE_DIR}/backend/include")
 
-target_compile_definitions(${PROJECT_NAME} PRIVATE -DBOOST_PROCESS_USE_STD_FS=1 -DSSH_NO_CPP_EXCEPTIONS)
+target_compile_definitions(${PROJECT_NAME} PRIVATE -DSSH_NO_CPP_EXCEPTIONS)
 
 include("${CMAKE_CURRENT_LIST_DIR}/../../../_cmake/dependencies/libssh.cmake")
 
@@ -41,6 +41,9 @@ target_link_libraries(
         nui-backend
         efsw-static
         Boost::filesystem
+        Boost::asio
+        Boost::system
+        Boost::process
         utility
         log
         persistence
@@ -63,3 +66,5 @@ nui_add_emscripten_target(
         # I recommend to work with a release build by default because debug builds get big fast.
         -DCMAKE_BUILD_TYPE=Release
 )
+
+add_dependencies(${PROJECT_NAME} scp-resource-copy)

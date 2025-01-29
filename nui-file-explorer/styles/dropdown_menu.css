@@ -1,0 +1,53 @@
+.nui-file-grid-head-dropdown-text {
+  padding-right: 5px;
+  padding-left: 5px;
+}
+
+.nui-file-grid-head-dropdown {
+  height: 32px;
+  width: auto;
+  display: flex;
+  position: relative;
+  align-items: center;
+  padding-right: 5px;
+  border-radius: var(--nui-file-grid-border-radius);
+  background-color: var(--nui-file-grid-dropdown-background);
+  cursor: pointer;
+  border: var(--nui-file-grid-border-width) solid
+    var(--nui-file-grid-border-color);
+  white-space: nowrap;
+  overflow: visible;
+  color: var(--nui-file-grid-dropdown-color);
+  text-overflow: ellipsis;
+  isolation: isolate;
+}
+
+.nui-file-grid-head-dropdown-content {
+  position: absolute;
+  z-index: 1;
+  min-width: 160px;
+  min-height: 5px;
+  padding: 5px 0;
+  margin: 0 -1px 0 0;
+  background-color: var(--nui-file-grid-dropdown-background);
+  border: var(--nui-file-grid-border-width) solid
+    var(--nui-file-grid-border-color);
+  border-radius: var(--nui-file-grid-border-radius);
+  box-shadow: 0 6px 12px rgba(0, 0, 0, 0.175);
+  background-clip: padding-box;
+  color: var(--nui-file-grid-dropdown-item-color);
+}
+
+.nui-file-grid-head-dropdown-button-arrow {
+  width: 0;
+  height: 0;
+  border-left: 7px solid transparent;
+  border-right: 7px solid transparent;
+  border-top: 7px solid var(--nui-file-grid-arrow-color);
+}
+
+.nui-file-grid-head-dropdown-content-item {
+  padding: 5px;
+  cursor: pointer;
+  color: var(--nui-file-grid-dropdown-item-color);
+}

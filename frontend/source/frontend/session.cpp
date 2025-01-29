@@ -5,6 +5,7 @@
 #include <frontend/terminal/user_control_engine.hpp>
 #include <frontend/terminal/ssh_engine.hpp>
 #include <frontend/classes.hpp>
+#include <nui-file-explorer/file_grid.hpp>
 #include <persistence/state_holder.hpp>
 #include <log/log.hpp>
 
@@ -17,7 +18,9 @@
 #include <nui/frontend/elements.hpp>
 #include <nui/frontend/attributes.hpp>
 
-#include <string>
+using namespace Nui;
+using namespace Nui::Elements;
+using namespace Nui::Attributes;
 
 struct Session::Implementation
 {
@@ -25,11 +28,14 @@ struct Session::Implementation
     Persistence::TerminalEngine engine;
     Nui::Observed<Persistence::TerminalOptions> options;
     Nui::Observed<std::unique_ptr<Terminal>> terminal;
-    Nui::Delocalized<int> stable;
     std::string initialName;
-    std::string tabTitle;
+    std::shared_ptr<Nui::Observed<std::string>> tabTitle;
+    std::string id;
     std::function<void(Session const& self)> closeSelf;
     Nui::Observed<bool> isVisible;
+    std::shared_ptr<Nui::Dom::Element> terminalElement;
+    NuiFileExplorer::FileGrid fileGrid;
+    std::shared_ptr<Nui::Dom::Element> fileExplorer;
 
     Implementation(
         Persistence::StateHolder* stateHolder,
@@ -41,19 +47,96 @@ struct Session::Implementation
         , engine{std::move(engine)}
         , options{this->engine.terminalOptions.value()}
         , terminal{}
-        , stable{}
         , initialName{std::move(initialName)}
-        , tabTitle{this->initialName}
+        , tabTitle{std::make_shared<Nui::Observed<std::string>>(this->initialName)}
+        , id{Nui::val::global("generateId")().as<std::string>()}
         , closeSelf{std::move(closeSelf)}
         , isVisible{visible}
-    {}
+        , terminalElement{}
+        , fileGrid{}
+        , fileExplorer{}
+    {
+        fileGrid.items({
+            NuiFileExplorer::FileGrid::Item{
+                .path = "G",
+                .icon = "nui://app.example/icons/folder_main.png",
+            },
+            NuiFileExplorer::FileGrid::Item{
+                .path = "A",
+                .icon = "nui://app.example/icons/folder_main.png",
+            },
+            NuiFileExplorer::FileGrid::Item{
+                .path = "world",
+                .icon = "nui://app.example/icons/folder_main.png",
+            },
+            NuiFileExplorer::FileGrid::Item{
+                .path = "world2",
+                .icon = "nui://app.example/icons/folder_main.png",
+            },
+            NuiFileExplorer::FileGrid::Item{
+                .path = "world77",
+                .icon = "nui://app.example/icons/folder_main.png",
+            },
+            NuiFileExplorer::FileGrid::Item{
+                .path = "world4",
+                .icon = "nui://app.example/icons/folder_main.png",
+            },
+            NuiFileExplorer::FileGrid::Item{
+                .path = "world5",
+                .icon = "nui://app.example/icons/folder_main.png",
+            },
+            NuiFileExplorer::FileGrid::Item{
+                .path = "world6",
+                .icon = "nui://app.example/icons/folder_main.png",
+            },
+        });
+    }
 };
+
+auto Session::makeTerminalElement() -> Nui::ElementRenderer
+{
+    using Nui::Elements::div; // because of the global div.
+
+    // clang-format off
+    return div{}(
+        observe(impl_->terminal),
+        [this]() -> Nui::ElementRenderer {
+            return div{
+                style = "height: 100%; width: 100%",
+                reference.onMaterialize([this](Nui::val element) {
+                    Log::info("Terminal materialized");
+                    if (impl_->terminal.value())
+                    {
+                        impl_->terminal.value()->open(
+                            element,
+                            *impl_->options,
+                            std::bind(&Session::onOpen, this, std::placeholders::_1, std::placeholders::_2));
+                    }
+                })
+            }();
+        }
+    );
+    // clang-format on
+}
+
+auto Session::makeFileExplorerElement() -> Nui::ElementRenderer
+{
+    using Nui::Elements::div; // because of the global div.
+    using namespace Nui::Attributes;
+
+    // clang-format off
+    return div{
+        style = "width: 100%; height: auto; display: block",
+    }(
+        impl_->fileGrid()
+    );
+    // clang-format on
+}
 
 Session::Session(
     Persistence::StateHolder* stateHolder,
     Persistence::TerminalEngine engine,
     std::string initialName,
-    std::function<void(Session const* session, std::string)> doTabTitleChange,
     std::function<void(Session const& self)> closeSelf,
     bool visible)
     : impl_{std::make_unique<Implementation>(
@@ -70,10 +153,10 @@ Session::Session(
                 .engineOptions = std::get<Persistence::ExecutingTerminalEngine>(impl_->engine.engine),
                 .termios = impl_->engine.termios.value(),
                 .onProcessChange =
-                    [this, doTabTitleChange = std::move(doTabTitleChange)](std::string const& cmdline) {
-                        impl_->tabTitle = cmdline;
+                    [this](std::string const& cmdline) {
                         Log::info("Tab title changed: {}", cmdline);
-                        doTabTitleChange(this, cmdline);
+                        *impl_->tabTitle = cmdline;
+                        Nui::globalEventContext.executeActiveEventsImmediately();
                     },
             }));
     }
@@ -100,61 +183,25 @@ Session::Session(
         // assume ipv6 when finding ':' in host
         if (host.find(":") != std::string::npos)
             host = "[" + host + "]";
-        impl_->tabTitle = user + "@" + host + ":" + std::to_string(port);
+        *impl_->tabTitle = user + "@" + host + ":" + std::to_string(port);
     }
     else
     {
         Log::error("Unsupported terminal engine type");
         return;
     }
-    createTerminalElement();
     Nui::globalEventContext.executeActiveEventsImmediately();
 }
 
-Session::~Session() = default;
+Session::~Session()
+{
+    if (impl_->terminalElement)
+    {
+        Nui::val::global("contentPanelManager").call<void>("removePanel", impl_->id);
+    }
+}
 
 ROAR_PIMPL_SPECIAL_FUNCTIONS_IMPL_NO_DTOR(Session);
-
-void Session::createTerminalElement()
-{
-    using namespace Nui;
-    using namespace Nui::Elements;
-    using namespace Nui::Attributes;
-    using Nui::Elements::div; // because of the global div.
-
-    // clang-format off
-    impl_->stable.element(
-        div{
-            style =
-                Style{
-                    "height"_style = "100%",
-                    "background-color"_style = observe(impl_->options).generate([this]() -> std::string {
-                        if (impl_->options->theme && impl_->options->theme->background)
-                            return *impl_->options->theme->background;
-                        return "#202020";
-                    }),
-                },
-        }(
-            observe(impl_->terminal),
-            [this]() -> Nui::ElementRenderer {
-                return div{
-                    style = "height: 100%; width: 100%",
-                    reference.onMaterialize([this](Nui::val element) {
-                        Log::info("Terminal materialized");
-                        if (impl_->terminal.value())
-                        {
-                            impl_->terminal.value()->open(
-                                element,
-                                *impl_->options,
-                                std::bind(&Session::onOpen, this, std::placeholders::_1, std::placeholders::_2));
-                        }
-                    })
-                }();
-            }
-        )
-    );
-    // clang-format on
-}
 
 void Session::onOpen(bool success, std::string const& info)
 {
@@ -190,7 +237,7 @@ std::string Session::name() const
     return impl_->initialName;
 }
 
-std::string Session::tabTitle() const
+std::weak_ptr<Nui::Observed<std::string>> Session::tabTitle() const
 {
     return impl_->tabTitle;
 }
@@ -210,11 +257,7 @@ void Session::visible(bool value)
 
 Nui::ElementRenderer Session::operator()(bool visible)
 {
-    using namespace Nui;
-    using namespace Nui::Elements;
-    using namespace Nui::Attributes;
     using Nui::Elements::div; // because of the global div.
-
     Log::info("Session::operator()");
 
     impl_->isVisible = visible;
@@ -224,15 +267,43 @@ Nui::ElementRenderer Session::operator()(bool visible)
         class_ = observe(impl_->isVisible).generate([this]() {
             return classes("terminal-session", impl_->isVisible.value() ? "terminal-session-visible" : "terminal-session-hidden");
         }),
-    }(
-        delocalizedSlot(
-            0,
-            impl_->stable,
-            {
-                class_ = "terminal-session-content",
-                style = "height: 100%;",
-            }
-        )
-    );
+        style = Style{
+            "background-color"_style = observe(impl_->options).generate([this]() -> std::string {
+                if (impl_->options->theme && impl_->options->theme->background)
+                    return *impl_->options->theme->background;
+                return "#202020";
+            }),
+        },
+        !reference.onMaterialize([this](Nui::val element){
+            Nui::val::global("contentPanelManager").call<void>("addPanel", element, impl_->id, Nui::bind([this]() -> Nui::val {
+                Nui::Console::log("terminal factory content panel manager");
+                if (impl_->terminalElement)
+                {
+                    Log::critical("Terminal element already exists - make sure that the session is not recreated");
+                    return Nui::val::undefined();
+                }
+                impl_->terminalElement = Nui::Dom::makeStandaloneElement(makeTerminalElement());
+                return impl_->terminalElement->val();
+            }), Nui::bind([this]() -> Nui::val {
+                // OpenFileExplorer
+                if (impl_->fileExplorer)
+                {
+                    Log::warn("There is already a file explorer, cannot open another one");
+                    return Nui::val::undefined();
+                }
+                impl_->fileExplorer = Nui::Dom::makeStandaloneElement(makeFileExplorerElement());
+                return impl_->fileExplorer->val();
+            }), Nui::bind([this]() -> Nui::val {
+                // Remove FileExplorer
+                if (!impl_->fileExplorer)
+                {
+                    Log::warn("There is no file explorer to remove");
+                    return Nui::val::undefined();
+                }
+                impl_->fileExplorer.reset();
+                return Nui::val::undefined();
+            }));
+        })
+    }();
     // clang-format on
 }

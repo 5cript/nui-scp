@@ -2,7 +2,17 @@
 
 #include <backend/process/environment.hpp>
 
-#include <boost/process/v2.hpp>
+#ifdef __clang__
+#    pragma clang diagnostic push
+#    pragma clang diagnostic ignored "-Weverything"
+#endif
+
+#include <backend/process/boost_process.hpp>
+
+#ifdef __clang__
+#    pragma clang diagnostic pop
+#endif
+
 #include <boost/asio/any_io_executor.hpp>
 #include <roar/detail/pimpl_special_functions.hpp>
 #include <nui/utility/move_detector.hpp>
@@ -29,7 +39,7 @@ class Process : public std::enable_shared_from_this<Process>
         std::chrono::seconds defaultExitWaitTimeout = std::chrono::seconds{10},
         std::function<std::unique_ptr<boost::process::v2::process>(
             boost::asio::any_io_executor,
-            std::filesystem::path const& executable,
+            boost::filesystem::path const& executable,
             std::vector<std::string> const& args,
             std::unordered_map<boost::process::v2::environment::key, boost::process::v2::environment::value>)>
             launcher = {});

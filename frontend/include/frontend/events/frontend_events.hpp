@@ -8,6 +8,6 @@ struct FrontendEvents : public AppWideEvents
     Nui::Observed<std::string> onNewSession;
 
     FrontendEvents()
-        : onNewSession{&appEventContext}
+        : onNewSession{}
     {}
 };

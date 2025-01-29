@@ -1,38 +1,58 @@
-@import "./tailwind.css";
+@import "./lumino/index.css";
+
 @import "./main_page.css";
 @import "./session_area.css";
 @import "./session.css";
 @import "./sidebar.css";
 @import "./toolbar.css";
+@import "../../../../../nui-file-explorer/styles/file_grid.css";
+@import "../../../../../nui-file-explorer/styles/dropdown_menu.css";
 
 *,
 *::before,
 *::after {
-    box-sizing: border-box;
+  box-sizing: border-box;
 }
 
 .prompter-form {
-    display: flex;
-    flex-direction: column;
-    justify-content: space-evenly;
-    align-items: flex-start;
-    margin: 3rem 6rem;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-evenly;
+  align-items: flex-start;
+  margin: 3rem 6rem;
 }
 
-.login-form>div {
-    display: grid;
-    width: 15rem;
-    margin-bottom: .5rem;
+.login-form > div {
+  display: grid;
+  width: 15rem;
+  margin-bottom: 0.5rem;
 }
 
-@media(max-width: 600px) {
-    .login-form {
-        margin: 3rem 1rem;
-    }
+@media (max-width: 600px) {
+  .login-form {
+    margin: 3rem 1rem;
+  }
 }
 
 body {
-    height: 100dvh;
-    width: 100%;
-    margin: 0;
+  height: 100dvh;
+  width: 100%;
+  margin: 0;
+  background-color: var(--sapBackgroundColor);
+  color: var(--sapTextColor);
+  --resizeHandleColor: #707070;
+  --brighterBackground: #404040;
+
+  --nui-file-grid-item-highlight: rgba(255, 255, 255, 0.3);
+  --nui-file-grid-border-color: var(--sapButton_BorderColor);
+  --nui-file-grid-dropdown-background: var(--sapButton_Background);
+  --nui-file-grid-filter-background: var(--sapBackgroundColor);
+  --nui-file-grid-filter-color: var(--sapTextColor);
+  --nui-file-grid-border-radius: 0.25rem;
+  --nui-file-grid-arrow-color: var(--sapTextColor);
+  --nui-file-grid-head-font-size: var(--sapFontSize);
+  --nui-file-grid-button-background: var(--sapButton_Background);
+  --nui-file-grid-border-width: 1px;
+  --nui-file-grid-dropdown-color: var(--sapButton_TextColor);
+  --nui-file-grid-dropdown-item-color: var(--sapTextColor);
 }

@@ -1,5 +1,3 @@
-#include <winsock2.h>
-
 #include <backend/pty/windows/conpty.hpp>
 #include <backend/pty/windows/pipe.hpp>
 #include <nui/utility/scope_exit.hpp>
@@ -147,7 +145,7 @@ namespace ConPTY
         if (!si.lpAttributeList)
             return false;
 
-        Nui::ScopeExit cleanupLpAttributeList{[&si]() {
+        Nui::ScopeExit cleanupLpAttributeList{[&si]() noexcept {
             HeapFree(GetProcessHeap(), 0, si.lpAttributeList);
         }};
 

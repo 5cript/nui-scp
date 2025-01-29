@@ -17,7 +17,6 @@ class Session
         Persistence::StateHolder* stateHolder,
         Persistence::TerminalEngine engine,
         std::string initialName,
-        std::function<void(Session const* session, std::string)> doTabTitleChange,
         std::function<void(Session const& self)> closeSelf,
         bool visible);
     ROAR_PIMPL_SPECIAL_FUNCTIONS(Session);
@@ -25,14 +24,15 @@ class Session
     Nui::ElementRenderer operator()(bool visible);
 
     std::string name() const;
-    std::string tabTitle() const;
+    std::weak_ptr<Nui::Observed<std::string>> tabTitle() const;
     void visible(bool value);
     bool visible() const;
 
     std::optional<std::string> getProcessIdIfExecutingEngine() const;
+    auto makeTerminalElement() -> Nui::ElementRenderer;
+    auto makeFileExplorerElement() -> Nui::ElementRenderer;
 
   private:
-    void createTerminalElement();
     void onOpen(bool success, std::string const& info);
 
   private:
