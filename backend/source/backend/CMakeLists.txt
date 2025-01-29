@@ -6,6 +6,8 @@ target_sources(
         process/process_store.cpp
         process/environment.cpp
         ssh/ssh_session_manager.cpp
+        ssh/session.cpp
+        ssh/sftp_session.cpp
         main.cpp
 )
 
