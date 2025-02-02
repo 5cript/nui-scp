@@ -77,7 +77,9 @@ namespace NuiFileExplorer
          * @brief Sets the size of the icons in the grid.
          */
         void iconSize(unsigned int value);
+        void iconSpacing(unsigned int value);
         unsigned int iconSize() const;
+        unsigned int iconSpacing() const;
 
         void deselectAll(bool rerender = false);
 

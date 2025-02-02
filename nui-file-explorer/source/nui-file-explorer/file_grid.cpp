@@ -52,6 +52,7 @@ namespace NuiFileExplorer
         Nui::Observed<std::vector<ItemWithInternals>> items{};
         Nui::Observed<FileGridFlavor> flavor{FileGridFlavor::Icons};
         Nui::Observed<unsigned int> iconSize{static_cast<unsigned int>(IconSize::Medium)};
+        Nui::Observed<unsigned int> iconSpacing{32u};
         DropdownMenu newItemMenu{
             {
                 "File",
@@ -158,6 +159,15 @@ namespace NuiFileExplorer
     {
         return impl_->iconSize.value();
     }
+    void FileGrid::iconSpacing(unsigned int value)
+    {
+        impl_->iconSpacing = value;
+        Nui::globalEventContext.executeActiveEventsImmediately();
+    }
+    unsigned int FileGrid::iconSpacing() const
+    {
+        return impl_->iconSpacing.value();
+    }
 
     Nui::ElementRenderer FileGrid::tableFlavor()
     {
@@ -196,8 +206,8 @@ namespace NuiFileExplorer
         return div {
             class_ = "nui-file-grid-icons",
             style = Style{
-                "grid-template-columns"_style = observe(impl_->iconSize).generate([this]() {
-                    return "repeat(auto-fill, minmax(" + std::to_string(impl_->iconSize.value()) +
+                "grid-template-columns"_style = observe(impl_->iconSize, impl_->iconSpacing).generate([this]() {
+                    return "repeat(auto-fill, minmax(" + std::to_string(impl_->iconSize.value() + impl_->iconSpacing.value()) +
                         "px, 1fr))";
                 })
             },
@@ -309,7 +319,8 @@ namespace NuiFileExplorer
                         }),
                         height = observe(impl_->iconSize).generate([this](){
                             return std::to_string(impl_->iconSize.value());
-                        })
+                        }),
+                        style = item.item.type == FileGrid::Item::Type::Directory ? "filter: hue-rotate(120deg)" : "filter: invert(100%) brightness(2)",
                     }(),
                     div{
                     }(item.item.path.filename().string())
