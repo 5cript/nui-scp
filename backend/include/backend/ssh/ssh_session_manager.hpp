@@ -41,6 +41,14 @@ class SshSessionManager
     std::map<int, PasswordProvider*> passwordProviders_;
     std::mutex addSessionMutex_;
     std::unique_ptr<std::thread> addSessionThread_;
+    struct PwCache
+    {
+        std::optional<std::string> user;
+        std::string host;
+        std::optional<int> port;
+        std::optional<std::string> password;
+    };
+    std::vector<PwCache> pwCache_;
 };
 
 int askPassDefault(char const* prompt, char* buf, std::size_t length, int echo, int verify, void* userdata);

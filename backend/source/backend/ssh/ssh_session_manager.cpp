@@ -536,11 +536,36 @@ void SshSessionManager::addSession(
             std::pair<SshSessionManager*, std::string> data{this, "PASSWORD"};
             std::string buf(1024, '\0');
             result = sequential([&] {
+                std::optional<std::string> pwFromCache{};
+                for (const auto& cache : pwCache_)
+                {
+                    if (cache.user == sessionOptions.user && cache.host == sessionOptions.host &&
+                        cache.port == sessionOptions.port)
+                    {
+                        pwFromCache = cache.password;
+                        break;
+                    }
+                }
+
+                if (pwFromCache.has_value())
+                {
+                    buf = pwFromCache.value();
+                    const auto result = static_cast<ssh::Session&>(*session).userauthPassword(buf.data());
+                    if (result == SSH_AUTH_SUCCESS)
+                        return (int)SSH_AUTH_SUCCESS;
+                }
+
                 const auto r = askPassDefault("Password: ", buf.data(), buf.size(), 0, 0, &data);
                 if (r == 0)
-                    return static_cast<ssh::Session&>(*session).userauthPassword(buf.data());
-                else
-                    return (int)SSH_AUTH_DENIED;
+                {
+                    const auto result = static_cast<ssh::Session&>(*session).userauthPassword(buf.data());
+                    if (result == SSH_AUTH_SUCCESS)
+                    {
+                        pwCache_.push_back(PwCache{sessionOptions.user, sessionOptions.host, sessionOptions.port, buf});
+                        return (int)SSH_AUTH_SUCCESS;
+                    }
+                }
+                return (int)SSH_AUTH_DENIED;
             });
         }
 

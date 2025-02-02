@@ -1,7 +1,6 @@
 #pragma once
 
 #include <nlohmann/json.hpp>
-#include <boost/describe.hpp>
 
 #include <filesystem>
 #include <string>
