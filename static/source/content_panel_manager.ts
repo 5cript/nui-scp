@@ -25,13 +25,11 @@ class ContentPanelManager {
         let term = new Terminal('Terminal', terminalFactory);
         let explorer = new FileExplorer('FileExplorer', fileExplorerFactory, fileExplorerDelete);
 
-        console.log("a");
         let dock = new DockPanel();
         dock.addWidget(term);
         dock.addWidget(explorer, { mode: 'split-right', ref: term });
         dock.id = 'dock_' + id;
 
-        console.log("b");
         let main = new BoxPanel({ direction: 'left-to-right', spacing: 0 });
         main.id = 'main_' + id;
         main.addWidget(dock);
@@ -41,23 +39,19 @@ class ContentPanelManager {
         });
         resizeObserver.observe(host);
 
-        console.log("c");
-        console.log(host.isConnected);
         try {
             Widget.attach(main, host);
-            console.log(host.isConnected);
             main.update();
         }
         catch (e) {
             console.log(e);
             console.log(JSON.stringify(e));
         }
-        console.log("d");
         this.panels.set(id, main);
     }
 
     removePanel = (id: string) => {
-        console.log("remove");
+        console.log("remove panel");
         let main = document.getElementById('main_' + id);
         if (main) {
             main.remove();

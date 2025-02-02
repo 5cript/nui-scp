@@ -32,13 +32,27 @@ namespace NuiFileExplorer
 
         struct Item
         {
+            enum class Type
+            {
+                Regular = 1,
+                Directory = 2,
+                Symlink = 3,
+                Special = 4,
+                Unknown = 5,
+                Socket = 6,
+                CharDevice = 7,
+                BlockDevice = 8,
+                Fifo = 9
+            };
+
             std::filesystem::path path;
             std::string icon; // url or base64 url etc.
-            bool isDirectory;
-            bool isSymlink;
-            std::filesystem::perms permissions;
-            unsigned int ownerId;
-            unsigned int groupId;
+            Type type = Type::Unknown;
+            std::filesystem::perms permissions = std::filesystem::perms::none;
+            unsigned int ownerId = 0;
+            unsigned int groupId = 0;
+            std::uint64_t atime = 0;
+            std::uint64_t size = 0;
         };
 
         FileGrid();
@@ -51,7 +65,7 @@ namespace NuiFileExplorer
         /**
          * @brief Sets the items to be displayed in the grid.
          */
-        void items(const std::vector<Item>& items);
+        void items(const std::vector<Item>& items, bool sorted = true);
 
         /**
          * @brief Determines how the grid should be displayed.

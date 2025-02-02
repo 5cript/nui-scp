@@ -12,6 +12,8 @@ namespace Persistence
             user = other.user;
         if (!sshKey.has_value())
             sshKey = other.sshKey;
+        if (!environment.has_value())
+            environment = other.environment;
 
         sshOptions.useDefaultsFrom(other.sshOptions.value());
     }
@@ -24,6 +26,7 @@ namespace Persistence
         TO_JSON_OPTIONAL(j, options, user);
         TO_JSON_OPTIONAL(j, options, sshKey);
         TO_JSON_OPTIONAL(j, options, environment);
+        j["openSftpByDefault"] = options.openSftpByDefault;
         j["sshOptions"] = options.sshOptions;
     }
     void from_json(nlohmann::json const& j, SshSessionOptions& options)
@@ -33,9 +36,12 @@ namespace Persistence
         FROM_JSON_OPTIONAL(j, options, port);
         FROM_JSON_OPTIONAL(j, options, user);
         FROM_JSON_OPTIONAL(j, options, sshKey);
+        FROM_JSON_OPTIONAL(j, options, environment);
         if (j.contains("host"))
             j.at("host").get_to(options.host);
         if (j.contains("sshOptions"))
             j.at("sshOptions").get_to(options.sshOptions);
+        if (j.contains("openSftpByDefault"))
+            j.at("openSftpByDefault").get_to(options.openSftpByDefault);
     }
 }

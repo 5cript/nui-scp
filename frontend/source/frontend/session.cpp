@@ -4,6 +4,7 @@
 #include <frontend/terminal/executing_engine.hpp>
 #include <frontend/terminal/user_control_engine.hpp>
 #include <frontend/terminal/ssh_engine.hpp>
+#include <frontend/terminal/sftp_file_engine.hpp>
 #include <frontend/classes.hpp>
 #include <nui-file-explorer/file_grid.hpp>
 #include <persistence/state_holder.hpp>
@@ -17,6 +18,8 @@
 #include <nui/frontend/utility/delocalized.hpp>
 #include <nui/frontend/elements.hpp>
 #include <nui/frontend/attributes.hpp>
+
+#include <algorithm>
 
 using namespace Nui;
 using namespace Nui::Elements;
@@ -37,6 +40,8 @@ struct Session::Implementation
     NuiFileExplorer::FileGrid fileGrid;
     std::shared_ptr<Nui::Dom::Element> fileExplorer;
 
+    std::unique_ptr<FileEngine> fileEngine;
+
     Implementation(
         Persistence::StateHolder* stateHolder,
         Persistence::TerminalEngine engine,
@@ -55,42 +60,7 @@ struct Session::Implementation
         , terminalElement{}
         , fileGrid{}
         , fileExplorer{}
-    {
-        fileGrid.items({
-            NuiFileExplorer::FileGrid::Item{
-                .path = "G",
-                .icon = "nui://app.example/icons/folder_main.png",
-            },
-            NuiFileExplorer::FileGrid::Item{
-                .path = "A",
-                .icon = "nui://app.example/icons/folder_main.png",
-            },
-            NuiFileExplorer::FileGrid::Item{
-                .path = "world",
-                .icon = "nui://app.example/icons/folder_main.png",
-            },
-            NuiFileExplorer::FileGrid::Item{
-                .path = "world2",
-                .icon = "nui://app.example/icons/folder_main.png",
-            },
-            NuiFileExplorer::FileGrid::Item{
-                .path = "world77",
-                .icon = "nui://app.example/icons/folder_main.png",
-            },
-            NuiFileExplorer::FileGrid::Item{
-                .path = "world4",
-                .icon = "nui://app.example/icons/folder_main.png",
-            },
-            NuiFileExplorer::FileGrid::Item{
-                .path = "world5",
-                .icon = "nui://app.example/icons/folder_main.png",
-            },
-            NuiFileExplorer::FileGrid::Item{
-                .path = "world6",
-                .icon = "nui://app.example/icons/folder_main.png",
-            },
-        });
-    }
+    {}
 };
 
 auto Session::makeTerminalElement() -> Nui::ElementRenderer
@@ -164,13 +134,7 @@ Session::Session(
     {
         impl_->terminal = std::make_unique<Terminal>(std::make_unique<SshTerminalEngine>(SshTerminalEngine::Settings{
             .engineOptions = std::get<Persistence::SshTerminalEngine>(impl_->engine.engine),
-            .onExit =
-                [this]() {
-                    // TODO: this is harsh, when the connection dropped unexpectedly, so keep the terminal open and
-                    // print a disconnect warning.
-                    if (impl_->closeSelf)
-                        impl_->closeSelf(*this);
-                },
+            .onExit = std::bind(&Session::onTerminalConnectionClose, this),
         }));
 
         const auto user = std::get<Persistence::SshTerminalEngine>(impl_->engine.engine)
@@ -222,7 +186,79 @@ void Session::onOpen(bool success, std::string const& info)
     else
     {
         impl_->terminal.value()->focus();
+        auto const& opts = std::get<Persistence::SshTerminalEngine>(impl_->engine.engine).sshSessionOptions.value();
+        if (opts.openSftpByDefault)
+        {
+            Log::info("Opening SFTP by default");
+            impl_->fileEngine = std::make_unique<SftpFileEngine>(SshTerminalEngine::Settings{
+                .engineOptions = std::get<Persistence::SshTerminalEngine>(impl_->engine.engine),
+                .onExit = std::bind(&Session::onFileExplorerConnectionClose, this),
+            });
+            // FIXME: path
+
+            impl_->fileEngine->listDirectory("/home/tim", [this](auto const& directoryEntries) {
+                if (!directoryEntries)
+                {
+                    Log::error("Failed to list directory");
+                    return;
+                }
+
+                std::vector<NuiFileExplorer::FileGrid::Item> items{};
+                std::transform(
+                    begin(*directoryEntries), end(*directoryEntries), std::back_inserter(items), [](auto const& entry) {
+                        return NuiFileExplorer::FileGrid::Item{
+                            .path = entry.path,
+                            .icon =
+                                [&entry]() {
+                                    const auto type = static_cast<NuiFileExplorer::FileGrid::Item::Type>(entry.type);
+                                    if (type == NuiFileExplorer::FileGrid::Item::Type::Directory)
+                                        return "nui://app.example/icons/folder_main.png";
+                                    if (type == NuiFileExplorer::FileGrid::Item::Type::BlockDevice)
+                                        return "nui://app.example/icons/hard_drive.png";
+
+                                    if (entry.path.extension() == ".cpp")
+                                        return "nui://app.example/icons/cpp_file.png";
+                                    // TODO: more icons
+
+                                    return "nui://app.example/icons/file.png";
+                                }(),
+                            .type = static_cast<NuiFileExplorer::FileGrid::Item::Type>(entry.type),
+                            .permissions = entry.permissions,
+                            .ownerId = entry.uid,
+                            .groupId = entry.gid,
+                            .atime = entry.atime,
+                            .size = entry.size,
+                        };
+                    });
+
+                impl_->fileGrid.items(items);
+            });
+        }
     }
+}
+
+void Session::onTerminalConnectionClose()
+{
+    if (impl_->fileEngine)
+    {
+        impl_->fileEngine.reset();
+    }
+
+    // TODO: this is harsh, when the connection dropped unexpectedly, so keep the terminal open and
+    // print a disconnect warning.
+    if (impl_->closeSelf)
+        impl_->closeSelf(*this);
+}
+
+void Session::onFileExplorerConnectionClose()
+{
+    // IF YOU CHANGE THIS IN THE FUTURE: dont forget to close the terminal connection too, which is now implicit by
+    // closeSelf.
+
+    // TODO: this is harsh, when the connection dropped unexpectedly, so keep the terminal open and
+    // print a disconnect warning.
+    if (impl_->closeSelf)
+        impl_->closeSelf(*this);
 }
 
 std::optional<std::string> Session::getProcessIdIfExecutingEngine() const

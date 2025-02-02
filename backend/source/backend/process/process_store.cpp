@@ -360,7 +360,7 @@ void ProcessStore::registerRpc(Nui::Window& wnd, Nui::RpcHub& hub)
                 }
 
 #ifdef _WIN32
-                using PtyType = ConPTY::PseudoConsole;
+            // using PtyType = ConPTY::PseudoConsole;
 #else
                 using PtyType = PTY::PseudoTerminal;
 #endif

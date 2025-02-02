@@ -12,6 +12,7 @@ target_sources(
         password_prompter.cpp
         terminal/terminal.cpp
         terminal/executing_engine.cpp
+        terminal/sftp_file_engine.cpp
         terminal/ssh_engine.cpp
         terminal/user_control_engine.cpp
 )
@@ -26,6 +27,7 @@ target_link_libraries(
         nui-file-explorer
         ui5
         roar-include-only
+        shared_data
         utility
         log
         persistence
@@ -53,6 +55,8 @@ nui_prepare_emscripten_target(
     EMSCRIPTEN_COMPILE_OPTIONS
         # -O3
         -g
+    CXX_STANDARD
+        23
     OBSERVED_BUNDLE_FILES
         "${CMAKE_SOURCE_DIR}/static/source/content_panels/file_explorer.ts"
         "${CMAKE_SOURCE_DIR}/static/source/content_panels/terminal.ts"

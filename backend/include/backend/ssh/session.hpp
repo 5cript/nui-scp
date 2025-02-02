@@ -10,6 +10,8 @@
 #include <mutex>
 #include <optional>
 
+class SftpSession;
+
 class Session
 {
   public:
@@ -24,6 +26,9 @@ class Session
     {
         return session_;
     }
+
+    std::shared_ptr<SftpSession> createSftpSession();
+    std::shared_ptr<SftpSession> getSftpSession();
 
     void startReading(
         std::function<void(std::string const&)> onStdout,
@@ -50,4 +55,5 @@ class Session
     std::function<void(std::string const&)> onStderr_;
     std::function<void()> onExit_;
     std::vector<std::string> queuedWrites_;
+    std::vector<std::shared_ptr<SftpSession>> sftpSessions_;
 };

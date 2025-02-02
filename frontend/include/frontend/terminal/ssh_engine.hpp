@@ -7,7 +7,6 @@
 
 #include <memory>
 #include <string>
-#include <string_view>
 
 // TODO: https://devblogs.microsoft.com/commandline/windows-command-line-introducing-the-windows-pseudo-console-conpty/
 
@@ -24,13 +23,15 @@ class SshTerminalEngine : public TerminalEngine
     SshTerminalEngine(Settings settings);
     ROAR_PIMPL_SPECIAL_FUNCTIONS(SshTerminalEngine);
 
-    void open(std::function<void(bool, std::string const&)> onOpen) override;
+    void open(std::function<void(bool, std::string const&)> onOpen, bool fileMode = false) override;
     void dispose() override;
     void write(std::string const& data) override;
     void resize(int cols, int rows) override;
 
     void setStdoutHandler(std::function<void(std::string const&)> handler) override;
     void setStderrHandler(std::function<void(std::string const&)> handler) override;
+
+    std::string sshSessionId() const;
 
   private:
     struct Implementation;

@@ -44,7 +44,7 @@ UserControlEngine::~UserControlEngine()
 
 ROAR_PIMPL_SPECIAL_FUNCTIONS_IMPL_NO_DTOR(UserControlEngine);
 
-void UserControlEngine::open(std::function<void(bool, std::string const&)> onOpen)
+void UserControlEngine::open(std::function<void(bool, std::string const&)> onOpen, bool)
 {
     onOpen(true, "Never Fails");
 }

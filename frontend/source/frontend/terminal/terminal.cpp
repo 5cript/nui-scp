@@ -299,7 +299,7 @@ void Terminal::open(
             onOpen(false, "Failed to get terminal");
             return;
         }
-        Log::info("Terminal opened with id: '{}", impl_->termId);
+        Log::info("Terminal opened with id: '{}'", impl_->termId);
 
         term.call<void>(
             "onData",

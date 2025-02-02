@@ -48,31 +48,34 @@ SshTerminalEngine::~SshTerminalEngine()
 
 ROAR_PIMPL_SPECIAL_FUNCTIONS_IMPL_NO_DTOR(SshTerminalEngine);
 
-void SshTerminalEngine::open(std::function<void(bool, std::string const&)> onOpen)
+void SshTerminalEngine::open(std::function<void(bool, std::string const&)> onOpen, bool fileMode)
 {
-    impl_->stdoutReceiver =
-        Nui::RpcClient::autoRegisterFunction("sshTerminalStdout_" + impl_->id, [this](Nui::val val) {
-            if (val.hasOwnProperty("data"))
-            {
-                const std::string data = Nui::val::global("atob")(val["data"]).as<std::string>();
-                if (impl_->stdoutHandler)
-                    impl_->stdoutHandler(data);
-            }
-            else
-                Log::info("sshTerminalStdout_" + impl_->id + " received an empty message");
-        });
+    if (!fileMode)
+    {
+        impl_->stdoutReceiver =
+            Nui::RpcClient::autoRegisterFunction("sshTerminalStdout_" + impl_->id, [this](Nui::val val) {
+                if (val.hasOwnProperty("data"))
+                {
+                    const std::string data = Nui::val::global("atob")(val["data"]).as<std::string>();
+                    if (impl_->stdoutHandler)
+                        impl_->stdoutHandler(data);
+                }
+                else
+                    Log::info("sshTerminalStdout_" + impl_->id + " received an empty message");
+            });
 
-    impl_->stderrReceiver =
-        Nui::RpcClient::autoRegisterFunction("sshTerminalStderr_" + impl_->id, [this](Nui::val val) {
-            if (val.hasOwnProperty("data"))
-            {
-                const std::string data = Nui::val::global("atob")(val["data"]).as<std::string>();
-                if (impl_->stderrHandler)
-                    impl_->stderrHandler(data);
-            }
-            else
-                Log::error("sshTerminalStderr_" + impl_->id + " received an empty message");
-        });
+        impl_->stderrReceiver =
+            Nui::RpcClient::autoRegisterFunction("sshTerminalStderr_" + impl_->id, [this](Nui::val val) {
+                if (val.hasOwnProperty("data"))
+                {
+                    const std::string data = Nui::val::global("atob")(val["data"]).as<std::string>();
+                    if (impl_->stderrHandler)
+                        impl_->stderrHandler(data);
+                }
+                else
+                    Log::error("sshTerminalStderr_" + impl_->id + " received an empty message");
+            });
+    }
 
     impl_->onExitReceiver = Nui::RpcClient::autoRegisterFunction("sshTerminalOnExit_" + impl_->id, [this](Nui::val) {
         Nui::RpcClient::callWithBackChannel(
@@ -86,8 +89,11 @@ void SshTerminalEngine::open(std::function<void(bool, std::string const&)> onOpe
 
     Nui::val obj = Nui::val::object();
     obj.set("engine", asVal(impl_->settings.engineOptions));
-    obj.set("stdout", "sshTerminalStdout_"s + impl_->id);
-    obj.set("stderr", "sshTerminalStderr_"s + impl_->id);
+    if (!fileMode)
+    {
+        obj.set("stdout", "sshTerminalStdout_"s + impl_->id);
+        obj.set("stderr", "sshTerminalStderr_"s + impl_->id);
+    }
     obj.set("onExit", "sshTerminalOnExit_"s + impl_->id);
 
     Nui::RpcClient::callWithBackChannel(
@@ -109,6 +115,11 @@ void SshTerminalEngine::open(std::function<void(bool, std::string const&)> onOpe
         obj);
 }
 
+std::string SshTerminalEngine::sshSessionId() const
+{
+    return impl_->sshSessionId;
+}
+
 void SshTerminalEngine::dispose()
 {
     Nui::RpcClient::callWithBackChannel(
@@ -120,6 +131,7 @@ void SshTerminalEngine::dispose()
 
     impl_->stdoutReceiver.reset();
     impl_->stderrReceiver.reset();
+    impl_->sshSessionId.clear();
 }
 
 void SshTerminalEngine::resize(int cols, int rows)

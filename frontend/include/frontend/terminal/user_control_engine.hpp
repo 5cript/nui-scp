@@ -23,7 +23,7 @@ class UserControlEngine : public TerminalEngine
     UserControlEngine(Settings settings);
     ROAR_PIMPL_SPECIAL_FUNCTIONS(UserControlEngine);
 
-    void open(std::function<void(bool, std::string const&)> onOpen) override;
+    void open(std::function<void(bool, std::string const&)> onOpen, bool) override;
     void dispose() override;
     void write(std::string const& data) override;
     void resize(int cols, int rows) override;

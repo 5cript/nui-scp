@@ -44,6 +44,7 @@ target_link_libraries(
         Boost::asio
         Boost::system
         Boost::process
+        shared_data
         utility
         log
         persistence

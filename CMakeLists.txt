@@ -25,6 +25,7 @@ target_include_directories(roar-include-only INTERFACE "${CMAKE_CURRENT_LIST_DIR
 
 include("${CMAKE_CURRENT_LIST_DIR}/dependencies/Nui/cmake/dependencies/nlohmann_json.cmake")
 add_subdirectory("${CMAKE_SOURCE_DIR}/constants/source/constants")
+add_subdirectory("${CMAKE_SOURCE_DIR}/shared_data/source/shared_data")
 add_subdirectory("${CMAKE_SOURCE_DIR}/utility/source/utility")
 add_subdirectory("${CMAKE_SOURCE_DIR}/log/source/log")
 add_subdirectory("${CMAKE_SOURCE_DIR}/persistence/source/persistence")

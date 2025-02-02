@@ -77,12 +77,7 @@ namespace NuiFileExplorer
             [this](std::string const& item) {
                 if (item == "Name")
                 {
-                    auto& items = this->items.value();
-                    std::sort(items.begin(), items.end(), [](auto const& lhs, auto const& rhs) {
-                        if (lhs.item.isDirectory != rhs.item.isDirectory)
-                            return lhs.item.isDirectory > rhs.item.isDirectory;
-                        return lhs.item.path.filename().string() < rhs.item.path.filename().string();
-                    });
+                    sortItems();
                     this->items.modifyNow();
                 }
             },
@@ -113,6 +108,16 @@ namespace NuiFileExplorer
             },
             "View",
         };
+
+        void sortItems()
+        {
+            auto& items = this->items.value();
+            std::sort(items.begin(), items.end(), [](auto const& lhs, auto const& rhs) {
+                if (lhs.item.type != rhs.item.type)
+                    return lhs.item.type > rhs.item.type;
+                return lhs.item.path.filename().string() < rhs.item.path.filename().string();
+            });
+        }
     };
 
     FileGrid::FileGrid()
@@ -122,11 +127,14 @@ namespace NuiFileExplorer
     FileGrid::FileGrid(FileGrid&&) = default;
     FileGrid& FileGrid::operator=(FileGrid&&) = default;
 
-    void FileGrid::items(const std::vector<FileGrid::Item>& items)
+    void FileGrid::items(const std::vector<FileGrid::Item>& items, bool sorted)
     {
+        impl_->items.value().clear();
         std::transform(items.begin(), items.end(), std::back_inserter(impl_->items.value()), [](auto const& item) {
             return ItemWithInternals{item};
         });
+        if (sorted)
+            impl_->sortItems();
 
         impl_->items.modifyNow();
     }

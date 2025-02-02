@@ -34,6 +34,8 @@ class Session
 
   private:
     void onOpen(bool success, std::string const& info);
+    void onFileExplorerConnectionClose();
+    void onTerminalConnectionClose();
 
   private:
     struct Implementation;

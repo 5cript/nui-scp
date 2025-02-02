@@ -1,5 +1,7 @@
 #include <backend/ssh/session.hpp>
+#include <backend/ssh/sftp_session.hpp>
 #include <backend/ssh/sequential.hpp>
+#include <log/log.hpp>
 
 using namespace Detail;
 
@@ -23,6 +25,12 @@ Session::~Session()
 void Session::stop()
 {
     std::scoped_lock guard{sessionMutex_};
+
+    for (auto const& sftpSession : sftpSessions_)
+    {
+        sftpSession->disconnect();
+    }
+
     onExit_ = {};
     if (ptyChannel_)
     {
@@ -37,6 +45,30 @@ void Session::stop()
         ptyChannel_.reset();
     }
     session_.disconnect();
+}
+
+std::shared_ptr<SftpSession> Session::createSftpSession()
+{
+    auto perhapsSession = makeSftpSession(*this);
+    if (!perhapsSession.has_value())
+    {
+        Log::error(
+            "Failed to create sftp session ({}, {}): {}",
+            perhapsSession.error().sshError,
+            perhapsSession.error().sftpError,
+            perhapsSession.error().message);
+        return nullptr;
+    }
+    auto sftpSession = std::make_shared<SftpSession>(std::move(perhapsSession).value());
+    sftpSessions_.push_back(sftpSession);
+    return sftpSession;
+}
+
+std::shared_ptr<SftpSession> Session::getSftpSession()
+{
+    if (sftpSessions_.empty())
+        return createSftpSession();
+    return sftpSessions_.back();
 }
 
 void Session::doProcessing()
@@ -95,9 +127,17 @@ void Session::doProcessing()
     }
 
     {
-        std::scoped_lock guard{sessionMutex_};
-        if (onExit_)
-            onExit_();
+        if (stopIssued_)
+        {
+            if (onExit_)
+                onExit_();
+        }
+        else
+        {
+            std::scoped_lock guard{sessionMutex_};
+            if (onExit_)
+                onExit_();
+        }
     }
 }
 
