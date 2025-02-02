@@ -40,6 +40,7 @@ void SftpFileEngine::lazyOpen(std::function<void(std::optional<std::string> cons
     if (!impl_->underlyingEngine.sshSessionId().empty())
     {
         onOpen(impl_->underlyingEngine.sshSessionId());
+        return;
     }
 
     impl_->underlyingEngine.open(
@@ -88,6 +89,35 @@ void SftpFileEngine::listDirectory(
                 }
 
                 onComplete(nlohmann::json::parse(Nui::JSON::stringify(val))["entries"]);
+            },
+            *sshSessionId,
+            path.generic_string());
+    });
+}
+
+void SftpFileEngine::createDirectory(std::filesystem::path const& path, std::function<void(bool)> onComplete)
+{
+    lazyOpen([path, onComplete = std::move(onComplete)](auto const& sshSessionId) {
+        if (!sshSessionId)
+        {
+            Log::error("Cannot create directory, no ssh session");
+            return;
+        }
+
+        Log::info("Creating directory: {}", path.generic_string());
+        Nui::RpcClient::callWithBackChannel(
+            "SshSessionManager::sftp::createDirectory",
+            [onComplete = std::move(onComplete)](Nui::val val) {
+                Nui::Console::log(val);
+
+                if (val.hasOwnProperty("error"))
+                {
+                    Log::error("(Frontend) Failed to create directory: {}", val["error"].as<std::string>());
+                    onComplete(false);
+                    return;
+                }
+
+                onComplete(true);
             },
             *sshSessionId,
             path.generic_string());

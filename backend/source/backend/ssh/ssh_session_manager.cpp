@@ -236,6 +236,45 @@ void SshSessionManager::registerRpc(Nui::Window& wnd, Nui::RpcHub& hub)
         });
 
     hub.registerFunction(
+        "SshSessionManager::sftp::createDirectory",
+        [this, hub = &hub](std::string const& responseId, std::string const& uuid, std::string const& path) {
+            try
+            {
+                if (sessions_.find(uuid) == sessions_.end())
+                {
+                    Log::error("No session found with id: {}", uuid);
+                    hub->callRemote(responseId, nlohmann::json{{"error", "No session found with id"}});
+                    return;
+                }
+
+                auto& session = sessions_[uuid];
+                auto sftpSession = session->getSftpSession();
+                if (!sftpSession)
+                {
+                    Log::error("Failed to create sftp session");
+                    hub->callRemote(responseId, nlohmann::json{{"error", "Failed to create sftp session"}});
+                    return;
+                }
+
+                auto result = sftpSession->createDirectory(path);
+                if (result)
+                {
+                    Log::error("Failed to create directory: {}", result->message);
+                    hub->callRemote(responseId, nlohmann::json{{"error", result->message}});
+                    return;
+                }
+
+                hub->callRemote(responseId, nlohmann::json{{"success", true}});
+            }
+            catch (std::exception const& e)
+            {
+                Log::error("Error creating directory: {}", e.what());
+                hub->callRemote(responseId, nlohmann::json{{"error", e.what()}});
+                return;
+            }
+        });
+
+    hub.registerFunction(
         "SshSessionManager::write",
         [this, hub = &hub](std::string const& responseId, std::string const& uuid, std::string const& data) {
             try

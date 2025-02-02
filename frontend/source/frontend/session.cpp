@@ -6,6 +6,7 @@
 #include <frontend/terminal/ssh_engine.hpp>
 #include <frontend/terminal/sftp_file_engine.hpp>
 #include <frontend/classes.hpp>
+#include <frontend/input_dialog.hpp>
 #include <nui-file-explorer/file_grid.hpp>
 #include <persistence/state_holder.hpp>
 #include <log/log.hpp>
@@ -39,13 +40,15 @@ struct Session::Implementation
     std::shared_ptr<Nui::Dom::Element> terminalElement;
     NuiFileExplorer::FileGrid fileGrid;
     std::shared_ptr<Nui::Dom::Element> fileExplorer;
-
+    std::filesystem::path currentPath;
     std::unique_ptr<FileEngine> fileEngine;
+    InputDialog* newItemAskDialog;
 
     Implementation(
         Persistence::StateHolder* stateHolder,
         Persistence::TerminalEngine engine,
         std::string initialName,
+        InputDialog* newItemAskDialog,
         std::function<void(Session const& self)> closeSelf,
         bool visible)
         : stateHolder{stateHolder}
@@ -60,6 +63,9 @@ struct Session::Implementation
         , terminalElement{}
         , fileGrid{}
         , fileExplorer{}
+        , currentPath{}
+        , fileEngine{}
+        , newItemAskDialog{newItemAskDialog}
     {}
 };
 
@@ -107,12 +113,14 @@ Session::Session(
     Persistence::StateHolder* stateHolder,
     Persistence::TerminalEngine engine,
     std::string initialName,
+    InputDialog* newItemAskDialog,
     std::function<void(Session const& self)> closeSelf,
     bool visible)
     : impl_{std::make_unique<Implementation>(
           stateHolder,
           std::move(engine),
           std::move(initialName),
+          newItemAskDialog,
           std::move(closeSelf),
           visible)}
 {
@@ -154,6 +162,57 @@ Session::Session(
         Log::error("Unsupported terminal engine type");
         return;
     }
+
+    impl_->fileGrid.onActivateItem([this](auto const& item) {
+        // TODO: what about files?:
+        if (item.type != NuiFileExplorer::FileGrid::Item::Type::Directory)
+            return;
+
+        if (item.path == ".")
+            return;
+        if (item.path == "..")
+            return navigateTo(impl_->currentPath.parent_path());
+
+        navigateTo(impl_->currentPath / item.path);
+    });
+
+    impl_->fileGrid.onNewItem([this](auto type) {
+        Log::info("New item requested: {}", static_cast<int>(type));
+        if (type == NuiFileExplorer::FileGrid::Item::Type::Directory)
+        {
+            // impl_->fileEngine->createDirectory(impl_->currentPath);
+            impl_->newItemAskDialog->open(
+                "New directory",
+                "Enter the name of the new directory",
+                "Create a new directory",
+                false,
+                [this](std::optional<std::string> const& name) {
+                    if (!name)
+                        return;
+
+                    Log::info("Creating new directory: {}", *name);
+                    if (name->find('/') != std::string::npos)
+                    {
+                        Log::error("Invalid directory name (cannot contain slashes): {}", *name);
+                        return;
+                    }
+                    impl_->fileEngine->createDirectory(impl_->currentPath / *name, [this](bool success) {
+                        if (!success)
+                        {
+                            Log::error("Failed to create directory");
+                            return;
+                        }
+                        // Refresh list from server:
+                        navigateTo(impl_->currentPath);
+                    });
+                });
+        }
+        else
+        {
+            // TODO:
+        }
+    });
+
     Nui::globalEventContext.executeActiveEventsImmediately();
 }
 
@@ -166,6 +225,56 @@ Session::~Session()
 }
 
 ROAR_PIMPL_SPECIAL_FUNCTIONS_IMPL_NO_DTOR(Session);
+
+void Session::onDirectoryListing(std::optional<std::vector<SharedData::DirectoryEntry>> directoryEntries)
+{
+    if (!directoryEntries)
+    {
+        Log::error("Failed to list directory");
+        return;
+    }
+
+    std::erase_if(*directoryEntries, [](auto const& entry) {
+        return entry.path.filename() == ".";
+    });
+
+    std::vector<NuiFileExplorer::FileGrid::Item> items{};
+    std::transform(begin(*directoryEntries), end(*directoryEntries), std::back_inserter(items), [](auto const& entry) {
+        return NuiFileExplorer::FileGrid::Item{
+            .path = entry.path,
+            .icon =
+                [&entry]() {
+                    const auto type = static_cast<NuiFileExplorer::FileGrid::Item::Type>(entry.type);
+                    if (type == NuiFileExplorer::FileGrid::Item::Type::Directory)
+                        return "nui://app.example/icons/folder_main.png";
+                    if (type == NuiFileExplorer::FileGrid::Item::Type::BlockDevice)
+                        return "nui://app.example/icons/hard_drive.png";
+
+                    if (entry.path.extension() == ".cpp")
+                        return "nui://app.example/icons/cpp_file.png";
+                    // TODO: more icons
+
+                    return "nui://app.example/icons/file.png";
+                }(),
+            .type = static_cast<NuiFileExplorer::FileGrid::Item::Type>(entry.type),
+            .permissions = entry.permissions,
+            .ownerId = entry.uid,
+            .groupId = entry.gid,
+            .atime = entry.atime,
+            .size = entry.size,
+        };
+    });
+
+    impl_->fileGrid.items(items);
+}
+
+void Session::navigateTo(std::filesystem::path const& path)
+{
+    Log::info("Navigating to: {}", path.generic_string());
+    impl_->currentPath = path;
+    impl_->fileEngine->listDirectory(
+        impl_->currentPath, std::bind(&Session::onDirectoryListing, this, std::placeholders::_1));
+}
 
 void Session::onOpen(bool success, std::string const& info)
 {
@@ -194,45 +303,7 @@ void Session::onOpen(bool success, std::string const& info)
                 .engineOptions = std::get<Persistence::SshTerminalEngine>(impl_->engine.engine),
                 .onExit = std::bind(&Session::onFileExplorerConnectionClose, this),
             });
-            // FIXME: path
-
-            impl_->fileEngine->listDirectory("/home/tim", [this](auto const& directoryEntries) {
-                if (!directoryEntries)
-                {
-                    Log::error("Failed to list directory");
-                    return;
-                }
-
-                std::vector<NuiFileExplorer::FileGrid::Item> items{};
-                std::transform(
-                    begin(*directoryEntries), end(*directoryEntries), std::back_inserter(items), [](auto const& entry) {
-                        return NuiFileExplorer::FileGrid::Item{
-                            .path = entry.path,
-                            .icon =
-                                [&entry]() {
-                                    const auto type = static_cast<NuiFileExplorer::FileGrid::Item::Type>(entry.type);
-                                    if (type == NuiFileExplorer::FileGrid::Item::Type::Directory)
-                                        return "nui://app.example/icons/folder_main.png";
-                                    if (type == NuiFileExplorer::FileGrid::Item::Type::BlockDevice)
-                                        return "nui://app.example/icons/hard_drive.png";
-
-                                    if (entry.path.extension() == ".cpp")
-                                        return "nui://app.example/icons/cpp_file.png";
-                                    // TODO: more icons
-
-                                    return "nui://app.example/icons/file.png";
-                                }(),
-                            .type = static_cast<NuiFileExplorer::FileGrid::Item::Type>(entry.type),
-                            .permissions = entry.permissions,
-                            .ownerId = entry.uid,
-                            .groupId = entry.gid,
-                            .atime = entry.atime,
-                            .size = entry.size,
-                        };
-                    });
-
-                impl_->fileGrid.items(items);
-            });
+            navigateTo(opts.defaultDirectory.value_or("/"));
         }
     }
 }
@@ -340,6 +411,7 @@ Nui::ElementRenderer Session::operator()(bool visible)
                 return Nui::val::undefined();
             }));
         })
-    }();
+    }(
+    );
     // clang-format on
 }

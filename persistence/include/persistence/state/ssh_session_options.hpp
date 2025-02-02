@@ -18,6 +18,7 @@ namespace Persistence
         std::optional<std::string> sshKey{std::nullopt};
         std::optional<std::unordered_map<std::string, std::string>> environment;
         bool openSftpByDefault{true};
+        std::optional<std::string> defaultDirectory{std::nullopt};
 
         Referenceable<SshOptions> sshOptions{};
         void useDefaultsFrom(SshSessionOptions const& other);

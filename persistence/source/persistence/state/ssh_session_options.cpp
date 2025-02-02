@@ -14,6 +14,8 @@ namespace Persistence
             sshKey = other.sshKey;
         if (!environment.has_value())
             environment = other.environment;
+        if (!defaultDirectory.has_value())
+            defaultDirectory = other.defaultDirectory;
 
         sshOptions.useDefaultsFrom(other.sshOptions.value());
     }
@@ -26,6 +28,7 @@ namespace Persistence
         TO_JSON_OPTIONAL(j, options, user);
         TO_JSON_OPTIONAL(j, options, sshKey);
         TO_JSON_OPTIONAL(j, options, environment);
+        TO_JSON_OPTIONAL(j, options, defaultDirectory);
         j["openSftpByDefault"] = options.openSftpByDefault;
         j["sshOptions"] = options.sshOptions;
     }
@@ -37,6 +40,7 @@ namespace Persistence
         FROM_JSON_OPTIONAL(j, options, user);
         FROM_JSON_OPTIONAL(j, options, sshKey);
         FROM_JSON_OPTIONAL(j, options, environment);
+        FROM_JSON_OPTIONAL(j, options, defaultDirectory);
         if (j.contains("host"))
             j.at("host").get_to(options.host);
         if (j.contains("sshOptions"))

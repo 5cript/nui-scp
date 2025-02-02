@@ -13,6 +13,7 @@ class SftpFileEngine : public FileEngine
         std::filesystem::path const& path,
         std::function<void(std::optional<std::vector<SharedData::DirectoryEntry>> const&)> onComplete) override;
     void dispose();
+    void createDirectory(std::filesystem::path const& path, std::function<void(bool)> onComplete) override;
 
   private:
     void lazyOpen(std::function<void(std::optional<std::string> const&)> const& onOpen);

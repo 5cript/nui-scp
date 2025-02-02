@@ -2,6 +2,7 @@
 
 #include <frontend/session.hpp>
 #include <frontend/events/frontend_events.hpp>
+#include <frontend/input_dialog.hpp>
 #include <persistence/state_holder.hpp>
 
 #include <nui/frontend/element_renderer.hpp>
@@ -10,7 +11,7 @@
 class SessionArea
 {
   public:
-    SessionArea(Persistence::StateHolder* stateHolder, FrontendEvents* events);
+    SessionArea(Persistence::StateHolder* stateHolder, FrontendEvents* events, InputDialog* newItemAskDialog);
     ROAR_PIMPL_SPECIAL_FUNCTIONS(SessionArea);
 
     Nui::ElementRenderer operator()();

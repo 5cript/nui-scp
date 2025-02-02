@@ -18,19 +18,21 @@ struct SessionArea::Implementation
 {
     Persistence::StateHolder* stateHolder;
     FrontendEvents* events;
+    InputDialog* newItemAskDialog;
     Nui::Observed<std::vector<std::unique_ptr<Session>>> sessions;
     int selected;
 
-    Implementation(Persistence::StateHolder* stateHolder, FrontendEvents* events)
+    Implementation(Persistence::StateHolder* stateHolder, FrontendEvents* events, InputDialog* newItemAskDialog)
         : stateHolder{stateHolder}
         , events{events}
+        , newItemAskDialog{newItemAskDialog}
         , sessions{}
         , selected{0}
     {}
 };
 
-SessionArea::SessionArea(Persistence::StateHolder* stateHolder, FrontendEvents* events)
-    : impl_{std::make_unique<Implementation>(stateHolder, events)}
+SessionArea::SessionArea(Persistence::StateHolder* stateHolder, FrontendEvents* events, InputDialog* newItemAskDialog)
+    : impl_{std::make_unique<Implementation>(stateHolder, events, newItemAskDialog)}
 {
     listen(events->onNewSession, [this](std::string const& name) -> void {
         addSession(name);
@@ -142,6 +144,7 @@ void SessionArea::addSession(std::string const& name)
             impl_->stateHolder,
             engine,
             name,
+            impl_->newItemAskDialog,
             [this](Session const& session) {
                 removeSession([&session](Session const& s) {
                     return &s == &session;

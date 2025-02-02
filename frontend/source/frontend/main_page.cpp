@@ -4,8 +4,9 @@
 #include <frontend/classes.hpp>
 #include <frontend/session_area.hpp>
 #include <frontend/password_prompter.hpp>
-#include <nui/frontend/api/timer.hpp>
 #include <log/log.hpp>
+
+#include <nui/frontend/api/timer.hpp>
 #include <nui/frontend/elements.hpp>
 #include <nui/frontend/attributes.hpp>
 
@@ -16,6 +17,7 @@ struct MainPage::Implementation
     PasswordPrompter prompter;
     Sidebar sidebar;
     Toolbar toolbar;
+    InputDialog newItemAskDialog;
     SessionArea sessionArea;
     Nui::Observed<bool> darkMode;
     Nui::TimerHandle setupWait;
@@ -26,7 +28,8 @@ struct MainPage::Implementation
         , prompter{}
         , sidebar{stateHolder, events}
         , toolbar{stateHolder, events}
-        , sessionArea{stateHolder, events}
+        , newItemAskDialog{"AskDialog"}
+        , sessionArea{stateHolder, events, &newItemAskDialog}
         , darkMode{true}
         , setupWait{}
     {
@@ -65,6 +68,7 @@ Nui::ElementRenderer MainPage::render()
     return div{
         class_ = "main-page-wrap"
     }(
+        impl_->newItemAskDialog(),
         impl_->prompter.dialog(),
         div{
             style = "background-color: var(--sapBackgroundColor); color: var(--sapTextColor);",

@@ -63,6 +63,20 @@ namespace NuiFileExplorer
         FileGrid& operator=(FileGrid&&);
 
         /**
+         * @brief Called when an item is double clicked or ENTER is pressed while an item is selected.
+         *
+         * @param callback
+         */
+        void onActivateItem(std::function<void(Item const&)> const& callback);
+
+        /**
+         * @brief Called when a new item is requested to be created.
+         *
+         * @param callback
+         */
+        void onNewItem(std::function<void(Item::Type)> const& callback);
+
+        /**
          * @brief Sets the items to be displayed in the grid.
          */
         void items(const std::vector<Item>& items, bool sorted = true);

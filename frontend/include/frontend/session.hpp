@@ -4,6 +4,8 @@
 #include <persistence/state/terminal_engine.hpp>
 #include <persistence/state/termios.hpp>
 #include <persistence/state/terminal_options.hpp>
+#include <frontend/input_dialog.hpp>
+#include <shared_data/directory_entry.hpp>
 
 #include <nui/frontend/element_renderer.hpp>
 #include <nui/frontend/utility/stabilize.hpp>
@@ -17,6 +19,7 @@ class Session
         Persistence::StateHolder* stateHolder,
         Persistence::TerminalEngine engine,
         std::string initialName,
+        InputDialog* newItemAskDialog,
         std::function<void(Session const& self)> closeSelf,
         bool visible);
     ROAR_PIMPL_SPECIAL_FUNCTIONS(Session);
@@ -36,6 +39,8 @@ class Session
     void onOpen(bool success, std::string const& info);
     void onFileExplorerConnectionClose();
     void onTerminalConnectionClose();
+    void onDirectoryListing(std::optional<std::vector<SharedData::DirectoryEntry>>);
+    void navigateTo(std::filesystem::path const& path);
 
   private:
     struct Implementation;

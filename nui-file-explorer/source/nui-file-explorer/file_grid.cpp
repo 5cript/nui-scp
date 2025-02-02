@@ -60,9 +60,18 @@ namespace NuiFileExplorer
                 // Soft Link ?
                 // Hard Link ?
             },
-            [](std::string const& item) {
+            [this](std::string const& item) {
                 Nui::Console::log("New clicked: ", item);
-                // TODO:
+                if (item == "File")
+                {
+                    if (onNewItem)
+                        onNewItem(Item::Type::Regular);
+                }
+                else if (item == "Folder")
+                {
+                    if (onNewItem)
+                        onNewItem(Item::Type::Directory);
+                }
             },
             [this]() {
                 sortMenu.close();
@@ -109,6 +118,9 @@ namespace NuiFileExplorer
             },
             "View",
         };
+
+        std::function<void(Item const&)> onActivateItem;
+        std::function<void(Item::Type)> onNewItem;
 
         void sortItems()
         {
@@ -195,6 +207,11 @@ namespace NuiFileExplorer
             Nui::globalEventContext.executeActiveEventsImmediately();
     }
 
+    void FileGrid::onActivateItem(std::function<void(Item const&)> const& callback)
+    {
+        impl_->onActivateItem = callback;
+    }
+
     Nui::ElementRenderer FileGrid::iconFlavor()
     {
         using namespace Nui;
@@ -222,6 +239,11 @@ namespace NuiFileExplorer
                             return "nui-file-grid-item-icons selected";
                         return "nui-file-grid-item-icons";
                     }),
+                    onDblClick = [this, &item](Nui::val event){
+                        event.call<void>("stopPropagation");
+                        if (impl_->onActivateItem)
+                            impl_->onActivateItem(item.item);
+                    },
                     onClick = [this, &item](Nui::val event){
                         event.call<void>("stopPropagation");
 
@@ -355,6 +377,11 @@ namespace NuiFileExplorer
                 }
             )
         );
+    }
+
+    void FileGrid::onNewItem(std::function<void(Item::Type)> const& callback)
+    {
+        impl_->onNewItem = callback;
     }
 
     Nui::ElementRenderer FileGrid::headMenu()

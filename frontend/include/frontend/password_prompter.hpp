@@ -14,10 +14,6 @@ class PasswordPrompter
     Nui::ElementRenderer dialog();
 
   private:
-    void closeDialog(std::string const& password);
-    void confirm();
-
-  private:
     struct Implementation;
     std::unique_ptr<Implementation> impl_;
 };

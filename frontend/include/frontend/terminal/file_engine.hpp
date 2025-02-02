@@ -19,4 +19,6 @@ class FileEngine
     virtual void listDirectory(
         std::filesystem::path const& path,
         std::function<void(std::optional<std::vector<SharedData::DirectoryEntry>> const&)> onComplete) = 0;
+
+    virtual void createDirectory(std::filesystem::path const& path, std::function<void(bool)> onComplete) = 0;
 };
