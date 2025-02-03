@@ -31,6 +31,10 @@ class ExecutingTerminalEngine : public TerminalEngine
     void write(std::string const& data) override;
     void resize(int cols, int rows) override;
     std::string id() const;
+    std::string engineName() const override
+    {
+        return "local";
+    }
 
     void setStdoutHandler(std::function<void(std::string const&)> handler) override;
     void setStderrHandler(std::function<void(std::string const&)> handler) override;

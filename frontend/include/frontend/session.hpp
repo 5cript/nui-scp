@@ -41,6 +41,7 @@ class Session
     void onTerminalConnectionClose();
     void onDirectoryListing(std::optional<std::vector<SharedData::DirectoryEntry>>);
     void navigateTo(std::filesystem::path const& path);
+    void openSftp();
 
   private:
     struct Implementation;

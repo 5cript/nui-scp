@@ -276,10 +276,32 @@ void Session::navigateTo(std::filesystem::path const& path)
         impl_->currentPath, std::bind(&Session::onDirectoryListing, this, std::placeholders::_1));
 }
 
+void Session::openSftp()
+{
+    if (impl_->terminal.value() && impl_->terminal.value()->engine().engineName() == "ssh")
+    {
+        auto const& opts = std::get<Persistence::SshTerminalEngine>(impl_->engine.engine).sshSessionOptions.value();
+        if (opts.openSftpByDefault)
+        {
+            Log::info("Opening SFTP by default");
+            impl_->fileEngine = std::make_unique<SftpFileEngine>(SshTerminalEngine::Settings{
+                .engineOptions = std::get<Persistence::SshTerminalEngine>(impl_->engine.engine),
+                .onExit = std::bind(&Session::onFileExplorerConnectionClose, this),
+            });
+            navigateTo(opts.defaultDirectory.value_or("/"));
+        }
+    }
+    else
+    {
+        Log::error("Cannot open SFTP for non-ssh terminal");
+    }
+}
+
 void Session::onOpen(bool success, std::string const& info)
 {
     if (!success)
     {
+        Log::info("Failed to create instance: {}", info);
         impl_->terminal = std::make_unique<Terminal>(std::make_unique<UserControlEngine>(UserControlEngine::Settings{
             .onInput =
                 [this](std::string const& input) {
@@ -294,17 +316,11 @@ void Session::onOpen(bool success, std::string const& info)
     }
     else
     {
+        Log::info("Terminal opened successfully");
         impl_->terminal.value()->focus();
-        auto const& opts = std::get<Persistence::SshTerminalEngine>(impl_->engine.engine).sshSessionOptions.value();
-        if (opts.openSftpByDefault)
-        {
-            Log::info("Opening SFTP by default");
-            impl_->fileEngine = std::make_unique<SftpFileEngine>(SshTerminalEngine::Settings{
-                .engineOptions = std::get<Persistence::SshTerminalEngine>(impl_->engine.engine),
-                .onExit = std::bind(&Session::onFileExplorerConnectionClose, this),
-            });
-            navigateTo(opts.defaultDirectory.value_or("/"));
-        }
+
+        if (impl_->terminal.value() && impl_->terminal.value()->engine().engineName() == "ssh")
+            openSftp();
     }
 }
 

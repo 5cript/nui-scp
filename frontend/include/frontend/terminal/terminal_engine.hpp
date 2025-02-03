@@ -9,6 +9,7 @@ class TerminalEngine
     virtual void dispose(/* parameters? */) = 0;
     virtual void write(std::string const& data) = 0;
     virtual void resize(int cols, int rows) = 0;
+    virtual std::string engineName() const = 0;
     virtual ~TerminalEngine() = default;
 
     virtual void setStdoutHandler(std::function<void(std::string const&)> handler) = 0;
