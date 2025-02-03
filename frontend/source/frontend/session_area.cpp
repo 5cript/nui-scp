@@ -143,6 +143,7 @@ void SessionArea::addSession(std::string const& name)
         impl_->sessions.emplace_back(std::make_unique<Session>(
             impl_->stateHolder,
             engine,
+            state.uiOptions,
             name,
             impl_->newItemAskDialog,
             [this](Session const& session) {

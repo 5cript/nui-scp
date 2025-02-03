@@ -14,6 +14,7 @@ namespace Persistence
         j["termios"] = state.termios;
         j["sshOptions"] = state.sshOptions;
         j["sshSessionOptions"] = state.sshSessionOptions;
+        j["uiOptions"] = state.uiOptions;
         j["logLevel"] = [&]() {
             return Log::levelToString(state.logLevel);
         }();
@@ -34,6 +35,9 @@ namespace Persistence
 
         if (j.contains("sshSessionOptions"))
             j.at("sshSessionOptions").get_to(state.sshSessionOptions);
+
+        if (j.contains("uiOptions"))
+            j.at("uiOptions").get_to(state.uiOptions);
 
         if (j.contains("logLevel"))
             state.logLevel = Log::levelFromString(j.at("logLevel").get<std::string>());

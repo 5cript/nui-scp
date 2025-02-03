@@ -55,7 +55,12 @@ namespace NuiFileExplorer
             std::uint64_t size = 0;
         };
 
-        FileGrid();
+        struct Settings
+        {
+            bool pathBarOnTop = false;
+        };
+
+        FileGrid(Settings settings);
         ~FileGrid();
         FileGrid(const FileGrid&) = delete;
         FileGrid& operator=(const FileGrid&) = delete;
@@ -111,10 +116,30 @@ namespace NuiFileExplorer
 
         Nui::ElementRenderer operator()(std::vector<Nui::Attribute>&& attributes = {});
 
+        /**
+         * @brief Set the Path in an input box.
+         */
+        void path(std::filesystem::path const& path);
+
+        /**
+         * @brief Set a callback for when the user enters a new path (not triggered by the setPath method).
+         *
+         * @param callback Called when the user enters a new path (not triggered by the setPath method).
+         */
+        void onPathChange(std::function<void(std::filesystem::path const&)> const& callback);
+
+        /**
+         * @brief Set a callback for when the refresh button is clicked.
+         *
+         * @param callback Called when the refresh button is clicked
+         */
+        void onRefresh(std::function<void()> const& callback);
+
       private:
         Nui::ElementRenderer iconFlavor();
         Nui::ElementRenderer tableFlavor();
         Nui::ElementRenderer headMenu();
+        Nui::ElementRenderer pathBar();
         Nui::ElementRenderer filter();
         Nui::ElementRenderer contextMenu();
         void onContextMenu(std::optional<Item> const& item, Nui::val event);

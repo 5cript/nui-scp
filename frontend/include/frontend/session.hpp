@@ -18,6 +18,7 @@ class Session
     Session(
         Persistence::StateHolder* stateHolder,
         Persistence::TerminalEngine engine,
+        Persistence::UiOptions uiOptions,
         std::string initialName,
         InputDialog* newItemAskDialog,
         std::function<void(Session const& self)> closeSelf,
@@ -40,7 +41,7 @@ class Session
     void onFileExplorerConnectionClose();
     void onTerminalConnectionClose();
     void onDirectoryListing(std::optional<std::vector<SharedData::DirectoryEntry>>);
-    void navigateTo(std::filesystem::path const& path);
+    void navigateTo(std::filesystem::path path);
     void openSftp();
 
   private:

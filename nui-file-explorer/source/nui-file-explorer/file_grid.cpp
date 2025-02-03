@@ -122,6 +122,10 @@ namespace NuiFileExplorer
         std::function<void(Item const&)> onActivateItem{};
         std::function<void(Item::Type)> onNewItem{};
         std::weak_ptr<Nui::Dom::BasicElement> contextMenuView{};
+        Nui::Observed<std::filesystem::path> path{};
+        std::function<void(std::filesystem::path const&)> onPathChange{};
+        std::function<void()> onRefresh{};
+        Settings settings{};
 
         void sortItems()
         {
@@ -132,10 +136,14 @@ namespace NuiFileExplorer
                 return lhs.item.path.filename().string() < rhs.item.path.filename().string();
             });
         }
+
+        Implementation(Settings settings)
+            : settings{std::move(settings)}
+        {}
     };
 
-    FileGrid::FileGrid()
-        : impl_(std::make_unique<Implementation>())
+    FileGrid::FileGrid(Settings settings)
+        : impl_(std::make_unique<Implementation>(std::move(settings)))
     {}
     FileGrid::~FileGrid() = default;
     FileGrid::FileGrid(FileGrid&&) = default;
@@ -251,6 +259,22 @@ namespace NuiFileExplorer
             Nui::Console::log(event);
             return;
         }
+    }
+
+    void FileGrid::path(std::filesystem::path const& path)
+    {
+        impl_->path = path;
+        // Do NOT call onPathChange here. That is intentional.
+    }
+
+    void FileGrid::onPathChange(std::function<void(std::filesystem::path const&)> const& callback)
+    {
+        impl_->onPathChange = callback;
+    }
+
+    void FileGrid::onRefresh(std::function<void()> const& callback)
+    {
+        impl_->onRefresh = callback;
     }
 
     Nui::ElementRenderer FileGrid::contextMenu()
@@ -458,6 +482,11 @@ namespace NuiFileExplorer
         return div {
             std::move(attributes)
         }(
+            [this]() -> Nui::ElementRenderer{
+                if (impl_->settings.pathBarOnTop)
+                    return pathBar();
+                return nil();
+            }(),
             headMenu(),
             div{
                 style = "width: 100%; flex-grow: 1; position: relative; overflow-y: scroll"
@@ -478,7 +507,12 @@ namespace NuiFileExplorer
                         return div{}();
                     }
                 )
-            )
+            ),
+            [this]() -> Nui::ElementRenderer{
+                if (!impl_->settings.pathBarOnTop)
+                    return pathBar();
+                return nil();
+            }()
         );
     }
 
@@ -502,6 +536,46 @@ namespace NuiFileExplorer
             impl_->sortMenu(),
             impl_->viewMenu(),
             filter()
+        );
+        // clang-format on
+    }
+
+    Nui::ElementRenderer FileGrid::pathBar()
+    {
+        using namespace Nui;
+        using namespace Nui::Elements;
+        using namespace Nui::Attributes;
+        using Nui::Elements::div;
+
+        // clang-format off
+        return div {
+            class_ = "nui-file-grid-path-bar",
+            style = [this](){
+                if (impl_->settings.pathBarOnTop)
+                    return "border-bottom: 1px solid var(--nui-file-grid-border-color)";
+                return "border-top: 1px solid var(--nui-file-grid-border-color)";
+            }()
+        }(
+            div{
+                /*refresh*/
+                onClick = [this](){
+                    if (impl_->onRefresh)
+                        impl_->onRefresh();
+                }
+            }(),
+            input{
+                type = "text",
+                "value"_prop = observe(impl_->path).generate([this](){
+                    return impl_->path->generic_string();
+                }),
+                "keyup"_event = [this](Nui::val event){
+                    if (event["key"].as<std::string>() == "Enter")
+                    {
+                        if (impl_->onPathChange)
+                            impl_->onPathChange(std::filesystem::path{event["target"]["value"].as<std::string>()});
+                    }
+                }
+            }()
         );
         // clang-format on
     }

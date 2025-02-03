@@ -43,10 +43,12 @@ struct Session::Implementation
     std::filesystem::path currentPath;
     std::unique_ptr<FileEngine> fileEngine;
     InputDialog* newItemAskDialog;
+    std::filesystem::path preNavigatePath;
 
     Implementation(
         Persistence::StateHolder* stateHolder,
         Persistence::TerminalEngine engine,
+        Persistence::UiOptions uiOptions,
         std::string initialName,
         InputDialog* newItemAskDialog,
         std::function<void(Session const& self)> closeSelf,
@@ -61,11 +63,14 @@ struct Session::Implementation
         , closeSelf{std::move(closeSelf)}
         , isVisible{visible}
         , terminalElement{}
-        , fileGrid{}
+        , fileGrid{{
+              .pathBarOnTop = uiOptions.fileGridPathBarOnTop,
+          }}
         , fileExplorer{}
         , currentPath{}
         , fileEngine{}
         , newItemAskDialog{newItemAskDialog}
+        , preNavigatePath{}
     {}
 };
 
@@ -112,6 +117,7 @@ auto Session::makeFileExplorerElement() -> Nui::ElementRenderer
 Session::Session(
     Persistence::StateHolder* stateHolder,
     Persistence::TerminalEngine engine,
+    Persistence::UiOptions uiOptions,
     std::string initialName,
     InputDialog* newItemAskDialog,
     std::function<void(Session const& self)> closeSelf,
@@ -119,6 +125,7 @@ Session::Session(
     : impl_{std::make_unique<Implementation>(
           stateHolder,
           std::move(engine),
+          std::move(uiOptions),
           std::move(initialName),
           newItemAskDialog,
           std::move(closeSelf),
@@ -213,6 +220,14 @@ Session::Session(
         }
     });
 
+    impl_->fileGrid.onRefresh([this]() {
+        navigateTo(impl_->currentPath);
+    });
+
+    impl_->fileGrid.onPathChange([this](std::filesystem::path const& path) {
+        navigateTo(path);
+    });
+
     Nui::globalEventContext.executeActiveEventsImmediately();
 }
 
@@ -231,6 +246,9 @@ void Session::onDirectoryListing(std::optional<std::vector<SharedData::Directory
     if (!directoryEntries)
     {
         Log::error("Failed to list directory");
+        // undo the navigation:
+        impl_->currentPath = impl_->preNavigatePath;
+        navigateTo(impl_->currentPath);
         return;
     }
 
@@ -268,12 +286,16 @@ void Session::onDirectoryListing(std::optional<std::vector<SharedData::Directory
     impl_->fileGrid.items(items);
 }
 
-void Session::navigateTo(std::filesystem::path const& path)
+void Session::navigateTo(std::filesystem::path path)
 {
+    path = path.lexically_normal();
+
     Log::info("Navigating to: {}", path.generic_string());
+    impl_->preNavigatePath = impl_->currentPath;
     impl_->currentPath = path;
     impl_->fileEngine->listDirectory(
         impl_->currentPath, std::bind(&Session::onDirectoryListing, this, std::placeholders::_1));
+    impl_->fileGrid.path(path.generic_string());
 }
 
 void Session::openSftp()
