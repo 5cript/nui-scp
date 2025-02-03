@@ -59,4 +59,5 @@ body {
     --nui-file-grid-dropdown-color: var(--sapButton_TextColor);
     --nui-file-grid-dropdown-item-color: var(--sapTextColor);
     --nui-file-grid-dropdown-content-font-size: var(--sapFontLargeSize);
+    --nui-file-grid-context-menu-background: var(--sapGroup_ContentBackground);
 }

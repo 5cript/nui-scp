@@ -62,11 +62,12 @@ namespace NuiFileExplorer
         using Nui::Elements::div;
 
         attributes.emplace_back(class_ = "nui-file-grid-head-dropdown");
-        attributes.emplace_back(onClick = [this]() {
+        attributes.emplace_back(onClick = [this](Nui::val event) {
             // open or close the dropdown
             impl_->isOpen = !impl_->isOpen.value();
             if (impl_->isOpen)
                 impl_->onOpen();
+            event.call<void>("stopPropagation");
         });
 
         // clang-format off

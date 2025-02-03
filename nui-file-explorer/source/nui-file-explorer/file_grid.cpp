@@ -119,8 +119,9 @@ namespace NuiFileExplorer
             "View",
         };
 
-        std::function<void(Item const&)> onActivateItem;
-        std::function<void(Item::Type)> onNewItem;
+        std::function<void(Item const&)> onActivateItem{};
+        std::function<void(Item::Type)> onNewItem{};
+        std::weak_ptr<Nui::Dom::BasicElement> contextMenuView{};
 
         void sortItems()
         {
@@ -207,9 +208,89 @@ namespace NuiFileExplorer
             Nui::globalEventContext.executeActiveEventsImmediately();
     }
 
+    void FileGrid::onUneventfulClick()
+    {
+        deselectAll();
+        closeMenus();
+    }
+
+    void FileGrid::closeMenus()
+    {
+        impl_->newItemMenu.close();
+        impl_->sortMenu.close();
+        impl_->viewMenu.close();
+
+        if (const auto menu = impl_->contextMenuView.lock(); menu)
+            menu->val()["style"].set("display", "none");
+    }
+
     void FileGrid::onActivateItem(std::function<void(Item const&)> const& callback)
     {
         impl_->onActivateItem = callback;
+    }
+
+    void FileGrid::onContextMenu(std::optional<Item> const& item, Nui::val event)
+    {
+        using namespace std::string_literals;
+
+        event.call<void>("stopPropagation");
+        event.call<void>("preventDefault");
+        if (const auto menu = impl_->contextMenuView.lock(); menu)
+        {
+            const int targetOffsetTop = event["target"]["offsetTop"].as<int>();
+            const int targetOffsetLeft = event["target"]["offsetLeft"].as<int>();
+            const int offsetY = event["offsetY"].as<int>();
+            const int offsetX = event["offsetX"].as<int>();
+
+            const auto left = targetOffsetLeft + offsetX;
+            const auto top = targetOffsetTop + offsetY;
+
+            menu->val()["style"].set("display", "block");
+            menu->val()["style"].set("top", std::to_string(top) + "px");
+            menu->val()["style"].set("left", std::to_string(left) + "px");
+            Nui::Console::log(event);
+            return;
+        }
+    }
+
+    Nui::ElementRenderer FileGrid::contextMenu()
+    {
+        using namespace Nui;
+        using namespace Nui::Elements;
+        using namespace Nui::Attributes;
+        using Nui::Elements::div;
+
+        // clang-format off
+        return div{
+            reference = impl_->contextMenuView,
+            class_ = "nui-file-grid-context-menu",
+        }(
+            div{
+                style = Style{
+                    "padding"_style = "0.5em",
+                    "border-bottom"_style = "1px solid var(--sapTextColor)",
+                }
+            }(
+                "Item 1"
+            ),
+            div{
+                style = Style{
+                    "padding"_style = "0.5em",
+                    "border-bottom"_style = "1px solid var(--sapTextColor)",
+                }
+            }(
+                "Item 2"
+            ),
+            div{
+                style = Style{
+                    "padding"_style = "0.5em",
+                    "border-bottom"_style = "1px solid var(--sapTextColor)",
+                }
+            }(
+                "Item 3"
+            )
+        );
+        // clang-format on
     }
 
     Nui::ElementRenderer FileGrid::iconFlavor()
@@ -229,7 +310,10 @@ namespace NuiFileExplorer
                 })
             },
             onClick = [this](Nui::val) {
-                deselectAll();
+                onUneventfulClick();
+            },
+            "contextmenu"_event = [this](Nui::val event) {
+                onContextMenu(std::nullopt, event);
             }
         }(
             impl_->items.map([this](auto, auto const& item){
@@ -241,11 +325,16 @@ namespace NuiFileExplorer
                     }),
                     onDblClick = [this, &item](Nui::val event){
                         event.call<void>("stopPropagation");
+                        closeMenus();
                         if (impl_->onActivateItem)
                             impl_->onActivateItem(item.item);
                     },
+                    "contextmenu"_event = [this, item = item.item](Nui::val event){
+                        onContextMenu(item, event);
+                    },
                     onClick = [this, &item](Nui::val event){
                         event.call<void>("stopPropagation");
+                        closeMenus();
 
                         if (event["ctrlKey"].as<bool>())
                         {
@@ -354,10 +443,16 @@ namespace NuiFileExplorer
 
     Nui::ElementRenderer FileGrid::operator()(std::vector<Nui::Attribute>&& attributes)
     {
+        using namespace std::string_literals;
         using namespace Nui;
         using namespace Nui::Elements;
         using namespace Nui::Attributes;
         using Nui::Elements::div;
+
+        attributes.emplace_back(onClick = [this](Nui::val) {
+            onUneventfulClick();
+        });
+        attributes.emplace_back(class_ = "nui-file-grid");
 
         // clang-format off
         return div {
@@ -365,16 +460,24 @@ namespace NuiFileExplorer
         }(
             headMenu(),
             div{
-                style = "width: 100%; height: 100%; flex-grow: 1"
+                style = "width: 100%; flex-grow: 1; position: relative; overflow-y: scroll"
             }(
-                observe(impl_->flavor),
-                [this]() -> Nui::ElementRenderer {
-                    if (impl_->flavor.value() == FileGridFlavor::Icons)
-                        return iconFlavor();
-                    if (impl_->flavor.value() == FileGridFlavor::Table)
-                        return tableFlavor();
-                    return div{}();
-                }
+                contextMenu(),
+                div{
+                    style = "width: 100%; height: 100%",
+                    "contextmenu"_event = [this](Nui::val event) {
+                        onContextMenu(std::nullopt, event);
+                    }
+                }(
+                    observe(impl_->flavor),
+                    [this]() -> Nui::ElementRenderer {
+                        if (impl_->flavor.value() == FileGridFlavor::Icons)
+                            return iconFlavor();
+                        if (impl_->flavor.value() == FileGridFlavor::Table)
+                            return tableFlavor();
+                        return div{}();
+                    }
+                )
             )
         );
     }

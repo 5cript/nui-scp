@@ -99,6 +99,16 @@ namespace NuiFileExplorer
 
         void selectAll(bool rerender = false);
 
+        /**
+         * @brief Use this to close all menus and deselect all items.
+         */
+        void onUneventfulClick();
+
+        /**
+         * @brief Closes all menus without deselecting items.
+         */
+        void closeMenus();
+
         Nui::ElementRenderer operator()(std::vector<Nui::Attribute>&& attributes = {});
 
       private:
@@ -106,6 +116,8 @@ namespace NuiFileExplorer
         Nui::ElementRenderer tableFlavor();
         Nui::ElementRenderer headMenu();
         Nui::ElementRenderer filter();
+        Nui::ElementRenderer contextMenu();
+        void onContextMenu(std::optional<Item> const& item, Nui::val event);
 
       private:
         struct Implementation;
