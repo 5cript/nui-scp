@@ -57,7 +57,7 @@ namespace Persistence
                         Log::warn("Config file does not exist, creating it with defaults.");
                         return nlohmann::json(nullptr);
                     }
-                    return nlohmann::json::parse(reader);
+                    return nlohmann::json::parse(reader, nullptr, true, true);
                 }
                 catch (std::exception const& e)
                 {

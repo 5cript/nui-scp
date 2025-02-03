@@ -120,7 +120,8 @@
         border-radius: var(--nui-file-grid-border-radius);
         padding: 4px;
         height: 32px;
-        width: 256px;
+        min-width: 256px;
+        flex-grow: 1;
         border: 1px solid var(--nui-file-grid-border-color);
         box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
         box-shadow: none;

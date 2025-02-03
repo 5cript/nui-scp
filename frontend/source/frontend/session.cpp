@@ -44,6 +44,7 @@ struct Session::Implementation
     std::unique_ptr<FileEngine> fileEngine;
     InputDialog* newItemAskDialog;
     std::filesystem::path preNavigatePath;
+    Persistence::UiOptions uiOptions;
 
     Implementation(
         Persistence::StateHolder* stateHolder,
@@ -71,6 +72,7 @@ struct Session::Implementation
         , fileEngine{}
         , newItemAskDialog{newItemAskDialog}
         , preNavigatePath{}
+        , uiOptions{uiOptions}
     {}
 };
 
@@ -257,31 +259,33 @@ void Session::onDirectoryListing(std::optional<std::vector<SharedData::Directory
     });
 
     std::vector<NuiFileExplorer::FileGrid::Item> items{};
-    std::transform(begin(*directoryEntries), end(*directoryEntries), std::back_inserter(items), [](auto const& entry) {
-        return NuiFileExplorer::FileGrid::Item{
-            .path = entry.path,
-            .icon =
-                [&entry]() {
+    std::transform(
+        begin(*directoryEntries), end(*directoryEntries), std::back_inserter(items), [this](auto const& entry) {
+            return NuiFileExplorer::FileGrid::Item{
+                .path = entry.path,
+                .icon = [&entry, this]() -> std::string {
                     const auto type = static_cast<NuiFileExplorer::FileGrid::Item::Type>(entry.type);
                     if (type == NuiFileExplorer::FileGrid::Item::Type::Directory)
                         return "nui://app.example/icons/folder_main.png";
                     if (type == NuiFileExplorer::FileGrid::Item::Type::BlockDevice)
                         return "nui://app.example/icons/hard_drive.png";
 
-                    if (entry.path.extension() == ".cpp")
-                        return "nui://app.example/icons/cpp_file.png";
-                    // TODO: more icons
+                    if (impl_->uiOptions.fileGridExtensionIcons.contains(entry.path.extension().string()))
+                    {
+                        return "nui://app.example/" +
+                            impl_->uiOptions.fileGridExtensionIcons.at(entry.path.extension().string());
+                    }
 
                     return "nui://app.example/icons/file.png";
                 }(),
-            .type = static_cast<NuiFileExplorer::FileGrid::Item::Type>(entry.type),
-            .permissions = entry.permissions,
-            .ownerId = entry.uid,
-            .groupId = entry.gid,
-            .atime = entry.atime,
-            .size = entry.size,
-        };
-    });
+                .type = static_cast<NuiFileExplorer::FileGrid::Item::Type>(entry.type),
+                .permissions = entry.permissions,
+                .ownerId = entry.uid,
+                .groupId = entry.gid,
+                .atime = entry.atime,
+                .size = entry.size,
+            };
+        });
 
     impl_->fileGrid.items(items);
 }
