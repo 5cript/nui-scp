@@ -10,7 +10,7 @@ namespace Persistence
         j = nlohmann::json::object();
 
         j["terminalOptions"] = state.terminalOptions;
-        j["terminalEngines"] = state.terminalEngines;
+        j["sessions"] = state.sessions;
         j["termios"] = state.termios;
         j["sshOptions"] = state.sshOptions;
         j["sshSessionOptions"] = state.sshSessionOptions;
@@ -24,8 +24,8 @@ namespace Persistence
         if (j.contains("terminalOptions"))
             j.at("terminalOptions").get_to(state.terminalOptions);
 
-        if (j.contains("terminalEngines"))
-            j.at("terminalEngines").get_to(state.terminalEngines);
+        if (j.contains("sessions"))
+            j.at("sessions").get_to(state.sessions);
 
         if (j.contains("termios"))
             j.at("termios").get_to(state.termios);

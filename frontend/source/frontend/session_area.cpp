@@ -44,9 +44,9 @@ SessionArea::SessionArea(Persistence::StateHolder* stateHolder, FrontendEvents* 
 
         auto const& state = holder.stateCache();
 
-        for (auto const& [name, engine] : state.terminalEngines)
+        for (auto const& [name, session] : state.sessions)
         {
-            if (engine.startupSession && engine.startupSession.value())
+            if (session.startupSession && session.startupSession.value())
                 addSession(name);
         }
     });
@@ -112,8 +112,8 @@ void SessionArea::addSession(std::string const& name)
 
         auto const& state = holder.stateCache();
 
-        auto iter = state.terminalEngines.find(name);
-        if (iter == end(state.terminalEngines))
+        auto iter = state.sessions.find(name);
+        if (iter == end(state.sessions))
         {
             Log::error("No engine found for name: {}", name);
             return;

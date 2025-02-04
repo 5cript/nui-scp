@@ -3,8 +3,8 @@ import {
     Widget
 } from '@lumino/widgets';
 
-class FileExplorer extends Widget {
-    static menuFocus: FileExplorer | null;
+class SessionOptions extends Widget {
+    static menuFocus: SessionOptions | null;
     deleter: () => any | undefined;
 
     constructor(name: string, factory: () => HTMLElement, deleter: () => any) {
@@ -13,8 +13,8 @@ class FileExplorer extends Widget {
 
         this.setFlag(Widget.Flag.DisallowLayout);
         this.title.label = name;
-        this.title.closable = true;
-        this.title.caption = `File Explorer`;
+        this.title.closable = false;
+        this.title.caption = `Pending File Operation Queue`;
     }
 
     protected onActivateRequest(msg: Message): void {
@@ -24,8 +24,8 @@ class FileExplorer extends Widget {
     }
 
     protected onBeforeDetach(msg: Message): void {
-        if (FileExplorer.menuFocus === this) {
-            FileExplorer.menuFocus = null;
+        if (SessionOptions.menuFocus === this) {
+            SessionOptions.menuFocus = null;
         }
     }
 
@@ -34,4 +34,4 @@ class FileExplorer extends Widget {
     }
 }
 
-export { FileExplorer };
+export { SessionOptions };

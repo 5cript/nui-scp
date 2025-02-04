@@ -121,11 +121,11 @@ namespace Persistence
             mustSave = true;
         }
 
-        if (stateCache_.terminalEngines.empty())
+        if (stateCache_.sessions.empty())
         {
             Log::warn("Config file misses terminal engines, adding defaults.");
 #ifdef _WIN32
-            stateCache_.terminalEngines["msys2_default"] = TerminalEngine{
+            stateCache_.sessions["msys2_default"] = TerminalEngine{
                 .type = "shell",
                 .terminalOptions = Reference{.ref = "default"},
                 .termios = Reference{.ref = "default"},
@@ -134,7 +134,7 @@ namespace Persistence
 #elif __APPLE__
 // nothing
 #else
-            stateCache_.terminalEngines["bash_default"] = TerminalEngine{
+            stateCache_.sessions["bash_default"] = TerminalEngine{
                 .type = "shell",
                 .terminalOptions = Reference{.ref = "default"},
                 .termios = Reference{.ref = "default"},

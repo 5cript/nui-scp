@@ -27,10 +27,10 @@ struct Toolbar::Implementation
         Log::info("Toolbar::Implementation()");
     }
 
-    void updateEnginesList();
+    void updateSessionsList();
 };
 
-void Toolbar::Implementation::updateEnginesList()
+void Toolbar::Implementation::updateSessionsList()
 {
     stateHolder->load([this](bool success, Persistence::StateHolder& holder) {
         if (!success)
@@ -39,7 +39,7 @@ void Toolbar::Implementation::updateEnginesList()
         auto const& state = holder.stateCache();
 
         std::vector<std::string> engines;
-        for (auto const& [name, engine] : state.terminalEngines)
+        for (auto const& [name, engine] : state.sessions)
             engines.push_back(name);
 
         {
@@ -56,7 +56,7 @@ Toolbar::Toolbar(Persistence::StateHolder* stateHolder, FrontendEvents* events)
     : impl_(std::make_unique<Implementation>(stateHolder, events))
 {
     Log::info("Toolbar::Toolbar");
-    impl_->updateEnginesList();
+    impl_->updateSessionsList();
 }
 
 ROAR_PIMPL_SPECIAL_FUNCTIONS_IMPL(Toolbar);
