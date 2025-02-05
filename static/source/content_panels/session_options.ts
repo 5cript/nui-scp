@@ -1,36 +1,15 @@
 import { Message } from '@lumino/messaging';
 import {
-    Widget
-} from '@lumino/widgets';
+    NuiWidget
+} from './nui_widget';
 
-class SessionOptions extends Widget {
-    static menuFocus: SessionOptions | null;
-    deleter: () => any | undefined;
+class SessionOptions extends NuiWidget {
+    constructor(name: string, factory: () => HTMLElement | undefined, deleter: () => any) {
+        super(name, factory, deleter, 'session-options');
 
-    constructor(name: string, factory: () => HTMLElement, deleter: () => any) {
-        super({ node: factory() });
-        this.deleter = deleter;
-
-        this.setFlag(Widget.Flag.DisallowLayout);
-        this.title.label = name;
+        this.title.label = 'Session Options';
         this.title.closable = false;
-        this.title.caption = `Pending File Operation Queue`;
-    }
-
-    protected onActivateRequest(msg: Message): void {
-        if (this.isAttached) {
-            // this.inputNode.focus();
-        }
-    }
-
-    protected onBeforeDetach(msg: Message): void {
-        if (SessionOptions.menuFocus === this) {
-            SessionOptions.menuFocus = null;
-        }
-    }
-
-    protected onAfterDetach(msg: Message): void {
-        this.deleter();
+        this.title.caption = 'Session Options';
     }
 }
 

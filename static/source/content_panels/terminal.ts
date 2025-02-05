@@ -1,30 +1,15 @@
+import { Message } from '@lumino/messaging';
 import {
-    Widget
-} from '@lumino/widgets';
+    NuiWidget
+} from './nui_widget';
 
-class Terminal extends Widget {
-    static menuFocus: Terminal | null;
+class Terminal extends NuiWidget {
+    constructor(name: string, factory: () => HTMLElement | undefined, deleter: () => any) {
+        super(name, factory, deleter, 'terminal');
 
-    constructor(name: string, factory: () => HTMLElement) {
-        super({ node: factory() });
-        this.setFlag(Widget.Flag.DisallowLayout);
-        //this.addClass('content');
-        this.title.label = name;
-        this.title.closable = false;
-        this.title.caption = `Long description for: ${name}`;
-    }
-
-    protected onActivateRequest(msg: Message): void {
-        if (this.isAttached) {
-            // focus terminal:
-            //this.inputNode.focus();
-        }
-    }
-
-    protected onBeforeDetach(msg: Message): void {
-        if (Terminal.menuFocus === this) {
-            Terminal.menuFocus = null;
-        }
+        this.title.label = 'Terminal';
+        this.title.closable = true;
+        this.title.caption = 'Terminal';
     }
 }
 

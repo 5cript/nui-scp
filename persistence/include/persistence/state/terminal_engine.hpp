@@ -64,7 +64,7 @@ namespace Persistence
         Referenceable<TerminalOptions> terminalOptions{};
         Referenceable<Termios> termios{};
         std::variant<std::monostate, ExecutingTerminalEngine, SshTerminalEngine> engine{};
-        std::optional<nlohmann::json> layout{};
+        std::optional<std::unordered_map<std::string, nlohmann::json>> layouts{};
     };
     void to_json(nlohmann::json& j, TerminalEngine const& engine);
     void from_json(nlohmann::json const& j, TerminalEngine& engine);

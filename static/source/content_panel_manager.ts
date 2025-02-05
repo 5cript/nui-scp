@@ -8,20 +8,24 @@ import {
     DockPanel,
     Widget,
     SplitLayout,
-    DockLayout,
+    DockLayout
 } from '@lumino/widgets';
 
 class ContentPanelManager {
     panels: Map<string, ContentPanel>;
+    terminalFactory: () => HTMLElement | undefined;
+    terminalDelete: () => any;
     fileExplorerFactory: () => HTMLElement | undefined;
-    fileExplorerDelete: () => any | undefined;
+    fileExplorerDelete: () => any;
     operationQueueFactory: () => HTMLElement | undefined;
-    operationQueueDelete: () => any | undefined;
+    operationQueueDelete: () => any;
     sessionOptionsFactory: () => HTMLElement | undefined;
-    sessionOptionsDelete: () => any | undefined;
+    sessionOptionsDelete: () => any;
 
     constructor() {
         this.panels = new Map<string, ContentPanel>();
+        this.terminalDelete = () => { return undefined; };
+        this.terminalFactory = () => { return undefined; };
         this.fileExplorerDelete = () => { return undefined; };
         this.fileExplorerFactory = () => { return undefined; };
         this.operationQueueDelete = () => { return undefined; };
@@ -33,7 +37,6 @@ class ContentPanelManager {
     modifyDefaultLayout(dock: DockPanel) {
         const saved = dock.saveLayout();
         const main = saved.main as DockLayout.ISplitAreaConfig;
-        // ((dock.saveLayout().main as DockLayout.ISplitAreaConfig)?.children[0] as DockLayout.ISplitAreaConfig)?.sizes
         if (main) {
             const children = main.children;
             if (children) {
@@ -46,28 +49,11 @@ class ContentPanelManager {
         dock.restoreLayout(saved);
     }
 
-    addPanel(
-        host: HTMLElement,
-        id: string,
-        terminalFactory: () => HTMLElement,
-        fileExplorerFactory: () => HTMLElement,
-        fileExplorerDelete: () => any,
-        operationQueueFactory: () => HTMLElement,
-        operationQueueDelete: () => any,
-        sessionOptionsFactory: () => HTMLElement,
-        sessionOptionsDelete: () => any
-    ) {
-        this.fileExplorerFactory = fileExplorerFactory;
-        this.fileExplorerDelete = fileExplorerDelete;
-        this.operationQueueFactory = operationQueueFactory;
-        this.operationQueueDelete = operationQueueDelete;
-        this.sessionOptionsFactory = sessionOptionsFactory;
-        this.sessionOptionsDelete = sessionOptionsDelete;
-
-        let term = new Terminal('Terminal', terminalFactory);
-        let explorer = new FileExplorer('FileExplorer', fileExplorerFactory, fileExplorerDelete);
-        let queue = new OperationQueue('OperationQueue', operationQueueFactory, operationQueueDelete);
-        let options = new SessionOptions('SessionOptions', sessionOptionsFactory, sessionOptionsDelete);
+    private makeDefaultDock(id: string): DockPanel {
+        let term = new Terminal('Terminal', this.terminalFactory, this.terminalDelete);
+        let explorer = new FileExplorer('FileExplorer', this.fileExplorerFactory, this.fileExplorerDelete);
+        let queue = new OperationQueue('OperationQueue', this.operationQueueFactory, this.operationQueueDelete);
+        let options = new SessionOptions('SessionOptions', this.sessionOptionsFactory, this.sessionOptionsDelete);
 
         let dock = new DockPanel({
             addButtonEnabled: true,
@@ -77,22 +63,136 @@ class ContentPanelManager {
         dock.addWidget(queue, { mode: "split-bottom", ref: term });
         dock.addWidget(options, { ref: queue });
         dock.id = 'dock_' + id;
-
         this.modifyDefaultLayout(dock);
 
-        // dock.layoutModified.connect(() => {
-        //     console.log("layout modified");
-        //     const layout = dock.layout;
-        //     if (layout) {
-        //         console.log(layout);
-        //     }
-        // });
-        dock.addRequested.connect((sender, widget) => {
-            console.log("add requested");
+        return dock;
+    }
+
+    private fabricateComponentFromId(id: string): Widget | undefined {
+        switch (id) {
+            case 'terminal':
+                return new Terminal('Terminal', this.terminalFactory, this.terminalDelete);
+            case 'file-explorer':
+                return new FileExplorer('FileExplorer', this.fileExplorerFactory, this.fileExplorerDelete);
+            case 'operation-queue':
+                return new OperationQueue('OperationQueue', this.operationQueueFactory, this.operationQueueDelete);
+            case 'session-options':
+                return new SessionOptions('SessionOptions', this.sessionOptionsFactory, this.sessionOptionsDelete);
+            default:
+                return undefined;
+        }
+    }
+
+    private makeDockFromLayout(id: string, layoutString: string): DockPanel {
+        let dehydrated = JSON.parse(layoutString);
+
+        let deserializeArea = (area: any) => {
+            if (!area) {
+                return null;
+            }
+
+            const type = ((area as any).type as string) || 'unknown';
+            if (type === 'unknown' || (type !== 'tab-area' && type !== 'split-area')) {
+                console.error(`Attempted to deserialize unknown type: ${type}`);
+                return null;
+            }
+
+            // Currently everything can only be constructed once!
+            const usedUpIds = new Set<string>();
+
+            if (type === 'tab-area') {
+                const { currentIndex, widgets } = area;
+
+                const hydrated = {
+                    type: 'tab-area',
+                    currentIndex: currentIndex || 0,
+                    widgets:
+                        (widgets &&
+                            (widgets.map(widget => {
+                                if (usedUpIds.has(widget)) {
+                                    console.error(`Duplicate widget id: ${widget}`);
+                                    return null;
+                                }
+                                usedUpIds.add(widget);
+                                return this.fabricateComponentFromId(widget);
+                            }).filter(widget => !!widget))) || [],
+                };
+
+                if (hydrated.currentIndex > hydrated.widgets.length - 1) {
+                    hydrated.currentIndex = 0;
+                }
+
+                return hydrated;
+            }
+
+            if (type === 'split-area') {
+                const { orientation, sizes, children } = area;
+
+                const hydrated = {
+                    type: 'split-area',
+                    orientation,
+                    sizes: sizes || [],
+                    children:
+                        (children &&
+                            (children.map(child => {
+                                return deserializeArea(child);
+                            }).filter(child => !!child))) || [],
+                };
+
+                return hydrated;
+            }
+        };
+
+        let dock = new DockPanel({
+            addButtonEnabled: true,
         });
+
+        const area = { main: deserializeArea(dehydrated.main) };
+        if (area) {
+            const dockLayout = dock.layout as DockLayout;
+            dockLayout.restoreLayout(area as DockPanel.ILayoutConfig);
+        }
+
+        dock.id = 'dock_' + id;
+
+        return dock;
+    }
+
+    addPanel(
+        host: HTMLElement,
+        id: string,
+        layoutString: string,
+        terminalFactory: () => HTMLElement,
+        terminalDelete: () => any,
+        fileExplorerFactory: () => HTMLElement,
+        fileExplorerDelete: () => any,
+        operationQueueFactory: () => HTMLElement,
+        operationQueueDelete: () => any,
+        sessionOptionsFactory: () => HTMLElement,
+        sessionOptionsDelete: () => any
+    ) {
+        this.terminalFactory = terminalFactory;
+        this.terminalDelete = terminalDelete;
+        this.fileExplorerFactory = fileExplorerFactory;
+        this.fileExplorerDelete = fileExplorerDelete;
+        this.operationQueueFactory = operationQueueFactory;
+        this.operationQueueDelete = operationQueueDelete;
+        this.sessionOptionsFactory = sessionOptionsFactory;
+        this.sessionOptionsDelete = sessionOptionsDelete;
 
         let main = new BoxPanel({ spacing: 0 });
         main.id = 'main_' + id;
+
+        let dock: DockPanel;
+        if (layoutString === "") {
+            dock = this.makeDefaultDock(id);
+        } else {
+            dock = this.makeDockFromLayout(id, layoutString);
+        }
+
+        dock.addRequested.connect((sender, widget) => {
+            console.log("add requested");
+        });
         main.addWidget(dock);
 
         const resizeObserver = new ResizeObserver(() => {
@@ -128,47 +228,12 @@ class ContentPanelManager {
         if (dock) {
             return JSON.parse(JSON.stringify(dock.saveLayout(), (key, value) => {
                 if (key === 'widgets') {
-                    return value.map((e: any) => e.node.id);
+                    return value.map((e: any) => e.layoutId);
                 }
                 return value;
             }));
         }
         return undefined;
-    }
-
-    loadPanelLayout(id: string, layout: any) {
-        // TODO: NOTE!!!!!: Make it possible to save and load multiple layouts and inherit them in the persistence.
-        // So you can save a terminal only layout for instance and a file only and a full layout and then load which you want.
-
-        // https://vk.github.io/dash-lumino-components/DockPanel.react.js.html
-
-        // newlayout = JSON.parse(JSON.stringify(newlayout));
-
-        // function updateWidgets(layout, components) {
-        //     if (!layout || typeof layout !== 'object') {
-        //         return; // Check if layout is null or not an object
-        //     }
-
-        //     if (Array.isArray(layout)) {
-        //         layout.forEach(item => updateWidgets(item, components));
-        //     } else {
-        //         Object.keys(layout).forEach(key => {
-        //             if (Array.isArray(layout[key])) {
-        //                 if (key === "widgets") {
-
-        //                     layout[key] = layout[key].map(widget => (components[widget] && components[widget].lumino) ? components[widget].lumino : null).filter(w => w !== null);
-        //                 } else {
-        //                     updateWidgets(layout[key], components);
-        //                 }
-        //             } else if (typeof layout[key] === 'object') {
-        //                 updateWidgets(layout[key], components);
-        //             }
-        //         });
-        //     }
-        // }
-
-        // updateWidgets(newlayout, components);
-        // components[this.props.id].lumino.restoreLayout(newlayout);
     }
 
     removePanel = (id: string) => {

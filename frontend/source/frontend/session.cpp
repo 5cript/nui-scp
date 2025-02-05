@@ -6,12 +6,12 @@
 #include <frontend/terminal/ssh_engine.hpp>
 #include <frontend/terminal/sftp_file_engine.hpp>
 #include <frontend/classes.hpp>
-#include <frontend/input_dialog.hpp>
+#include <frontend/dialog/input_dialog.hpp>
+#include <frontend/session_components/session_options.hpp>
 #include <nui-file-explorer/file_grid.hpp>
 #include <persistence/state_holder.hpp>
+#include <constants/layouts.hpp>
 #include <log/log.hpp>
-
-#include <ui5/components/button.hpp>
 
 #include <fmt/format.h>
 #include <nlohmann/json.hpp>
@@ -32,6 +32,7 @@ using namespace Nui::Attributes;
 struct Session::Implementation
 {
     Persistence::StateHolder* stateHolder;
+    FrontendEvents* events;
     Persistence::TerminalEngine engine;
     Nui::Observed<Persistence::TerminalOptions> options;
     Nui::Observed<std::unique_ptr<Terminal>> terminal;
@@ -44,22 +45,31 @@ struct Session::Implementation
     NuiFileExplorer::FileGrid fileGrid;
     std::shared_ptr<Nui::Dom::Element> fileExplorer;
     std::shared_ptr<Nui::Dom::Element> operationQueue;
-    std::shared_ptr<Nui::Dom::Element> sessionOptions;
     std::filesystem::path currentPath;
     std::unique_ptr<FileEngine> fileEngine;
     InputDialog* newItemAskDialog;
+    ConfirmDialog* confirmDialog;
     std::filesystem::path preNavigatePath;
     Persistence::UiOptions uiOptions;
+    std::optional<std::string> layoutName;
+
+    // Session Options
+    std::shared_ptr<Nui::Dom::Element> sessionOptionsElement{};
+    SessionOptions sessionOptions;
 
     Implementation(
         Persistence::StateHolder* stateHolder,
+        FrontendEvents* events,
         Persistence::TerminalEngine engine,
         Persistence::UiOptions uiOptions,
         std::string initialName,
+        std::optional<std::string> layoutName,
         InputDialog* newItemAskDialog,
+        ConfirmDialog* confirmDialog,
         std::function<void(Session const& self)> closeSelf,
         bool visible)
         : stateHolder{stateHolder}
+        , events{events}
         , engine{std::move(engine)}
         , options{this->engine.terminalOptions.value()}
         , terminal{}
@@ -76,8 +86,11 @@ struct Session::Implementation
         , currentPath{}
         , fileEngine{}
         , newItemAskDialog{newItemAskDialog}
+        , confirmDialog{confirmDialog}
         , preNavigatePath{}
         , uiOptions{uiOptions}
+        , layoutName{std::move(layoutName)}
+        , sessionOptions{stateHolder, events, this->initialName, this->id, confirmDialog}
     {}
 };
 
@@ -121,59 +134,26 @@ auto Session::makeFileExplorerElement() -> Nui::ElementRenderer
     // clang-format on
 }
 
-auto Session::makeSessionOptionsElement() -> Nui::ElementRenderer
-{
-    using Nui::Elements::div; // because of the global div.
-    using namespace Nui::Attributes;
-
-    // clang-format off
-    return div{
-        style = "width: 100%; height: auto; display: block",
-    }(
-        ui5::button{
-            "click"_event = [this](Nui::val) {
-                Log::info("Save layout clicked");
-                impl_->stateHolder->load([this](bool success, Persistence::StateHolder& stateHolder) {
-                    if (!success)
-                    {
-                        Log::error("Failed to load state holder");
-                        return;
-                    }
-
-                    auto layout = Nui::val::global("contentPanelManager").call<Nui::val>("getPanelLayout", impl_->id);
-                    if (layout.isUndefined())
-                    {
-                        Log::error("Failed to get layout");
-                        return;
-                    }
-                    Nui::Console::log(layout);
-
-                    stateHolder.stateCache().sessions.at(impl_->initialName).layout = nlohmann::json::parse(Nui::JSON::stringify(layout));
-
-                    stateHolder.save([]() {
-                        Log::info("Layout saved");
-                    });
-                });
-            }
-        }("Save Layout")
-    );
-    // clang-format on
-}
-
 Session::Session(
     Persistence::StateHolder* stateHolder,
+    FrontendEvents* events,
     Persistence::TerminalEngine engine,
     Persistence::UiOptions uiOptions,
     std::string initialName,
+    std::optional<std::string> layoutName,
     InputDialog* newItemAskDialog,
+    ConfirmDialog* confirmDialog,
     std::function<void(Session const& self)> closeSelf,
     bool visible)
     : impl_{std::make_unique<Implementation>(
           stateHolder,
+          events,
           std::move(engine),
           std::move(uiOptions),
           std::move(initialName),
+          std::move(layoutName),
           newItemAskDialog,
+          confirmDialog,
           std::move(closeSelf),
           visible)}
 {
@@ -403,6 +383,11 @@ void Session::onTerminalConnectionClose()
 
     // TODO: this is harsh, when the connection dropped unexpectedly, so keep the terminal open and
     // print a disconnect warning.
+    closeSelf();
+}
+
+void Session::closeSelf()
+{
     if (impl_->closeSelf)
         impl_->closeSelf(*this);
 }
@@ -414,8 +399,7 @@ void Session::onFileExplorerConnectionClose()
 
     // TODO: this is harsh, when the connection dropped unexpectedly, so keep the terminal open and
     // print a disconnect warning.
-    if (impl_->closeSelf)
-        impl_->closeSelf(*this);
+    closeSelf();
 }
 
 std::optional<std::string> Session::getProcessIdIfExecutingEngine() const
@@ -462,6 +446,110 @@ auto Session::makeOperationQueueElement() -> Nui::ElementRenderer
     // clang-format on
 }
 
+void Session::initializeLayout(Nui::val element)
+{
+    std::optional<std::string> layout = std::nullopt;
+
+    if (impl_->layoutName != Constants::defaultLayoutName)
+    {
+        if (impl_->engine.layouts && impl_->layoutName)
+        {
+            if (auto iter = impl_->engine.layouts->find(*impl_->layoutName); iter != impl_->engine.layouts->end())
+            {
+                layout = iter->second.dump();
+            }
+            else
+            {
+                Log::warn("Layout name not found: {}", *impl_->layoutName);
+            }
+        }
+    }
+
+    Log::info("Initializing layout with name: {}", layout.value_or("(none)"));
+
+    Nui::val::global("contentPanelManager")
+        .call<void>(
+            "addPanel",
+            element,
+            impl_->id,
+            layout.value_or(""),
+            Nui::bind([this]() -> Nui::val {
+                Nui::Console::log("terminal factory content panel manager");
+                if (impl_->terminalElement)
+                {
+                    Log::critical("Terminal element already exists - make sure that the session is not recreated");
+                    return Nui::val::undefined();
+                }
+                impl_->terminalElement = Nui::Dom::makeStandaloneElement(makeTerminalElement());
+                return impl_->terminalElement->val();
+            }),
+            Nui::bind([this]() -> Nui::val {
+                if (!impl_->terminalElement)
+                {
+                    Log::critical("Terminal element does not exist - make sure that the session is not recreated");
+                    return Nui::val::undefined();
+                }
+                closeSelf();
+                return Nui::val::undefined();
+            }),
+            Nui::bind([this]() -> Nui::val {
+                // OpenFileExplorer
+                if (impl_->fileExplorer)
+                {
+                    Log::warn("There is already a file explorer, cannot open another one");
+                    return Nui::val::undefined();
+                }
+                impl_->fileExplorer = Nui::Dom::makeStandaloneElement(makeFileExplorerElement());
+                return impl_->fileExplorer->val();
+            }),
+            Nui::bind([this]() -> Nui::val {
+                // Remove FileExplorer
+                if (!impl_->fileExplorer)
+                {
+                    Log::warn("There is no file explorer to remove");
+                    return Nui::val::undefined();
+                }
+                impl_->fileExplorer.reset();
+                return Nui::val::undefined();
+            }),
+            Nui::bind([this]() -> Nui::val {
+                if (impl_->operationQueue)
+                {
+                    Log::warn("There is already an operation queue, cannot open another one");
+                    return Nui::val::undefined();
+                }
+                impl_->operationQueue = Nui::Dom::makeStandaloneElement(makeOperationQueueElement());
+                return impl_->operationQueue->val();
+            }),
+            Nui::bind([this]() -> Nui::val {
+                if (!impl_->operationQueue)
+                {
+                    Log::warn("There is no operation queue to remove");
+                    return Nui::val::undefined();
+                }
+                impl_->operationQueue.reset();
+                return Nui::val::undefined();
+            }),
+            Nui::bind([this]() -> Nui::val {
+                if (impl_->sessionOptionsElement)
+                {
+                    Log::warn("There are already session options, cannot open another one");
+                    return Nui::val::undefined();
+                }
+                impl_->sessionOptionsElement = Nui::Dom::makeStandaloneElement(impl_->sessionOptions());
+                return impl_->sessionOptionsElement->val();
+            }),
+            Nui::bind([this]() -> Nui::val {
+                if (!impl_->sessionOptionsElement)
+                {
+                    Log::warn("There are no session options to remove");
+                    return Nui::val::undefined();
+                }
+                impl_->sessionOptionsElement.reset();
+                return Nui::val::undefined();
+            }));
+}
+
 Nui::ElementRenderer Session::operator()(bool visible)
 {
     using Nui::Elements::div; // because of the global div.
@@ -482,66 +570,7 @@ Nui::ElementRenderer Session::operator()(bool visible)
             }),
         },
         !reference.onMaterialize([this](Nui::val element){
-            Nui::val::global("contentPanelManager").call<void>("addPanel", element, impl_->id, Nui::bind([this]() -> Nui::val {
-                Nui::Console::log("terminal factory content panel manager");
-                if (impl_->terminalElement)
-                {
-                    Log::critical("Terminal element already exists - make sure that the session is not recreated");
-                    return Nui::val::undefined();
-                }
-                impl_->terminalElement = Nui::Dom::makeStandaloneElement(makeTerminalElement());
-                return impl_->terminalElement->val();
-            }), Nui::bind([this]() -> Nui::val {
-                // OpenFileExplorer
-                if (impl_->fileExplorer)
-                {
-                    Log::warn("There is already a file explorer, cannot open another one");
-                    return Nui::val::undefined();
-                }
-                impl_->fileExplorer = Nui::Dom::makeStandaloneElement(makeFileExplorerElement());
-                return impl_->fileExplorer->val();
-            }), Nui::bind([this]() -> Nui::val {
-                // Remove FileExplorer
-                if (!impl_->fileExplorer)
-                {
-                    Log::warn("There is no file explorer to remove");
-                    return Nui::val::undefined();
-                }
-                impl_->fileExplorer.reset();
-                return Nui::val::undefined();
-            }), Nui::bind([this]() -> Nui::val {
-                if (impl_->operationQueue)
-                {
-                    Log::warn("There is already an operation queue, cannot open another one");
-                    return Nui::val::undefined();
-                }
-                impl_->operationQueue = Nui::Dom::makeStandaloneElement(makeOperationQueueElement());
-                return impl_->operationQueue->val();
-            }), Nui::bind([this]() -> Nui::val {
-                if (!impl_->operationQueue)
-                {
-                    Log::warn("There is no operation queue to remove");
-                    return Nui::val::undefined();
-                }
-                impl_->operationQueue.reset();
-                return Nui::val::undefined();
-            }), Nui::bind([this]() -> Nui::val {
-                if (impl_->sessionOptions)
-                {
-                    Log::warn("There are already session options, cannot open another one");
-                    return Nui::val::undefined();
-                }
-                impl_->sessionOptions = Nui::Dom::makeStandaloneElement(makeSessionOptionsElement());
-                return impl_->sessionOptions->val();
-            }), Nui::bind([this]() -> Nui::val {
-                if (!impl_->sessionOptions)
-                {
-                    Log::warn("There are no session options to remove");
-                    return Nui::val::undefined();
-                }
-                impl_->sessionOptions.reset();
-                return Nui::val::undefined();
-            }));
+            initializeLayout(element);
         })
     }(
     );

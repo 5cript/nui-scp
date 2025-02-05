@@ -1,5 +1,5 @@
-#include <frontend/password_prompter.hpp>
-#include <frontend/input_dialog.hpp>
+#include <frontend/dialog/password_prompter.hpp>
+#include <frontend/dialog/input_dialog.hpp>
 #include <log/log.hpp>
 
 #include <nui/rpc.hpp>

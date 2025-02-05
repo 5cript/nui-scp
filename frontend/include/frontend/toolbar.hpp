@@ -13,6 +13,11 @@ class Toolbar
     ROAR_PIMPL_SPECIAL_FUNCTIONS(Toolbar);
 
     Nui::ElementRenderer operator()();
+    std::string selectedLayout() const;
+
+  private:
+    void connectLayoutsChanged();
+    void reloadLayouts();
 
   private:
     struct Implementation;

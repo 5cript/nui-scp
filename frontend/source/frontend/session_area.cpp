@@ -19,20 +19,34 @@ struct SessionArea::Implementation
     Persistence::StateHolder* stateHolder;
     FrontendEvents* events;
     InputDialog* newItemAskDialog;
+    ConfirmDialog* confirmDialog;
+    Toolbar* toolbar;
     Nui::Observed<std::vector<std::unique_ptr<Session>>> sessions;
     int selected;
 
-    Implementation(Persistence::StateHolder* stateHolder, FrontendEvents* events, InputDialog* newItemAskDialog)
+    Implementation(
+        Persistence::StateHolder* stateHolder,
+        FrontendEvents* events,
+        InputDialog* newItemAskDialog,
+        ConfirmDialog* confirmDialog,
+        Toolbar* toolbar)
         : stateHolder{stateHolder}
         , events{events}
         , newItemAskDialog{newItemAskDialog}
+        , confirmDialog{confirmDialog}
+        , toolbar{toolbar}
         , sessions{}
         , selected{0}
     {}
 };
 
-SessionArea::SessionArea(Persistence::StateHolder* stateHolder, FrontendEvents* events, InputDialog* newItemAskDialog)
-    : impl_{std::make_unique<Implementation>(stateHolder, events, newItemAskDialog)}
+SessionArea::SessionArea(
+    Persistence::StateHolder* stateHolder,
+    FrontendEvents* events,
+    InputDialog* newItemAskDialog,
+    ConfirmDialog* confirmDialog,
+    Toolbar* toolbar)
+    : impl_{std::make_unique<Implementation>(stateHolder, events, newItemAskDialog, confirmDialog, toolbar)}
 {
     listen(events->onNewSession, [this](std::string const& name) -> void {
         addSession(name);
@@ -106,6 +120,8 @@ void SessionArea::setSelected(int index)
 
 void SessionArea::addSession(std::string const& name)
 {
+    using namespace std::string_literals;
+
     impl_->stateHolder->load([this, name](bool success, Persistence::StateHolder& holder) {
         if (!success)
             return;
@@ -139,13 +155,16 @@ void SessionArea::addSession(std::string const& name)
                 Log::warn("Failed to resolve ref ssh options for engine: {}", name);
         }
 
-        Log::info("Adding session: {}", name);
+        Log::info("Adding session: {} with layout {}", name, impl_->toolbar->selectedLayout());
         impl_->sessions.emplace_back(std::make_unique<Session>(
             impl_->stateHolder,
+            impl_->events,
             engine,
             state.uiOptions,
             name,
+            impl_->toolbar->selectedLayout(),
             impl_->newItemAskDialog,
+            impl_->confirmDialog,
             [this](Session const& session) {
                 removeSession([&session](Session const& s) {
                     return &s == &session;

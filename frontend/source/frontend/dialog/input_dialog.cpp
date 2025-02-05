@@ -1,4 +1,4 @@
-#include <frontend/input_dialog.hpp>
+#include <frontend/dialog/input_dialog.hpp>
 #include <log/log.hpp>
 
 #include <nui/rpc.hpp>
@@ -119,7 +119,7 @@ Nui::ElementRenderer InputDialog::operator()()
         ),
         div{
             "slot"_prop = "footer",
-            style="display: flex; justify-content: flex-end; width: 100%; align-items: center"
+            style="display: flex; justify-content: flex-end; width: 100%; align-items: center; gap: 10px"
         }(
             div{style = "flex: 1;"}(),
             ui5::button{

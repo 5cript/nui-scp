@@ -1,8 +1,9 @@
 #pragma once
 
 #include <frontend/session.hpp>
-#include <frontend/events/frontend_events.hpp>
-#include <frontend/input_dialog.hpp>
+#include <frontend/toolbar.hpp>
+#include <frontend/dialog/input_dialog.hpp>
+#include <frontend/dialog/confirm_dialog.hpp>
 #include <persistence/state_holder.hpp>
 
 #include <nui/frontend/element_renderer.hpp>
@@ -11,7 +12,12 @@
 class SessionArea
 {
   public:
-    SessionArea(Persistence::StateHolder* stateHolder, FrontendEvents* events, InputDialog* newItemAskDialog);
+    SessionArea(
+        Persistence::StateHolder* stateHolder,
+        FrontendEvents* events,
+        InputDialog* newItemAskDialog,
+        ConfirmDialog* confirmDialog,
+        Toolbar* toolbar);
     ROAR_PIMPL_SPECIAL_FUNCTIONS(SessionArea);
 
     Nui::ElementRenderer operator()();

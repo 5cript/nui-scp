@@ -9,8 +9,10 @@ target_sources(
         toolbar.cpp
         session_area.cpp
         session.cpp
-        input_dialog.cpp
-        password_prompter.cpp
+        dialog/input_dialog.cpp
+        dialog/password_prompter.cpp
+        dialog/confirm_dialog.cpp
+        session_components/session_options.cpp
         terminal/terminal.cpp
         terminal/executing_engine.cpp
         terminal/sftp_file_engine.cpp

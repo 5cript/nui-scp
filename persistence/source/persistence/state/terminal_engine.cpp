@@ -77,8 +77,8 @@ namespace Persistence
 
         TO_JSON_OPTIONAL(j, engine, startupSession);
 
-        if (engine.layout)
-            j["layout"] = *engine.layout;
+        if (engine.layouts)
+            j["layouts"] = *engine.layouts;
     }
     void from_json(nlohmann::json const& j, TerminalEngine& engine)
     {
@@ -112,8 +112,8 @@ namespace Persistence
 
         FROM_JSON_OPTIONAL(j, engine, startupSession);
 
-        if (j.contains("layout"))
-            engine.layout = j.at("layout");
+        if (j.contains("layouts"))
+            engine.layouts = j.at("layouts");
     }
 
     ExecutingTerminalEngine defaultMsys2TerminalEngine()
