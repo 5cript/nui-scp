@@ -3,19 +3,17 @@
 #include <backend/ssh/sequential.hpp>
 #include <log/log.hpp>
 
+#include <boost/uuid/uuid_generators.hpp>
+#include <boost/uuid/uuid.hpp>
+#include <boost/uuid/uuid_io.hpp>
+
 using namespace Detail;
 
 Session::Session()
-    : stopIssued_{}
-    , sessionMutex_{}
-    , processingThread_{}
+    : sessionMutex_{}
     , session_{}
-    , ptyChannel_{}
-    , environment_{}
-    , onStdout_{}
-    , onStderr_{}
-    , onExit_{}
-    , queuedWrites_{}
+    , channels_{}
+    , sftpSessions_{}
 {}
 Session::~Session()
 {
@@ -24,26 +22,18 @@ Session::~Session()
 
 void Session::stop()
 {
-    std::scoped_lock guard{sessionMutex_};
-
     for (auto const& sftpSession : sftpSessions_)
     {
         sftpSession->disconnect();
     }
 
-    onExit_ = {};
-    if (ptyChannel_)
+    std::scoped_lock guard{sessionMutex_};
+    // This might be possible to do in parallel, but lets be pessimistic and safe.
+    for (auto const& [uuid, channel] : channels_)
     {
-        stopIssued_ = true;
-        if (processingThread_.joinable())
-            processingThread_.join();
-        if (ptyChannel_->isOpen())
-        {
-            ptyChannel_->sendEof();
-            ptyChannel_->close();
-        }
-        ptyChannel_.reset();
+        channel->stop();
     }
+
     session_.disconnect();
 }
 
@@ -71,99 +61,41 @@ std::shared_ptr<SftpSession> Session::getSftpSession()
     return sftpSessions_.back();
 }
 
-void Session::doProcessing()
+Channel* Session::getChannel(Ids::ChannelId const& id)
 {
-    if (!ptyChannel_)
-        return;
-
-    constexpr static int bufferSize = 1024;
-    char buffer[bufferSize];
-
-    auto readOne = [this, &buffer](bool stdout_) {
-        auto rdy = ssh_channel_poll_timeout(ptyChannel_->getCChannel(), 100, stdout_ ? 0 : 1);
-        if (rdy < 0)
-            return -1;
-
-        if (rdy == 0)
-            return 0;
-
-        while (rdy > 0)
-        {
-            const auto toRead = std::min(bufferSize, rdy);
-            const auto bytesRead = ssh_channel_read(ptyChannel_->getCChannel(), buffer, toRead, stdout_ ? 0 : 1);
-            if (bytesRead <= 0)
-                return -1;
-
-            std::string data{buffer, static_cast<std::size_t>(bytesRead)};
-            if (stdout_)
-                onStdout_(data);
-            else
-                onStderr_(data);
-
-            rdy -= bytesRead;
-        }
-        return rdy;
-    };
-
-    while (!stopIssued_)
-    {
-        if (readOne(true) < 0)
-            break;
-        // Lets not read stderr for now and see what happens:
-        // readOne(false);
-
-        std::unique_lock tryGuard{sessionMutex_, std::try_to_lock};
-        if (tryGuard.owns_lock())
-        {
-            if (!queuedWrites_.empty())
-            {
-                for (auto const& data : queuedWrites_)
-                {
-                    ptyChannel_->write(data.c_str(), data.size());
-                }
-                queuedWrites_.clear();
-            }
-        }
-    }
-
-    {
-        if (stopIssued_)
-        {
-            if (onExit_)
-                onExit_();
-        }
-        else
-        {
-            std::scoped_lock guard{sessionMutex_};
-            if (onExit_)
-                onExit_();
-        }
-    }
-}
-
-void Session::write(std::string const& data)
-{
-    if (!ptyChannel_)
-        return;
-
     std::scoped_lock guard{sessionMutex_};
-    queuedWrites_.push_back(data);
+    auto it = channels_.find(id);
+    if (it == channels_.end())
+        return nullptr;
+    return it->second.get();
 }
 
-int Session::createPtyChannel()
+bool Session::closeChannel(Ids::ChannelId const& id)
 {
-    ptyChannel_ = std::make_unique<ssh::Channel>(session_);
-    auto& channel = *ptyChannel_;
+    std::scoped_lock guard{sessionMutex_};
+    auto it = channels_.find(id);
+    if (it == channels_.end())
+        return false;
+    it->second->stop();
+    channels_.erase(it);
+    return true;
+}
+
+std::expected<Ids::ChannelId, int>
+Session::createPtyChannel(std::optional<std::unordered_map<std::string, std::string>> const& environment)
+{
+    auto ptyChannel = std::make_unique<ssh::Channel>(session_);
+    auto& channel = *ptyChannel;
     auto result = sequential(
         [&channel]() {
             if (!channel.isOpen())
                 return channel.openSession();
             return 0;
         },
-        [this, &channel]() {
-            if (!environment_.has_value())
+        [&channel, &environment]() {
+            if (!environment.has_value())
                 return 0;
-            for (auto const& [key, value] : *environment_)
+            for (auto const& [key, value] : *environment)
             {
                 if (channel.requestEnv(key.c_str(), value.c_str()) != 0)
                     return -1;
@@ -176,31 +108,14 @@ int Session::createPtyChannel()
         [&channel]() {
             return channel.requestShell();
         });
-    return result.result;
-}
 
-void Session::setPtyEnvironment(std::unordered_map<std::string, std::string> const& env)
-{
-    environment_ = env;
-}
-int Session::resizePty(int cols, int rows)
-{
-    if (!ptyChannel_)
-        return 0;
+    if (result.result != SSH_OK)
+        return std::unexpected(result.result);
 
-    return ptyChannel_->changePtySize(cols, rows);
-}
+    const auto id = Ids::generateChannelId();
 
-void Session::startReading(
-    std::function<void(std::string const&)> onStdout,
-    std::function<void(std::string const&)> onStderr,
-    std::function<void()> onExit)
-{
-    onStdout_ = onStdout;
-    onStderr_ = onStderr;
-    onExit_ = onExit;
-
-    processingThread_ = std::thread([this]() {
-        doProcessing();
-    });
+    // make unique impossible due to private constructor
+    std::scoped_lock guard{sessionMutex_};
+    channels_[id] = std::unique_ptr<Channel>{new Channel(std::move(ptyChannel), true)};
+    return id;
 }

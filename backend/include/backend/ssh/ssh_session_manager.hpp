@@ -4,6 +4,7 @@
 #include <backend/password/password_provider.hpp>
 #include <backend/ssh/session.hpp>
 #include <backend/ssh/sftp_session.hpp>
+#include <ids/ids.hpp>
 
 #include <nui/rpc.hpp>
 #include <libssh/libsshpp.hpp>
@@ -31,12 +32,12 @@ class SshSessionManager
     void joinSessionAdder();
     void addSession(
         Persistence::SshTerminalEngine const& engine,
-        std::function<void(std::optional<std::string> const&)> onComplete);
+        std::function<void(std::optional<Ids::SessionId> const&)> onComplete);
 
     friend int askPassDefault(char const* prompt, char* buf, std::size_t length, int echo, int verify, void* userdata);
 
   private:
-    std::unordered_map<std::string, std::unique_ptr<Session>> sessions_;
+    std::unordered_map<Ids::SessionId, std::unique_ptr<Session>, Ids::IdHash> sessions_;
     std::mutex passwordProvidersMutex_;
     std::map<int, PasswordProvider*> passwordProviders_;
     std::mutex addSessionMutex_;

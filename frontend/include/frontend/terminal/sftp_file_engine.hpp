@@ -12,11 +12,11 @@ class SftpFileEngine : public FileEngine
     void listDirectory(
         std::filesystem::path const& path,
         std::function<void(std::optional<std::vector<SharedData::DirectoryEntry>> const&)> onComplete) override;
-    void dispose();
+    void dispose() override;
     void createDirectory(std::filesystem::path const& path, std::function<void(bool)> onComplete) override;
 
   private:
-    void lazyOpen(std::function<void(std::optional<std::string> const&)> const& onOpen);
+    void lazyOpen(std::function<void(std::optional<Ids::SessionId> const&)> const& onOpen);
 
   private:
     struct Implementation;

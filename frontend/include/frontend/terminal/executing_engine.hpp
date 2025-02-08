@@ -12,7 +12,7 @@
 
 // TODO: https://devblogs.microsoft.com/commandline/windows-command-line-introducing-the-windows-pseudo-console-conpty/
 
-class ExecutingTerminalEngine : public TerminalEngine
+class ExecutingTerminalEngine : public SingleChannelTerminalEngine
 {
   public:
     struct Settings
@@ -27,7 +27,7 @@ class ExecutingTerminalEngine : public TerminalEngine
     ROAR_PIMPL_SPECIAL_FUNCTIONS(ExecutingTerminalEngine);
 
     void open(std::function<void(bool, std::string const&)> onOpen, bool fileMode = false) override;
-    void dispose() override;
+    void dispose(std::function<void()> onDisposeComplete) override;
     void write(std::string const& data) override;
     void resize(int cols, int rows) override;
     std::string id() const;

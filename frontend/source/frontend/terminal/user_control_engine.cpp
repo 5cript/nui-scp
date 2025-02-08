@@ -6,8 +6,6 @@
 #include <nui/frontend/val.hpp>
 #include <nui/rpc.hpp>
 
-#include <exception>
-
 using namespace std::string_literals;
 
 struct UserControlEngine::Implementation
@@ -38,7 +36,7 @@ UserControlEngine::~UserControlEngine()
 {
     if (!moveDetector_.wasMoved())
     {
-        dispose();
+        dispose([]() {});
     }
 }
 
@@ -49,10 +47,11 @@ void UserControlEngine::open(std::function<void(bool, std::string const&)> onOpe
     onOpen(true, "Never Fails");
 }
 
-void UserControlEngine::dispose()
+void UserControlEngine::dispose(std::function<void()> onDisposeComplete)
 {
     impl_->stdoutReceiver.reset();
     impl_->stderrReceiver.reset();
+    onDisposeComplete();
 }
 
 void UserControlEngine::resize(int, int)

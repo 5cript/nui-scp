@@ -18,6 +18,7 @@ target_sources(
         terminal/sftp_file_engine.cpp
         terminal/ssh_engine.cpp
         terminal/user_control_engine.cpp
+        terminal/ssh_channel.cpp
 )
 
 target_include_directories(${PROJECT_NAME} PRIVATE ${CMAKE_SOURCE_DIR}/frontend/include)
@@ -36,6 +37,7 @@ target_link_libraries(
         persistence
         nlohmann_json::nlohmann_json
         events
+        ids
 )
 
 nui_prepare_emscripten_target(

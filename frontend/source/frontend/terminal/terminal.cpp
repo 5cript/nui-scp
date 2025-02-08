@@ -151,8 +151,7 @@ namespace
         }
         if (isUserInput)
         {
-            // Never! Could contain sensitive data
-            // Log::debug("Terminal::sending", debugPrint);
+            // Never Log Here! Could contain sensitive data!
         }
         else
         {
@@ -161,32 +160,36 @@ namespace
     }
 }
 
-struct Terminal::Implementation
+struct TerminalChannel::Implementation
 {
-    std::string termId;
-    std::string command;
-    std::unique_ptr<TerminalEngine> engine;
-    std::vector<std::pair<std::string, bool>> writeCache;
-    std::function<void(std::string const&, bool)> doWrite;
+    MultiChannelTerminalEngine* engine;
+    Ids::ChannelId channelId;
+    std::string termId{};
+    std::string command{};
+    std::vector<std::pair<std::string, bool>> writeCache{};
+    std::function<void(std::string const&, bool)> doWrite{};
 
     Nui::val terminal() const
     {
         return terminalUtility().call<Nui::val>("getTerminal", termId);
     }
 
+    ChannelInterface* channel()
+    {
+        Log::debug("Getting channel with id: '{}'", channelId.value());
+        return engine->channel(channelId);
+    }
+
     void writeRespectingCache(std::string const& data, bool isUserInput);
     void writeAfterCache(std::string const& data, bool isUserInput);
 
-    Implementation(std::unique_ptr<TerminalEngine> engine)
-        : termId{}
-        , command{}
-        , engine{std::move(engine)}
-        , writeCache{}
-        , doWrite{}
+    Implementation(MultiChannelTerminalEngine* engine, Ids::ChannelId channelId)
+        : engine{engine}
+        , channelId{std::move(channelId)}
     {}
 };
 
-void Terminal::Implementation::writeRespectingCache(std::string const& data, bool isUserInput)
+void TerminalChannel::Implementation::writeRespectingCache(std::string const& data, bool isUserInput)
 {
     if (termId.empty())
     {
@@ -195,10 +198,12 @@ void Terminal::Implementation::writeRespectingCache(std::string const& data, boo
         return;
     }
 
+    // Switch writing mode to cacheless:
     doWrite = [this](std::string const& cacheData, bool cacheIsUserInput) {
         writeAfterCache(cacheData, cacheIsUserInput);
     };
 
+    // Write out cache...
     if (!writeCache.empty())
     {
         for (auto const& [cacheData, cacheIsUserInput] : writeCache)
@@ -206,16 +211,25 @@ void Terminal::Implementation::writeRespectingCache(std::string const& data, boo
         writeCache.clear();
     }
 
+    // Now write the new data:
     doWrite(data, isUserInput);
 }
-void Terminal::Implementation::writeAfterCache(std::string const& data, bool isUserInput)
+
+void TerminalChannel::Implementation::writeAfterCache(std::string const& data, bool isUserInput)
 {
     if (data.empty())
         return;
 
     if (isUserInput)
     {
-        engine->write(data);
+        // FIXME: Remove debug log
+        Log::debug("Terminal::sending", data);
+        if (auto* chan = channel(); chan)
+        {
+            // FIXME: Remove debug log
+            Log::debug("Terminal::sending to channel", data);
+            chan->write(data);
+        }
     }
     else
     {
@@ -248,84 +262,79 @@ void Terminal::Implementation::writeAfterCache(std::string const& data, bool isU
     }
 }
 
-Terminal::Terminal(std::unique_ptr<TerminalEngine> engine)
-    : impl_{std::make_unique<Implementation>(std::move(engine))}
+TerminalChannel::TerminalChannel(MultiChannelTerminalEngine* engine, Ids::ChannelId channelId)
+    : impl_{std::make_unique<Implementation>(engine, std::move(channelId))}
 {
     impl_->doWrite = [this](std::string const& data, bool isUserInput) {
         impl_->writeRespectingCache(data, isUserInput);
     };
-
-    impl_->engine->setStdoutHandler([this](std::string const& data) {
-        write(data, false);
-    });
-    impl_->engine->setStderrHandler([this](std::string const& data) {
-        // TODO: Add stderr styling mode
-        write(data, false);
-    });
 }
+ROAR_PIMPL_SPECIAL_FUNCTIONS_IMPL(TerminalChannel);
 
-TerminalEngine& Terminal::engine()
+std::string TerminalChannel::stealTerminal()
 {
-    return *impl_->engine;
+    const auto id = impl_->termId;
+    impl_->termId.clear();
+    return id;
 }
 
-bool Terminal::isOpen() const
-{
-    return !impl_->termId.empty();
-}
-void Terminal::open(
-    Nui::val element,
+void TerminalChannel::open(
+    Nui::val host,
     Persistence::TerminalOptions const& options,
     std::function<void(bool, std::string const&)> onOpen)
 {
     if (isOpen())
         return;
-    Log::info("Opening terminal");
-    impl_->engine->open([this, onOpen = std::move(onOpen), element, options](bool success, std::string const& info) {
-        if (!success)
-        {
-            Log::error("Failed to open terminal: '{}'", info);
-            dispose();
-            onOpen(false, info);
-            return;
-        };
 
-        impl_->termId = terminalUtility().call<std::string>("createTerminal", element, asVal(options));
-        auto term = impl_->terminal();
-        if (term.isUndefined())
-        {
-            Log::error("Failed to get terminal with id: '{}", impl_->termId);
-            dispose();
-            onOpen(false, "Failed to get terminal");
-            return;
-        }
-        Log::info("Terminal opened with id: '{}'", impl_->termId);
+    Log::info("Opening terminal channel");
 
-        term.call<void>(
-            "onData",
-            Nui::bind(
-                [this](Nui::val data, Nui::val) {
-                    write(data.as<std::string>(), true);
-                },
-                std::placeholders::_1,
-                std::placeholders::_2));
+    impl_->termId = terminalUtility().call<std::string>("createTerminal", host, asVal(options));
 
-        term.call<void>(
-            "onResize",
-            Nui::bind(
-                [this](Nui::val obj, Nui::val) {
-                    Log::debug("Terminal resized {}:{}. ", obj["cols"].as<int>(), obj["rows"].as<int>());
-                    impl_->engine->resize(obj["cols"].as<int>(), obj["rows"].as<int>());
-                },
-                std::placeholders::_1,
-                std::placeholders::_2));
+    auto term = impl_->terminal();
+    if (term.isUndefined())
+    {
+        Log::error("Failed to get terminal with id: '{}", impl_->termId);
+        dispose();
+        onOpen(false, "Failed to get terminal");
+        return;
+    }
 
-        if (!impl_->writeCache.empty())
-            write("", false);
-        onOpen(true, info);
-    });
+    Log::info("Channel Terminal opened with id: '{}'", impl_->termId);
+
+    term.call<void>(
+        "onData",
+        Nui::bind(
+            [this](Nui::val data, Nui::val) {
+                write(data.as<std::string>(), true);
+            },
+            std::placeholders::_1,
+            std::placeholders::_2));
+
+    term.call<void>(
+        "onResize",
+        Nui::bind(
+            [this](Nui::val obj, Nui::val) {
+                Log::debug("Terminal resized {}:{}. ", obj["cols"].as<int>(), obj["rows"].as<int>());
+                if (auto* channel = impl_->channel(); channel)
+                    channel->resize(obj["cols"].as<int>(), obj["rows"].as<int>());
+            },
+            std::placeholders::_1,
+            std::placeholders::_2));
+
+    if (!impl_->writeCache.empty())
+        write("", false);
+
+    onOpen(true, "");
 }
-void Terminal::focus()
+void TerminalChannel::write(std::string const& data, bool isUserInput)
+{
+    impl_->doWrite(data, isUserInput);
+}
+void TerminalChannel::writeStderr(std::string const& data, bool isUserInput)
+{
+    impl_->doWrite(data, isUserInput);
+}
+void TerminalChannel::focus()
 {
     if (!isOpen())
         return;
@@ -337,9 +346,8 @@ void Terminal::focus()
     }
     term.call<void>("focus");
 }
-void Terminal::dispose()
+void TerminalChannel::dispose()
 {
-    impl_->engine->dispose();
     if (!impl_->termId.empty())
     {
         auto term = impl_->terminal();
@@ -352,9 +360,183 @@ void Terminal::dispose()
     }
     impl_->termId.clear();
 }
-void Terminal::write(std::string const& data, bool isUserInput)
+
+bool TerminalChannel::isOpen() const
 {
-    impl_->doWrite(data, isUserInput);
+    return !impl_->termId.empty();
+}
+
+struct Terminal::Implementation
+{
+    std::unique_ptr<TerminalEngine> engine;
+    std::unordered_map<Ids::ChannelId, std::unique_ptr<TerminalChannel>, Ids::IdHash> channels;
+    bool isMultiChannel;
+    std::unique_ptr<TerminalChannel> singleModeChannel;
+
+    Implementation(std::unique_ptr<TerminalEngine> engine, bool isMultiChannel)
+        : engine{std::move(engine)}
+        , channels{}
+        , isMultiChannel{isMultiChannel}
+        , singleModeChannel{}
+    {}
+};
+
+Terminal::Terminal(std::unique_ptr<TerminalEngine> engine, bool isMultiChannel)
+    : impl_{std::make_unique<Implementation>(std::move(engine), isMultiChannel)}
+{}
+
+void Terminal::iterateAllChannels(
+    std::function<bool(Ids::ChannelId const& channelId, TerminalChannel& channel)> const& handler)
+{
+    for (auto& [id, channel] : impl_->channels)
+    {
+        if (!handler(id, *channel))
+            break;
+    }
+}
+
+void Terminal::createChannel(
+    Nui::val host,
+    Persistence::TerminalOptions const& options,
+    std::function<void(std::optional<Ids::ChannelId> /*channelId*/, std::string const& info)> onChannelCreated)
+{
+    Log::info("Creating channel");
+
+    if (impl_->isMultiChannel)
+    {
+        auto* multiChannelEngine = static_cast<MultiChannelTerminalEngine*>(impl_->engine.get());
+
+        std::shared_ptr<std::optional<Ids::ChannelId>> channelId =
+            std::make_shared<std::optional<Ids::ChannelId>>(std::nullopt);
+
+        Log::info("Creating channel using multi-channel engine");
+        multiChannelEngine->createChannel(
+            [this, channelId](std::string const& data) {
+                // This should work, because the channel is opened after creation, and no data should be written before
+                if (channelId && *channelId)
+                {
+                    if (auto channel = impl_->channels.find(**channelId); channel != impl_->channels.end())
+                    {
+                        channel->second->write(data, false);
+                    }
+                }
+            },
+            [this, channelId](std::string const& data) {
+                // This should work, because the channel is opened after creation, and no data should be written before
+                if (channelId && *channelId)
+                {
+                    if (auto channel = impl_->channels.find(**channelId); channel != impl_->channels.end())
+                    {
+                        channel->second->writeStderr(data, false);
+                    }
+                }
+            },
+            [this, channelId, onChannelCreated, host, options](std::optional<Ids::ChannelId> const& creationResult) {
+                Log::info("Channel created.");
+                if (!creationResult)
+                {
+                    onChannelCreated(std::nullopt, "Failed to create channel");
+                    return;
+                }
+
+                *channelId = creationResult;
+
+                auto* multiChannelEngine = static_cast<MultiChannelTerminalEngine*>(impl_->engine.get());
+
+                if (!*channelId)
+                {
+                    onChannelCreated(std::nullopt, "Failed to create channel");
+                    return;
+                }
+
+                [[maybe_unused]] auto [channelIter, _] = impl_->channels.emplace(
+                    **channelId, std::make_unique<TerminalChannel>(multiChannelEngine, **channelId));
+                if (channelIter == impl_->channels.end())
+                {
+                    Log::error("Failed to create channel");
+                    onChannelCreated(std::nullopt, "Failed to create channel");
+                    return;
+                }
+
+                Log::info("Opening channel");
+                channelIter->second->open(
+                    host, options, [onChannelCreated, channelId = **channelId](bool success, std::string const& info) {
+                        if (!success)
+                        {
+                            onChannelCreated(std::nullopt, info);
+                            return;
+                        }
+                        onChannelCreated(channelId, info);
+                    });
+            });
+    }
+    else
+    {
+        // TODO: Implement single channel mode
+        onChannelCreated(std::nullopt, "Single channel mode not implemented");
+    }
+}
+TerminalChannel* Terminal::channel(Ids::ChannelId const& channelId)
+{
+    Log::debug("Getting channel: '{}'", channelId.value());
+    Log::debug("THIS PTR: {}", reinterpret_cast<std::uintptr_t>(this));
+    if (auto channel = impl_->channels.find(channelId); channel != impl_->channels.end())
+    {
+        return channel->second.get();
+    }
+    return nullptr;
+}
+void Terminal::closeChannel(Ids::ChannelId const& channelId)
+{
+    if (auto channel = impl_->channels.find(channelId); channel != impl_->channels.end())
+    {
+        Log::info("Closing channel: '{}'", channelId.value());
+        channel->second->dispose();
+        impl_->channels.erase(channel);
+    }
+}
+
+TerminalEngine& Terminal::engine()
+{
+    return *impl_->engine;
+}
+void Terminal::focus()
+{
+    if (impl_->isMultiChannel)
+    {
+        if (!impl_->channels.empty())
+        {
+            impl_->channels.begin()->second->focus();
+        }
+    }
+    else
+    {
+        // TODO:
+    }
+}
+
+void Terminal::open(std::function<void(bool, std::string const&)> onOpen)
+{
+    Log::info("Opening session");
+
+    impl_->engine->open([this, onOpen = std::move(onOpen)](bool success, std::string const& info) {
+        if (!success)
+        {
+            Log::error("Failed to open terminal: '{}'", info);
+            dispose();
+            onOpen(false, info);
+            return;
+        };
+        onOpen(true, info);
+    });
+}
+void Terminal::dispose()
+{
+    for (auto& [id, terminal] : impl_->channels)
+    {
+        terminal->dispose();
+    }
+    impl_->engine->dispose([]() {});
 }
 Terminal::~Terminal()
 {

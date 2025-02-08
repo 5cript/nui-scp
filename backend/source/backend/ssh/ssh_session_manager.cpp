@@ -63,18 +63,29 @@ int askPassDefault(char const* prompt, char* buf, std::size_t length, int, int, 
 
 SshSessionManager::SshSessionManager()
     : sessions_{}
-{}
+{
+    ssh_init();
+}
 
 SshSessionManager::~SshSessionManager()
 {
     joinSessionAdder();
+    ssh_finalize();
 }
 
 void SshSessionManager::registerRpc(Nui::Window& wnd, Nui::RpcHub& hub)
 {
+    /*
+    {
+        engine: {
+            sshSessionOptions: Persistence::SshSessionOptions,
+            environment: std::unordered_map<std::string, std::string>
+        },
+    }
+    */
     hub.registerFunction(
         "SshSessionManager::connect",
-        [this, hub = &hub, wnd = &wnd](std::string const& responseId, nlohmann::json const& parameters) {
+        [this, hub = &hub](std::string const& responseId, nlohmann::json const& parameters) {
             try
             {
                 Log::info("Connecting to ssh server with parameters: {}", parameters.dump(4));
@@ -87,84 +98,20 @@ void SshSessionManager::registerRpc(Nui::Window& wnd, Nui::RpcHub& hub)
 
                 const auto sessionOptions =
                     parameters["engine"]["sshSessionOptions"].get<Persistence::SshSessionOptions>();
-                // const auto sshOptions = sessionOptions.sshOptions.value();
-
-                auto env = sessionOptions.environment;
-                const auto fileMode = !parameters.contains("stdout") || !parameters.contains("stderr");
-
-                std::string stdoutReceptacle{};
-                std::string stderrReceptacle{};
-                if (!fileMode)
-                {
-                    stdoutReceptacle = parameters.at("stdout").get<std::string>();
-                    stderrReceptacle = parameters.at("stderr").get<std::string>();
-                }
-                const auto exitReceptacle = parameters.at("onExit").get<std::string>();
 
                 const auto engine = parameters["engine"].get<Persistence::SshTerminalEngine>();
                 joinSessionAdder();
-                addSession(
-                    engine,
-                    [this,
-                     wnd,
-                     hub,
-                     responseId,
-                     stdoutReceptacle,
-                     stderrReceptacle,
-                     fileMode,
-                     exitReceptacle,
-                     env = std::move(env)](auto const& maybeId) {
-                        if (!maybeId)
-                        {
-                            Log::error("Failed to create ssh session.");
-                            hub->callRemote(responseId, nlohmann::json{{"error", "Failed to connect to ssh server"}});
-                            return;
-                        }
+                addSession(engine, [responseId, hub](auto const& maybeId) {
+                    if (!maybeId)
+                    {
+                        Log::error("Failed to connect to ssh server");
+                        hub->callRemote(responseId, nlohmann::json{{"error", "Failed to connect to ssh server"}});
+                        return;
+                    }
 
-                        const auto uuid = maybeId.value();
-
-                        if (env)
-                            sessions_[uuid]->setPtyEnvironment(env.value());
-
-                        Log::info("Connected to ssh server with id: {}", uuid);
-
-                        if (!fileMode)
-                        {
-                            const auto result = sessions_[uuid]->createPtyChannel();
-
-                            if (result != 0)
-                            {
-                                Log::error("Failed to create pty channel: {}", result);
-                                sessions_.erase(uuid);
-                                hub->callRemote(responseId, nlohmann::json{{"error", "Failed to create pty channel"}});
-                                return;
-                            }
-
-                            sessions_[uuid]->startReading(
-                                [wnd, hub, uuid, stdoutReceptacle](std::string const& msg) {
-                                    wnd->runInJavascriptThread([hub, stdoutReceptacle, uuid, msg]() {
-                                        hub->callRemote(
-                                            stdoutReceptacle,
-                                            nlohmann::json{{"uuid", uuid}, {"data", Roar::base64Encode(msg)}});
-                                    });
-                                },
-                                [wnd, hub, uuid, stderrReceptacle](std::string const& data) {
-                                    wnd->runInJavascriptThread([hub, stderrReceptacle, uuid, data]() {
-                                        hub->callRemote(
-                                            stderrReceptacle,
-                                            nlohmann::json{{"uuid", uuid}, {"data", Roar::base64Encode(data)}});
-                                    });
-                                },
-                                [wnd, hub, uuid, exitReceptacle]() {
-                                    wnd->runInJavascriptThread([hub, uuid, exitReceptacle]() {
-                                        Log::info("Ssh connection lost with id: {}", uuid);
-                                        hub->callRemote(exitReceptacle, nlohmann::json{{"uuid", uuid}});
-                                    });
-                                });
-                        }
-
-                        hub->callRemote(responseId, nlohmann::json{{"uuid", uuid}});
-                    });
+                    Log::info("Connected to ssh server with id: {}", maybeId->value());
+                    hub->callRemote(responseId, nlohmann::json{{"id", maybeId->value()}});
+                });
             }
             catch (std::exception const& e)
             {
@@ -174,18 +121,159 @@ void SshSessionManager::registerRpc(Nui::Window& wnd, Nui::RpcHub& hub)
             }
         });
 
+    /*
+    {
+        sessionId: string,
+        engine: {
+            sshSessionOptions: Persistence::SshSessionOptions,
+            environment: std::unordered_map<std::string, std::string>
+        }
+    }
+    */
     hub.registerFunction(
-        "SshSessionManager::disconnect", [this, hub = &hub](std::string const& responseId, std::string const& uuid) {
+        "SshSessionManager::Session::createChannel",
+        [this, hub = &hub](std::string const& responseId, nlohmann::json const& parameters) {
+            if (!parameters.contains("sessionId"))
+            {
+                Log::error("No session id specified for channel creation");
+                hub->callRemote(responseId, nlohmann::json{{"error", "No session id specified for channel creation"}});
+                return;
+            }
+
+            const auto sessionId = Ids::makeSessionId(parameters.at("sessionId").get<std::string>());
+
+            if (sessions_.find(sessionId) == sessions_.end())
+            {
+                Log::error("No session found with id: {}", sessionId.value());
+                hub->callRemote(responseId, nlohmann::json{{"error", "No session found with id"}});
+                return;
+            }
+
+            if (!parameters.contains("engine"))
+            {
+                Log::error("No engine specified for ssh channel");
+                hub->callRemote(responseId, nlohmann::json{{"error", "No engine specified for ssh connection"}});
+                return;
+            }
+
+            const auto sessionOptions = parameters["engine"]["sshSessionOptions"].get<Persistence::SshSessionOptions>();
+            auto env = sessionOptions.environment;
+
+            const auto channelId = sessions_[sessionId]->createPtyChannel(env);
+            if (!channelId.has_value())
+            {
+                Log::error("Failed to create pty channel: {}", channelId.error());
+                hub->callRemote(responseId, nlohmann::json{{"error", "Failed to create pty channel"}});
+                return;
+            }
+
+            hub->callRemote(responseId, nlohmann::json{{"id", channelId.value().value()}});
+        });
+
+    hub.registerFunction(
+        "SshSessionManager::Channel::startReading",
+        [this, hub = &hub, wnd = &wnd](
+            std::string const& responseId, std::string const& sessionIdString, std::string const& channelIdString) {
+            const auto sessionId = Ids::makeSessionId(sessionIdString);
+            const auto channelId = Ids::makeChannelId(channelIdString);
+
+            if (sessions_.find(sessionId) == sessions_.end())
+            {
+                Log::error("No session found with id: {}", sessionId.value());
+                hub->callRemote(responseId, nlohmann::json{{"error", "No session found with id"}});
+                return;
+            }
+
+            auto& session = sessions_[sessionId];
+            auto channel = session->getChannel(channelId);
+
+            const std::string stdoutReceptacle{"sshTerminalStdout_" + channelId.value()};
+            const std::string stderrReceptacle{"sshTerminalStderr_" + channelId.value()};
+            const std::string exitReceptacle{"sshTerminalOnExit_" + channelId.value()};
+
+            channel->startReading(
+                [wnd, hub, sessionId, channelId, stdoutReceptacle](std::string const& msg) {
+                    wnd->runInJavascriptThread([hub, stdoutReceptacle, sessionId, channelId, msg]() {
+                        hub->callRemote(
+                            stdoutReceptacle,
+                            nlohmann::json{
+                                {"sessionId", sessionId.value()},
+                                {"channelId", channelId.value()},
+                                {"data", Roar::base64Encode(msg)}});
+                    });
+                },
+                [wnd, hub, sessionId, channelId, stderrReceptacle](std::string const& data) {
+                    wnd->runInJavascriptThread([hub, stderrReceptacle, sessionId, channelId, data]() {
+                        hub->callRemote(
+                            stderrReceptacle,
+                            nlohmann::json{
+                                {"sessionId", sessionId.value()},
+                                {"channelId", channelId.value()},
+                                {"data", Roar::base64Encode(data)}});
+                    });
+                },
+                [this, wnd, hub, sessionId, channelId, exitReceptacle]() {
+                    wnd->runInJavascriptThread([this, hub, sessionId, channelId, exitReceptacle]() {
+                        Log::info("Channel for session '{}' lost with id: {}", sessionId.value(), channelId.value());
+                        sessions_[sessionId]->closeChannel(channelId);
+                        hub->callRemote(
+                            exitReceptacle,
+                            nlohmann::json{{"sessionId", sessionId.value()}, {"channelId", channelId.value()}});
+                    });
+                });
+
+            hub->callRemote(responseId, nlohmann::json{{"success", true}});
+        });
+
+    hub.registerFunction(
+        "SshSessionManager::Session::closeChannel",
+        [this, hub = &hub](
+            std::string const& responseId, std::string const& sessionIdString, std::string const& channelIdString) {
             try
             {
-                if (sessions_.find(uuid) == sessions_.end())
+                const auto sessionId = Ids::makeSessionId(sessionIdString);
+                const auto channelId = Ids::makeChannelId(channelIdString);
+
+                if (sessions_.find(sessionId) == sessions_.end())
+                {
+                    Log::error("No session found with id: {}", sessionId.value());
+                    hub->callRemote(responseId, nlohmann::json{{"error", "No session found with id"}});
+                    return;
+                }
+
+                auto& session = sessions_[sessionId];
+                if (!session->closeChannel(channelId))
+                {
+                    Log::error("Failed to close channel with id: {}", channelId.value());
+                    hub->callRemote(responseId, nlohmann::json{{"error", "Failed to close channel"}});
+                    return;
+                }
+
+                hub->callRemote(responseId, nlohmann::json{{"success", true}});
+            }
+            catch (std::exception const& e)
+            {
+                Log::error("Error closing channel: {}", e.what());
+                hub->callRemote(responseId, nlohmann::json{{"error", e.what()}});
+                return;
+            }
+        });
+
+    hub.registerFunction(
+        "SshSessionManager::disconnect",
+        [this, hub = &hub](std::string const& responseId, std::string const& sessionIdString) {
+            try
+            {
+                const auto sessionId = Ids::makeSessionId(sessionIdString);
+
+                if (sessions_.find(sessionId) == sessions_.end())
                 {
                     // Do not log this, because multi delete is not an error
                     hub->callRemote(responseId, nlohmann::json{{"error", "No session found with id"}});
                     return;
                 }
-                Log::info("Disconnecting from ssh server with id: {}", uuid);
-                sessions_.erase(uuid);
+                Log::info("Disconnecting from ssh server with id: {}", sessionId.value());
+                sessions_.erase(sessionId);
                 hub->callRemote(responseId, nlohmann::json{{"success", true}});
             }
             catch (std::exception const& e)
@@ -198,17 +286,19 @@ void SshSessionManager::registerRpc(Nui::Window& wnd, Nui::RpcHub& hub)
 
     hub.registerFunction(
         "SshSessionManager::sftp::listDirectory",
-        [this, hub = &hub](std::string const& responseId, std::string const& uuid, std::string const& path) {
+        [this, hub = &hub](std::string const& responseId, std::string const& sessionIdString, std::string const& path) {
             try
             {
-                if (sessions_.find(uuid) == sessions_.end())
+                const auto sessionId = Ids::makeSessionId(sessionIdString);
+
+                if (sessions_.find(sessionId) == sessions_.end())
                 {
-                    Log::error("No session found with id: {}", uuid);
+                    Log::error("No session found with id: {}", sessionId.value());
                     hub->callRemote(responseId, nlohmann::json{{"error", "No session found with id"}});
                     return;
                 }
 
-                auto& session = sessions_[uuid];
+                auto& session = sessions_[sessionId];
                 auto sftpSession = session->getSftpSession();
                 if (!sftpSession)
                 {
@@ -237,17 +327,19 @@ void SshSessionManager::registerRpc(Nui::Window& wnd, Nui::RpcHub& hub)
 
     hub.registerFunction(
         "SshSessionManager::sftp::createDirectory",
-        [this, hub = &hub](std::string const& responseId, std::string const& uuid, std::string const& path) {
+        [this, hub = &hub](std::string const& responseId, std::string const& sessionIdString, std::string const& path) {
             try
             {
-                if (sessions_.find(uuid) == sessions_.end())
+                const auto sessionId = Ids::makeSessionId(sessionIdString);
+
+                if (sessions_.find(sessionId) == sessions_.end())
                 {
-                    Log::error("No session found with id: {}", uuid);
+                    Log::error("No session found with id: {}", sessionId.value());
                     hub->callRemote(responseId, nlohmann::json{{"error", "No session found with id"}});
                     return;
                 }
 
-                auto& session = sessions_[uuid];
+                auto& session = sessions_[sessionId];
                 auto sftpSession = session->getSftpSession();
                 if (!sftpSession)
                 {
@@ -275,19 +367,35 @@ void SshSessionManager::registerRpc(Nui::Window& wnd, Nui::RpcHub& hub)
         });
 
     hub.registerFunction(
-        "SshSessionManager::write",
-        [this, hub = &hub](std::string const& responseId, std::string const& uuid, std::string const& data) {
+        "SshSessionManager::Channel::write",
+        [this, hub = &hub](
+            std::string const& responseId,
+            std::string const& sessionIdString,
+            std::string const& channelIdString,
+            std::string const& data) {
             try
             {
-                if (sessions_.find(uuid) == sessions_.end())
+                const auto sessionId = Ids::makeSessionId(sessionIdString);
+                const auto channelId = Ids::makeChannelId(channelIdString);
+
+                if (sessions_.find(sessionId) == sessions_.end())
                 {
-                    Log::error("No session found with id: {}", uuid);
+                    Log::error("No session found with id: {}", sessionId.value());
                     hub->callRemote(responseId, nlohmann::json{{"error", "No session found with id"}});
                     return;
                 }
 
-                auto& session = sessions_[uuid];
-                session->write(Roar::base64Decode(data));
+                auto& session = sessions_[sessionId];
+
+                auto* channel = session->getChannel(channelId);
+                if (!channel)
+                {
+                    Log::error("Failed to get channel: {}", channelId.value());
+                    hub->callRemote(responseId, nlohmann::json{{"error", "Failed to get channel"}});
+                    return;
+                }
+
+                channel->write(Roar::base64Decode(data));
             }
             catch (std::exception const& e)
             {
@@ -298,20 +406,36 @@ void SshSessionManager::registerRpc(Nui::Window& wnd, Nui::RpcHub& hub)
         });
 
     hub.registerFunction(
-        "SshSessionManager::ptyResize",
-        [this, hub = &hub](std::string const& responseId, std::string const& uuid, int cols, int rows) {
+        "SshSessionManager::Channel::ptyResize",
+        [this, hub = &hub](
+            std::string const& responseId,
+            std::string const& sessionIdString,
+            std::string const& channelIdString,
+            int cols,
+            int rows) {
             try
             {
-                if (sessions_.find(uuid) == sessions_.end())
+                const auto sessionId = Ids::makeSessionId(sessionIdString);
+                const auto channelId = Ids::makeChannelId(channelIdString);
+
+                if (sessions_.find(sessionId) == sessions_.end())
                 {
-                    Log::error("No session found with id: {}", uuid);
+                    Log::error("No session found with id: {}", sessionId.value());
                     hub->callRemote(responseId, nlohmann::json{{"error", "No session found with id"}});
                     return;
                 }
 
-                auto& session = sessions_[uuid];
+                auto& session = sessions_[sessionId];
 
-                const auto result = session->resizePty(cols, rows);
+                auto* channel = session->getChannel(channelId);
+                if (!channel)
+                {
+                    Log::error("Failed to get channel: {}", channelId.value());
+                    hub->callRemote(responseId, nlohmann::json{{"error", "Failed to get channel"}});
+                    return;
+                }
+
+                const auto result = channel->resizePty(cols, rows);
                 if (result != 0)
                 {
                     Log::error("Failed to resize pty: {}", result);
@@ -347,7 +471,7 @@ void SshSessionManager::joinSessionAdder()
 
 void SshSessionManager::addSession(
     Persistence::SshTerminalEngine const& engine,
-    std::function<void(std::optional<std::string> const&)> onComplete)
+    std::function<void(std::optional<Ids::SessionId> const&)> onComplete)
 {
     std::scoped_lock guard{addSessionMutex_};
     if (addSessionThread_ && addSessionThread_->joinable())
@@ -635,15 +759,17 @@ void SshSessionManager::addSession(
 
         std::stringstream sstr;
         sstr << boost::uuids::random_generator()();
-        const auto uuid = sstr.str();
-        if (sessions_.find(uuid) != sessions_.end())
+        const auto sessionId = Ids::makeSessionId(sstr.str());
+
+        if (sessions_.find(sessionId) != sessions_.end())
         {
             Log::error("Failed to generate unique session id?!");
             // intentional std::terminate
             throw std::runtime_error("Failed to generate unique session id");
         }
-        sessions_[uuid] = std::move(session);
-        Log::info("Ssh session created with id: {}", uuid);
-        onComplete(uuid);
+
+        sessions_[sessionId] = std::move(session);
+        Log::info("Ssh session created with id: {}", sessionId.value());
+        onComplete(sessionId);
     });
 }

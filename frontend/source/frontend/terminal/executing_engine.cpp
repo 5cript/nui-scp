@@ -42,7 +42,7 @@ ExecutingTerminalEngine::~ExecutingTerminalEngine()
 {
     if (!moveDetector_.wasMoved())
     {
-        dispose();
+        dispose([]() {});
     }
 }
 
@@ -131,11 +131,12 @@ void ExecutingTerminalEngine::open(std::function<void(bool, std::string const&)>
         [this, onOpen = std::move(onOpen)](Nui::val val) {
             if (!val.hasOwnProperty("uuid"))
             {
-                Log::error("ProcessStore::spawn callback did not return a uuid");
+                Log::error("ProcessStore::spawn callback did not return an id");
                 if (val.hasOwnProperty("error"))
                     Log::error(val["error"].as<std::string>());
                 return onOpen(false, val["error"].as<std::string>());
             }
+            // TODO: Use typed id
             std::string uuid = val["uuid"].as<std::string>();
             impl_->processId = uuid;
 
@@ -145,12 +146,13 @@ void ExecutingTerminalEngine::open(std::function<void(bool, std::string const&)>
         obj);
 }
 
-void ExecutingTerminalEngine::dispose()
+void ExecutingTerminalEngine::dispose(std::function<void()> onDisposeComplete)
 {
     Nui::RpcClient::callWithBackChannel(
         "ProcessStore::exit",
-        [](Nui::val) {
+        [onDisposeComplete = std::move(onDisposeComplete)](Nui::val) {
             // TODO: handle error
+            onDisposeComplete();
         },
         impl_->processId);
 

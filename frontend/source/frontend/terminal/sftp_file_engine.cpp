@@ -7,6 +7,7 @@
 struct SftpFileEngine::Implementation
 {
     SshTerminalEngine underlyingEngine;
+    bool wasDisposed = false;
 
     Implementation(SshTerminalEngine::Settings settings)
         : underlyingEngine{std::move(settings)}
@@ -18,7 +19,7 @@ SftpFileEngine::SftpFileEngine(SshTerminalEngine::Settings settings)
 {}
 SftpFileEngine::~SftpFileEngine()
 {
-    if (!moveDetector_.wasMoved())
+    if (!moveDetector_.wasMoved() && !impl_->wasDisposed)
     {
         dispose();
     }
@@ -26,18 +27,19 @@ SftpFileEngine::~SftpFileEngine()
 
 void SftpFileEngine::dispose()
 {
-    if (impl_->underlyingEngine.sshSessionId().empty())
+    impl_->wasDisposed = true;
+    if (!impl_->underlyingEngine.sshSessionId().isValid())
     {
         return;
     }
-    impl_->underlyingEngine.dispose();
+    impl_->underlyingEngine.dispose([]() {});
 }
 
 ROAR_PIMPL_SPECIAL_FUNCTIONS_IMPL_NO_DTOR(SftpFileEngine);
 
-void SftpFileEngine::lazyOpen(std::function<void(std::optional<std::string> const&)> const& onOpen)
+void SftpFileEngine::lazyOpen(std::function<void(std::optional<Ids::SessionId> const&)> const& onOpen)
 {
-    if (!impl_->underlyingEngine.sshSessionId().empty())
+    if (impl_->underlyingEngine.sshSessionId().isValid())
     {
         onOpen(impl_->underlyingEngine.sshSessionId());
         return;
@@ -90,7 +92,7 @@ void SftpFileEngine::listDirectory(
 
                 onComplete(nlohmann::json::parse(Nui::JSON::stringify(val))["entries"]);
             },
-            *sshSessionId,
+            sshSessionId->value(),
             path.generic_string());
     });
 }
@@ -119,7 +121,7 @@ void SftpFileEngine::createDirectory(std::filesystem::path const& path, std::fun
 
                 onComplete(true);
             },
-            *sshSessionId,
+            sshSessionId->value(),
             path.generic_string());
     });
 }

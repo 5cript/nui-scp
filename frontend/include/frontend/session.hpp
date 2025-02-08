@@ -8,6 +8,7 @@
 #include <frontend/dialog/input_dialog.hpp>
 #include <frontend/dialog/confirm_dialog.hpp>
 #include <shared_data/directory_entry.hpp>
+#include <ids/ids.hpp>
 
 #include <nui/frontend/element_renderer.hpp>
 #include <nui/frontend/utility/stabilize.hpp>
@@ -26,11 +27,12 @@ class Session
         std::optional<std::string> layoutName,
         InputDialog* newItemAskDialog,
         ConfirmDialog* confirmDialog,
-        std::function<void(Session const& self)> closeSelf,
+        std::function<void()> closeSelf,
         bool visible);
     ROAR_PIMPL_SPECIAL_FUNCTIONS(Session);
 
     Nui::ElementRenderer operator()(bool visible);
+    void managerShutdown(std::function<void()> onShutdown);
 
     std::string name() const;
     std::weak_ptr<Nui::Observed<std::string>> tabTitle() const;
@@ -38,19 +40,28 @@ class Session
     bool visible() const;
 
     std::optional<std::string> getProcessIdIfExecutingEngine() const;
-    auto makeTerminalElement() -> Nui::ElementRenderer;
+    auto makeChannelElement() -> Nui::ElementRenderer;
     auto makeFileExplorerElement() -> Nui::ElementRenderer;
     auto makeOperationQueueElement() -> Nui::ElementRenderer;
 
   private:
-    void onOpen(bool success, std::string const& info);
+    void onOpenSession(bool success, std::string const& info);
+    void onOpenChannel(std::optional<Ids::ChannelId> channelId, std::string const& info);
+
     void onFileExplorerConnectionClose();
     void onTerminalConnectionClose();
+    void onBeforeTerminalConnectionClose();
     void onDirectoryListing(std::optional<std::vector<SharedData::DirectoryEntry>>);
     void navigateTo(std::filesystem::path path);
     void openSftp();
     void closeSelf();
-    void initializeLayout(Nui::val element);
+    void initializeLayout();
+
+    void setupFileGrid();
+
+    void createExecutingEngine();
+    void createSshEngine();
+    void fallbackToUserControlEngine();
 
   private:
     struct Implementation;

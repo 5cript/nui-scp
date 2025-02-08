@@ -2,36 +2,30 @@
 #include <frontend/nlohmann_compat.hpp>
 #include <log/log.hpp>
 
+#include <nui/utility/scope_exit.hpp>
 #include <nui/frontend/val.hpp>
 #include <nui/rpc.hpp>
-
-#include <exception>
 
 using namespace std::string_literals;
 
 struct SshTerminalEngine::Implementation
 {
     SshTerminalEngine::Settings settings;
-    std::string id;
-
-    Nui::RpcClient::AutoUnregister stdoutReceiver;
-    Nui::RpcClient::AutoUnregister stderrReceiver;
-    Nui::RpcClient::AutoUnregister onExitReceiver;
-
-    std::string sshSessionId;
-
-    std::function<void(std::string const&)> stdoutHandler;
-    std::function<void(std::string const&)> stderrHandler;
+    Ids::SessionId sshSessionId;
+    std::unordered_map<Ids::ChannelId, SshChannel, Ids::IdHash> channels;
+    std::function<void()> disposer;
+    bool fileMode;
+    bool wasDisposed;
+    bool blockedByDestruction;
 
     Implementation(SshTerminalEngine::Settings&& settings)
         : settings{std::move(settings)}
-        , id{Nui::val::global("generateId")().as<std::string>()}
-        , stdoutReceiver{}
-        , stderrReceiver{}
-        , onExitReceiver{}
         , sshSessionId{}
-        , stdoutHandler{}
-        , stderrHandler{}
+        , channels{}
+        , disposer{}
+        , fileMode{false}
+        , wasDisposed{false}
+        , blockedByDestruction{false}
     {}
 };
 
@@ -40,9 +34,11 @@ SshTerminalEngine::SshTerminalEngine(Settings settings)
 {}
 SshTerminalEngine::~SshTerminalEngine()
 {
-    if (!moveDetector_.wasMoved())
+    if (!moveDetector_.wasMoved() && !impl_->wasDisposed)
     {
-        dispose();
+        // Does not do channel close chain, but quick-kills the session.
+        Log::info("Disconnecting from destructor");
+        disconnect([]() {}, true);
     }
 }
 
@@ -50,116 +46,181 @@ ROAR_PIMPL_SPECIAL_FUNCTIONS_IMPL_NO_DTOR(SshTerminalEngine);
 
 void SshTerminalEngine::open(std::function<void(bool, std::string const&)> onOpen, bool fileMode)
 {
-    if (!fileMode)
+    if (impl_->blockedByDestruction)
     {
-        impl_->stdoutReceiver =
-            Nui::RpcClient::autoRegisterFunction("sshTerminalStdout_" + impl_->id, [this](Nui::val val) {
-                if (val.hasOwnProperty("data"))
-                {
-                    const std::string data = Nui::val::global("atob")(val["data"]).as<std::string>();
-                    if (impl_->stdoutHandler)
-                        impl_->stdoutHandler(data);
-                }
-                else
-                    Log::info("sshTerminalStdout_" + impl_->id + " received an empty message");
-            });
-
-        impl_->stderrReceiver =
-            Nui::RpcClient::autoRegisterFunction("sshTerminalStderr_" + impl_->id, [this](Nui::val val) {
-                if (val.hasOwnProperty("data"))
-                {
-                    const std::string data = Nui::val::global("atob")(val["data"]).as<std::string>();
-                    if (impl_->stderrHandler)
-                        impl_->stderrHandler(data);
-                }
-                else
-                    Log::error("sshTerminalStderr_" + impl_->id + " received an empty message");
-            });
+        Log::error("Blocked by destruction");
+        return onOpen(false, "Blocked by destruction");
     }
 
-    impl_->onExitReceiver = Nui::RpcClient::autoRegisterFunction("sshTerminalOnExit_" + impl_->id, [this](Nui::val) {
-        Nui::RpcClient::callWithBackChannel(
-            "SshSessionManager::disconnect",
-            [this](Nui::val) {
-                if (impl_->settings.onExit)
-                    impl_->settings.onExit();
-            },
-            impl_->sshSessionId);
-    });
+    impl_->fileMode = fileMode;
 
     Nui::val obj = Nui::val::object();
     obj.set("engine", asVal(impl_->settings.engineOptions));
-    if (!fileMode)
-    {
-        obj.set("stdout", "sshTerminalStdout_"s + impl_->id);
-        obj.set("stderr", "sshTerminalStderr_"s + impl_->id);
-    }
-    obj.set("onExit", "sshTerminalOnExit_"s + impl_->id);
 
     Nui::RpcClient::callWithBackChannel(
         "SshSessionManager::connect",
         [this, onOpen = std::move(onOpen)](Nui::val val) {
-            if (!val.hasOwnProperty("uuid"))
+            if (!val.hasOwnProperty("id"))
             {
-                Log::error("SshSessionManager::connect callback did not return a uuid");
+                Log::error("SshSessionManager::connect callback did not return an id");
                 std::string error = "";
                 if (val.hasOwnProperty("error"))
                     error = val["error"].as<std::string>();
                 return onOpen(false, error);
             }
-            std::string uuid = val["uuid"].as<std::string>();
-            impl_->sshSessionId = uuid;
-
+            impl_->sshSessionId = Ids::makeSessionId(val["id"].as<std::string>());
             onOpen(true, "");
         },
         obj);
 }
 
-std::string SshTerminalEngine::sshSessionId() const
+void SshTerminalEngine::disconnect(std::function<void()> onDisconnect, bool fromDtor)
+{
+    if (!impl_->wasDisposed)
+    {
+        impl_->wasDisposed = true;
+        Log::info("Disconnecting session: {}", impl_->sshSessionId.value());
+        Nui::RpcClient::callWithBackChannel(
+            "SshSessionManager::disconnect",
+            [onDisconnect = std::move(onDisconnect)](Nui::val) {
+                // TODO: handle error
+                onDisconnect();
+            },
+            impl_->sshSessionId.value());
+        if (!fromDtor)
+        {
+            if (impl_->settings.onExit)
+                impl_->settings.onExit();
+        }
+    }
+}
+
+void SshTerminalEngine::onChannelDeath()
+{
+    if (!impl_->wasDisposed)
+    {
+        if (impl_->settings.onBeforeExit)
+            impl_->settings.onBeforeExit();
+    }
+    dispose([]() {});
+}
+
+void SshTerminalEngine::createChannel(
+    std::function<void(std::string const&)> handler,
+    std::function<void(std::string const&)> errorHandler,
+    std::function<void(std::optional<Ids::ChannelId> const&)> onCreated)
+{
+    if (impl_->blockedByDestruction)
+    {
+        Log::error("Blocked by destruction");
+        return onCreated(std::nullopt);
+    }
+
+    Nui::val obj = Nui::val::object();
+    obj.set("engine", asVal(impl_->settings.engineOptions));
+    obj.set("sessionId", impl_->sshSessionId.value());
+
+    Nui::RpcClient::callWithBackChannel(
+        "SshSessionManager::Session::createChannel",
+        [this, onCreated = std::move(onCreated), handler = std::move(handler), errorHandler = std::move(errorHandler)](
+            Nui::val val) {
+            if (val.hasOwnProperty("error"))
+            {
+                Log::error("Failed to create channel: {}", val["error"].as<std::string>());
+                onCreated(std::nullopt);
+                return;
+            }
+
+            if (!val.hasOwnProperty("id"))
+            {
+                Log::error("SshSessionManager::Session::createChannel callback did not return an id");
+                onCreated(std::nullopt);
+                return;
+            }
+
+            const auto channelId = Ids::makeChannelId(val["id"].as<std::string>());
+            [[maybe_unused]] const auto [iter, _] =
+                impl_->channels.emplace(channelId, SshChannel{impl_->sshSessionId, channelId});
+
+            // Creates recepticals for stdout/stderr/exit
+            iter->second.open(
+                handler,
+                errorHandler,
+                [this]() {
+                    // If one channel dies, destroy everything.
+                    Log::info("Channel died, disconnecting entire session");
+                    onChannelDeath();
+                },
+                impl_->fileMode);
+
+            Nui::RpcClient::callWithBackChannel(
+                "SshSessionManager::Channel::startReading",
+                [this, channelId, onCreated](Nui::val val) {
+                    if (val.hasOwnProperty("error"))
+                    {
+                        Log::error("Failed to start reading: {}", val["error"].as<std::string>());
+                        closeChannel(channelId, []() {});
+                        onCreated(std::nullopt);
+                        return;
+                    }
+                    Log::info("Started reading: {}", channelId.value());
+                    onCreated(channelId);
+                },
+                impl_->sshSessionId.value(),
+                channelId.value());
+        },
+        obj);
+}
+
+Ids::SessionId SshTerminalEngine::sshSessionId() const
 {
     return impl_->sshSessionId;
 }
 
-void SshTerminalEngine::dispose()
+void SshTerminalEngine::dispose(std::function<void()> onDisposeComplete)
 {
-    Nui::RpcClient::callWithBackChannel(
-        "SshSessionManager::disconnect",
-        [](Nui::val) {
-            // TODO: handle error
-        },
-        impl_->sshSessionId);
+    impl_->blockedByDestruction = true;
 
-    impl_->stdoutReceiver.reset();
-    impl_->stderrReceiver.reset();
-    impl_->sshSessionId.clear();
+    if (impl_->disposer)
+        return;
+
+    impl_->disposer = [this, onDisposeComplete = std::move(onDisposeComplete)]() mutable {
+        if (impl_->channels.empty())
+        {
+            disconnect(onDisposeComplete);
+        }
+        else
+        {
+            auto currentChannel = impl_->channels.begin();
+            const auto channelId = currentChannel->first;
+            closeChannel(channelId, [this, onDisposeComplete]() mutable {
+                impl_->disposer();
+            });
+        }
+    };
+
+    impl_->disposer();
 }
 
-void SshTerminalEngine::resize(int cols, int rows)
+void SshTerminalEngine::closeChannel(Ids::ChannelId const& channelId, std::function<void()> onChannelClosed)
 {
-    Nui::RpcClient::callWithBackChannel(
-        "SshSessionManager::ptyResize",
-        [](Nui::val) {
-            // TODO: handle error
-        },
-        impl_->sshSessionId,
-        cols,
-        rows);
+    if (auto channel = impl_->channels.find(channelId); channel != impl_->channels.end())
+    {
+        channel->second.dispose([this, channelId, onChannelClosed = std::move(onChannelClosed)]() {
+            impl_->channels.erase(channelId);
+            onChannelClosed();
+        });
+    }
+    else
+    {
+        Log::error("Failed to close channel (could not find it): {}", channelId.value());
+    }
 }
-
-void SshTerminalEngine::write(std::string const& data)
+SshChannel* SshTerminalEngine::channel(Ids::ChannelId const& channelId)
 {
-    Nui::RpcClient::callWithBackChannel(
-        "SshSessionManager::write",
-        [](Nui::val) {},
-        impl_->sshSessionId,
-        Nui::val::global("btoa")(data).as<std::string>());
-}
-
-void SshTerminalEngine::setStdoutHandler(std::function<void(std::string const&)> handler)
-{
-    impl_->stdoutHandler = std::move(handler);
-}
-void SshTerminalEngine::setStderrHandler(std::function<void(std::string const&)> handler)
-{
-    impl_->stderrHandler = std::move(handler);
+    if (auto channel = impl_->channels.find(channelId); channel != impl_->channels.end())
+    {
+        return &channel->second;
+    }
+    return nullptr;
 }

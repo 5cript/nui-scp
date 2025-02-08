@@ -73,29 +73,41 @@ ROAR_PIMPL_SPECIAL_FUNCTIONS_IMPL(SessionArea);
 void SessionArea::registerRpc()
 {
     Nui::RpcClient::registerFunction("SessionArea::processDied", [this](Nui::val val) {
-        auto const processId = val["uuid"].as<std::string>();
+        auto const processId = val["id"].as<std::string>();
         Log::info("Process with id '{}' terminated.", processId);
-        removeSession([processId](Session const& session) {
-            return session.getProcessIdIfExecutingEngine().value_or("") == processId;
-        });
+
+        std::size_t index = 0;
+        for (auto const& session : impl_->sessions.value())
+        {
+            if (session->getProcessIdIfExecutingEngine().value_or("") == processId)
+            {
+                break;
+            }
+            ++index;
+        }
+
+        if (index < impl_->sessions.size())
+            removeSession(index);
     });
 }
 
-void SessionArea::removeSession(std::function<bool(Session const&)> const& predicate)
+void SessionArea::removeSession(std::size_t index)
 {
-    int i = 0;
-    for (auto iter = begin(impl_->sessions); iter != end(impl_->sessions); ++iter, ++i)
+    if (index >= impl_->sessions.size())
     {
-        if (predicate(**iter.getWrapped()))
-        {
-            if ((*iter.getWrapped())->visible() && impl_->sessions.size() > 1)
-                setSelected(std::max(0, i - 1));
-            Log::info("Removing session: {}", (*iter.getWrapped())->name());
-            impl_->sessions.erase(iter);
-            break;
-        }
+        Log::critical("Session index out of bounds: {}", index);
+        return;
     }
-    Nui::globalEventContext.executeActiveEventsImmediately();
+
+    Log::info("Removing session: {}", impl_->sessions.value()[index]->name());
+
+    if (impl_->sessions.value()[index]->visible() && impl_->sessions.size() > 1)
+        setSelected(std::max(0ull, index - 1ull));
+
+    impl_->sessions.value()[index]->managerShutdown([this, index]() {
+        impl_->sessions.erase(impl_->sessions.begin() + index);
+        Nui::globalEventContext.executeActiveEventsImmediately();
+    });
 }
 
 void SessionArea::setSelected(int index)
@@ -165,12 +177,11 @@ void SessionArea::addSession(std::string const& name)
             impl_->toolbar->selectedLayout(),
             impl_->newItemAskDialog,
             impl_->confirmDialog,
-            [this](Session const& session) {
-                removeSession([&session](Session const& s) {
-                    return &s == &session;
-                });
+            [this, index = impl_->sessions.size()]() {
+                removeSession(index);
             },
             impl_->sessions.size() == 0));
+
         if (impl_->selected >= 0 && impl_->selected < static_cast<int>(impl_->sessions.size()))
             impl_->sessions.value()[impl_->selected]->visible(false);
         impl_->selected = impl_->sessions.size() - 1;

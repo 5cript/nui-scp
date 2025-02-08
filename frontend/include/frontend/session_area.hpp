@@ -24,7 +24,7 @@ class SessionArea
 
     void addSession(std::string const& name);
     void registerRpc();
-    void removeSession(std::function<bool(Session const&)> const& predicate);
+    void removeSession(std::size_t index);
     void setSelected(int index);
 
   private:
