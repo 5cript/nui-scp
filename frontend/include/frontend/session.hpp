@@ -27,7 +27,7 @@ class Session
         std::optional<std::string> layoutName,
         InputDialog* newItemAskDialog,
         ConfirmDialog* confirmDialog,
-        std::function<void()> closeSelf,
+        std::function<void(Session const*)> closeSelf,
         bool visible);
     ROAR_PIMPL_SPECIAL_FUNCTIONS(Session);
 

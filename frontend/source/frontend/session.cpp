@@ -39,7 +39,7 @@ struct Session::Implementation
     std::string initialName;
     std::shared_ptr<Nui::Observed<std::string>> tabTitle;
     std::string id;
-    std::function<void()> closeSelf;
+    std::function<void(Session const*)> closeSelf;
     Nui::Observed<bool> isVisible;
     Persistence::UiOptions uiOptions;
 
@@ -86,7 +86,7 @@ struct Session::Implementation
         std::optional<std::string> layoutName,
         InputDialog* newItemAskDialog,
         ConfirmDialog* confirmDialog,
-        std::function<void()> closeSelf,
+        std::function<void(Session const*)> closeSelf,
         bool visible)
         : stateHolder{stateHolder}
         , events{events}
@@ -162,7 +162,7 @@ Session::Session(
     std::optional<std::string> layoutName,
     InputDialog* newItemAskDialog,
     ConfirmDialog* confirmDialog,
-    std::function<void()> closeSelf,
+    std::function<void(Session const*)> closeSelf,
     bool visible)
     : impl_{std::make_unique<Implementation>(
           stateHolder,
@@ -538,7 +538,7 @@ void Session::closeSelf()
 
     if (impl_->closeSelf)
     {
-        impl_->closeSelf();
+        impl_->closeSelf(this);
         return;
     }
 }

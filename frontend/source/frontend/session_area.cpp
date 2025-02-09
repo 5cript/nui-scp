@@ -182,7 +182,13 @@ void SessionArea::addSession(std::string const& name)
             impl_->toolbar->selectedLayout(),
             impl_->newItemAskDialog,
             impl_->confirmDialog,
-            [this, index = impl_->sessions.size()]() {
+            [this](Session const* ptr) {
+                auto const index = std::distance(
+                    begin(impl_->sessions.value()),
+                    std::find_if(
+                        begin(impl_->sessions.value()), end(impl_->sessions.value()), [ptr](auto const& session) {
+                            return session.get() == ptr;
+                        }));
                 removeSession(index);
             },
             impl_->sessions.size() == 0));
