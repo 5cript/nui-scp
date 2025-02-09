@@ -79,6 +79,22 @@ namespace Log
     }
 
     /**
+     * @brief Get the log level.
+     *
+     * @return Log::Level
+     */
+    inline Log::Level level()
+    {
+#ifdef __EMSCRIPTEN__
+        if (Detail::logger)
+            return Detail::logger->level();
+        return Log::Level::Info;
+#else
+        return Detail::logger.level();
+#endif
+    }
+
+    /**
      * @brief Convenience function to log at trace level.
      */
     template <typename... Args>

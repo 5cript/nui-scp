@@ -81,6 +81,7 @@ void SessionArea::registerRpc()
         {
             if (session->getProcessIdIfExecutingEngine().value_or("") == processId)
             {
+                Log::info("Process with id '{}' found in session '{}'.", processId, session->name());
                 break;
             }
             ++index;
@@ -88,6 +89,10 @@ void SessionArea::registerRpc()
 
         if (index < impl_->sessions.size())
             removeSession(index);
+        else
+        {
+            Log::error("Process with id '{}' not found in any session.", processId);
+        }
     });
 }
 

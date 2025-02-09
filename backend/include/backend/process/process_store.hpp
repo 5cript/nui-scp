@@ -40,7 +40,7 @@ class ProcessStore
     }
 
     void notifyChildExit(Nui::RpcHub& hub, long long pid);
-    void notifyChildExit(Nui::RpcHub& hub, std::string const& uuid);
+    void notifyChildExit(Nui::RpcHub& hub, std::string const& id);
 
     void pruneDeadProcesses();
 

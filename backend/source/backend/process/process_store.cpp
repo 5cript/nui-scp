@@ -127,9 +127,9 @@ void ProcessStore::pruneDeadProcesses()
     }
 }
 
-void ProcessStore::notifyChildExit(Nui::RpcHub& hub, std::string const& uuid)
+void ProcessStore::notifyChildExit(Nui::RpcHub& hub, std::string const& id)
 {
-    auto process = processes_.find(uuid);
+    auto process = processes_.find(id);
     if (process == processes_.end())
     {
         Log::error("Process not found");
@@ -138,19 +138,19 @@ void ProcessStore::notifyChildExit(Nui::RpcHub& hub, std::string const& uuid)
 
     process->second->exit();
     processes_.erase(process);
-    hub.callRemote("SessionArea::processDied", nlohmann::json{{"uuid", uuid}});
+    hub.callRemote("SessionArea::processDied", nlohmann::json{{"id", id}});
 }
 
 void ProcessStore::notifyChildExit(Nui::RpcHub& hub, long long pid)
 {
-    for (auto& [uuid, process] : processes_)
+    for (auto& [id, process] : processes_)
     {
         if (process->pid() == pid)
         {
             process->exit();
-            const auto idCopy = uuid;
-            processes_.erase(uuid);
-            hub.callRemote("SessionArea::processDied", nlohmann::json{{"uuid", idCopy}, {"pid", pid}});
+            const auto idCopy = id;
+            processes_.erase(id);
+            hub.callRemote("SessionArea::processDied", nlohmann::json{{"id", idCopy}, {"pid", pid}});
             return;
         }
     }
@@ -201,11 +201,11 @@ void ProcessStore::registerRpc(Nui::Window& wnd, Nui::RpcHub& hub)
                     termios = parameters.at("termios").get<Persistence::Termios>();
 
                 env.merge(environment);
-                auto uuid = std::make_shared<std::string>();
+                auto id = std::make_shared<std::string>();
                 const auto processId =
                     emplace(command, arguments, std::move(env), std::move(termios), isPty, defaultExitWaitTimeout);
 
-                *uuid = processId;
+                *id = processId;
 
 #ifdef _WIN32
                 using PtyType = ConPTY::PseudoConsole;
@@ -213,25 +213,23 @@ void ProcessStore::registerRpc(Nui::Window& wnd, Nui::RpcHub& hub)
                 using PtyType = PTY::PseudoTerminal;
 #endif
 
-                hub->callRemote(responseId, nlohmann::json{{"uuid", processId}});
+                hub->callRemote(responseId, nlohmann::json{{"id", processId}});
 
                 if (processes_[processId]->getState<ProcessInfo>(ProcessAttachedState::ProcessInfo).isPty)
                 {
                     Log::info("Starting PTY reading");
                     auto& pty = processes_[processId]->getState<PtyType>(ProcessAttachedState::PseudoConsole);
                     pty.startReading(
-                        [wnd, hub, stdoutReceptacle, uuid](std::string_view message) {
-                            wnd->runInJavascriptThread([hub, stdoutReceptacle, uuid, msg = std::string{message}]() {
+                        [wnd, hub, stdoutReceptacle, id](std::string_view message) {
+                            wnd->runInJavascriptThread([hub, stdoutReceptacle, id, msg = std::string{message}]() {
                                 hub->callRemote(
-                                    stdoutReceptacle,
-                                    nlohmann::json{{"uuid", *uuid}, {"data", Roar::base64Encode(msg)}});
+                                    stdoutReceptacle, nlohmann::json{{"id", *id}, {"data", Roar::base64Encode(msg)}});
                             });
                         },
-                        [wnd, hub, stderrReceptacle, uuid](std::string_view message) {
-                            wnd->runInJavascriptThread([hub, stderrReceptacle, uuid, msg = std::string{message}]() {
+                        [wnd, hub, stderrReceptacle, id](std::string_view message) {
+                            wnd->runInJavascriptThread([hub, stderrReceptacle, id, msg = std::string{message}]() {
                                 hub->callRemote(
-                                    stderrReceptacle,
-                                    nlohmann::json{{"uuid", *uuid}, {"data", Roar::base64Encode(msg)}});
+                                    stderrReceptacle, nlohmann::json{{"id", *id}, {"data", Roar::base64Encode(msg)}});
                             });
                         });
                 }
@@ -239,19 +237,17 @@ void ProcessStore::registerRpc(Nui::Window& wnd, Nui::RpcHub& hub)
                 {
                     Log::info("Starting non-PTY reading");
                     processes_[processId]->startReading(
-                        [hub, stdoutReceptacle, uuid, wnd](std::string_view message) {
-                            wnd->runInJavascriptThread([hub, stdoutReceptacle, uuid, msg = std::string{message}]() {
+                        [hub, stdoutReceptacle, id, wnd](std::string_view message) {
+                            wnd->runInJavascriptThread([hub, stdoutReceptacle, id, msg = std::string{message}]() {
                                 hub->callRemote(
-                                    stdoutReceptacle,
-                                    nlohmann::json{{"uuid", *uuid}, {"data", Roar::base64Encode(msg)}});
+                                    stdoutReceptacle, nlohmann::json{{"id", *id}, {"data", Roar::base64Encode(msg)}});
                             });
                             return true;
                         },
-                        [hub, stderrReceptacle, uuid, wnd](std::string_view message) {
-                            wnd->runInJavascriptThread([hub, stderrReceptacle, uuid, msg = std::string{message}]() {
+                        [hub, stderrReceptacle, id, wnd](std::string_view message) {
+                            wnd->runInJavascriptThread([hub, stderrReceptacle, id, msg = std::string{message}]() {
                                 hub->callRemote(
-                                    stderrReceptacle,
-                                    nlohmann::json{{"uuid", *uuid}, {"data", Roar::base64Encode(msg)}});
+                                    stderrReceptacle, nlohmann::json{{"id", *id}, {"data", Roar::base64Encode(msg)}});
                             });
                             return true;
                         });
@@ -269,10 +265,10 @@ void ProcessStore::registerRpc(Nui::Window& wnd, Nui::RpcHub& hub)
         "ProcessStore::terminate", [this, hub = &hub](std::string const& responseId, nlohmann::json const& parameters) {
             try
             {
-                const auto uuid = parameters.at("uuid").get<std::string>();
-                Log::info("Terminating process with UUID: {}", uuid);
+                const auto id = parameters.at("id").get<std::string>();
+                Log::info("Terminating process with UUID: {}", id);
 
-                auto process = processes_.find(uuid);
+                auto process = processes_.find(id);
                 if (process == processes_.end())
                 {
                     hub->callRemote(responseId, nlohmann::json{{"error", "Process not found"}});
@@ -291,11 +287,11 @@ void ProcessStore::registerRpc(Nui::Window& wnd, Nui::RpcHub& hub)
         });
 
     hub.registerFunction(
-        "ProcessStore::exit", [this, hub = &hub](std::string const& responseId, std::string const& uuid) {
+        "ProcessStore::exit", [this, hub = &hub](std::string const& responseId, std::string const& id) {
             try
             {
-                Log::info("Exiting process with UUID: {}", uuid);
-                auto process = processes_.find(uuid);
+                Log::info("Exiting process with UUID: {}", id);
+                auto process = processes_.find(id);
                 if (process == processes_.end())
                 {
                     hub->callRemote(responseId, nlohmann::json{{"error", "Process not found"}});
@@ -315,10 +311,10 @@ void ProcessStore::registerRpc(Nui::Window& wnd, Nui::RpcHub& hub)
 
     hub.registerFunction(
         "ProcessStore::write",
-        [this, hub = &hub](std::string const& responseId, std::string const& uuid, std::string const& data) {
+        [this, hub = &hub](std::string const& responseId, std::string const& id, std::string const& data) {
             try
             {
-                auto process = processes_.find(uuid);
+                auto process = processes_.find(id);
                 if (process == processes_.end())
                 {
                     hub->callRemote(responseId, nlohmann::json{{"error", "Process not found"}});
@@ -349,10 +345,10 @@ void ProcessStore::registerRpc(Nui::Window& wnd, Nui::RpcHub& hub)
         });
 
     hub.registerFunction(
-        "ProcessStore::ptyProcesses", [this, hub = &hub](std::string const& responseId, std::string const& uuid) {
+        "ProcessStore::ptyProcesses", [this, hub = &hub](std::string const& responseId, std::string const& id) {
             try
             {
-                auto process = processes_.find(uuid);
+                auto process = processes_.find(id);
                 if (process == processes_.end())
                 {
                     hub->callRemote(responseId, nlohmann::json{{"error", "Process not found"}});
@@ -403,11 +399,11 @@ void ProcessStore::registerRpc(Nui::Window& wnd, Nui::RpcHub& hub)
 
     hub.registerFunction(
         "ProcessStore::ptyResize",
-        [this, hub = &hub](std::string const& responseId, std::string const& uuid, int cols, int rows) {
+        [this, hub = &hub](std::string const& responseId, std::string const& id, int cols, int rows) {
             try
             {
-                Log::debug("Resizing PTY with UUID: {} to cols: {}, rows: {}", uuid, cols, rows);
-                auto process = processes_.find(uuid);
+                Log::debug("Resizing PTY with UUID: {} to cols: {}, rows: {}", id, cols, rows);
+                auto process = processes_.find(id);
                 if (process == processes_.end())
                 {
                     hub->callRemote(responseId, nlohmann::json{{"error", "Process not found"}});

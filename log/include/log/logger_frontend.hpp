@@ -71,6 +71,11 @@ namespace Log
                 callable(static_cast<int>(level));
         }
 
+        Log::Level level() const
+        {
+            return logLevel_;
+        }
+
         template <typename... Args>
         void log(Log::Level level, std::string const& message)
         {

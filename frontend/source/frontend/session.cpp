@@ -298,6 +298,9 @@ void Session::createExecutingEngine()
                 },
         }),
         false);
+
+    impl_->terminal.value()->open(
+        std::bind(&Session::onOpenSession, this, std::placeholders::_1, std::placeholders::_2));
 }
 
 Session::~Session() = default;
@@ -425,25 +428,26 @@ void Session::onOpenSession(bool success, std::string const& info)
     else
     {
         Log::info("Session opened successfully: {}", info);
+        if (impl_->terminal.value() && impl_->terminal.value()->engine().engineName() == "ssh")
+        {
+            // TODO: __todo_default__ is probably something that should be replaced with a proper default value
+            const auto user = std::get<Persistence::SshTerminalEngine>(impl_->engine.engine)
+                                  .sshSessionOptions.value()
+                                  .user.value_or("__todo_default__");
+            auto host = std::get<Persistence::SshTerminalEngine>(impl_->engine.engine).sshSessionOptions.value().host;
+            const auto port = std::get<Persistence::SshTerminalEngine>(impl_->engine.engine)
+                                  .sshSessionOptions.value()
+                                  .port.value_or(22);
 
-        // TODO: __todo_default__ is probably something that should be replaced with a proper default value
-        const auto user = std::get<Persistence::SshTerminalEngine>(impl_->engine.engine)
-                              .sshSessionOptions.value()
-                              .user.value_or("__todo_default__");
-        auto host = std::get<Persistence::SshTerminalEngine>(impl_->engine.engine).sshSessionOptions.value().host;
-        const auto port =
-            std::get<Persistence::SshTerminalEngine>(impl_->engine.engine).sshSessionOptions.value().port.value_or(22);
+            // assume ipv6 when finding ':' in host
+            if (host.find(":") != std::string::npos)
+                host = "[" + host + "]";
+            *impl_->tabTitle = user + "@" + host + ":" + std::to_string(port);
 
-        // assume ipv6 when finding ':' in host
-        if (host.find(":") != std::string::npos)
-            host = "[" + host + "]";
-        *impl_->tabTitle = user + "@" + host + ":" + std::to_string(port);
+            openSftp();
+        }
 
         impl_->terminal.value()->focus();
-
-        if (impl_->terminal.value() && impl_->terminal.value()->engine().engineName() == "ssh")
-            openSftp();
-
         initializeLayout();
     }
 }
@@ -499,9 +503,18 @@ void Session::onFileExplorerConnectionClose()
 
 void Session::managerShutdown(std::function<void()> onShutdown)
 {
-    if (impl_->terminal.value() || impl_->fileEngine)
+    const bool isExecutingEngine = std::holds_alternative<Persistence::ExecutingTerminalEngine>(impl_->engine.engine);
+
+    if (!isExecutingEngine && (impl_->terminal.value() || impl_->fileEngine))
     {
-        Log::info("Waiting for terminal or file engine to close");
+        if (impl_->terminal.value())
+        {
+            Log::info("Waiting for terminal engine to close");
+        }
+        if (impl_->fileEngine)
+        {
+            Log::info("Waiting for file engine to close");
+        }
         impl_->onShutdownComplete = std::move(onShutdown);
     }
     else

@@ -129,7 +129,7 @@ void ExecutingTerminalEngine::open(std::function<void(bool, std::string const&)>
     Nui::RpcClient::callWithBackChannel(
         "ProcessStore::spawn",
         [this, onOpen = std::move(onOpen)](Nui::val val) {
-            if (!val.hasOwnProperty("uuid"))
+            if (!val.hasOwnProperty("id"))
             {
                 Log::error("ProcessStore::spawn callback did not return an id");
                 if (val.hasOwnProperty("error"))
@@ -137,10 +137,10 @@ void ExecutingTerminalEngine::open(std::function<void(bool, std::string const&)>
                 return onOpen(false, val["error"].as<std::string>());
             }
             // TODO: Use typed id
-            std::string uuid = val["uuid"].as<std::string>();
-            impl_->processId = uuid;
+            std::string id = val["id"].as<std::string>();
+            impl_->processId = id;
 
-            onOpen(true, "");
+            onOpen(true, id);
             updatePtyProcs();
         },
         obj);

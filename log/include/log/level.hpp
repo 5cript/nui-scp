@@ -45,6 +45,28 @@ namespace Log
                 return spdlog::level::info;
         }
     }
+    inline Level fromSpdlogLevel(spdlog::level::level_enum lvl)
+    {
+        switch (lvl)
+        {
+            case spdlog::level::trace:
+                return Level::Trace;
+            case spdlog::level::debug:
+                return Level::Debug;
+            case spdlog::level::info:
+                return Level::Info;
+            case spdlog::level::warn:
+                return Level::Warning;
+            case spdlog::level::err:
+                return Level::Error;
+            case spdlog::level::critical:
+                return Level::Critical;
+            case spdlog::level::off:
+                return Level::Off;
+            default:
+                return Level::Info;
+        }
+    }
 #endif
 
     inline Level levelFromString(std::string_view str)

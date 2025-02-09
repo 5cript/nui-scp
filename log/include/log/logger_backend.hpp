@@ -67,6 +67,11 @@ namespace Log
             spdlog::set_level(toSpdlogLevel(level));
         }
 
+        Log::Level level() const
+        {
+            return fromSpdlogLevel(spdlog::get_level());
+        }
+
         template <typename... Args>
         void log(Log::Level level, std::string_view fmt, Args&&... args)
         {
