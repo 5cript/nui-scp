@@ -32,12 +32,12 @@ struct Toolbar::Implementation
         Log::info("Toolbar::Implementation()");
     }
 
-    void updateSessionsList();
+    void updateSessionsList(std::function<void()> onDone);
 };
 
-void Toolbar::Implementation::updateSessionsList()
+void Toolbar::Implementation::updateSessionsList(std::function<void()> onDone)
 {
-    stateHolder->load([this](bool success, Persistence::StateHolder& holder) {
+    stateHolder->load([this, onDone = std::move(onDone)](bool success, Persistence::StateHolder& holder) {
         if (!success)
             return;
 
@@ -54,6 +54,7 @@ void Toolbar::Implementation::updateSessionsList()
             events->onNewSession.value() = terminalEngines.value().front();
         }
         Nui::globalEventContext.executeActiveEventsImmediately();
+        onDone();
     });
 }
 
@@ -61,7 +62,9 @@ Toolbar::Toolbar(Persistence::StateHolder* stateHolder, FrontendEvents* events)
     : impl_(std::make_unique<Implementation>(stateHolder, events))
 {
     Log::info("Toolbar::Toolbar");
-    impl_->updateSessionsList();
+    impl_->updateSessionsList([this]() {
+        reloadLayouts();
+    });
 }
 
 void Toolbar::connectLayoutsChanged()
