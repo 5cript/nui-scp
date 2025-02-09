@@ -485,21 +485,16 @@ void Session::onFileExplorerConnectionClose()
 
     Log::debug("onFileExplorerConnectionClose");
 
-    Log::info("A");
     impl_->fileEngine.reset();
 
     if (impl_->terminal.value())
     {
-        Log::info("B");
         impl_->terminal.value()->dispose();
     }
     else
     {
-        Log::info("C");
         closeSelf();
-        Log::info("D");
     }
-    Log::info("E");
 }
 
 void Session::managerShutdown(std::function<void()> onShutdown)
@@ -519,23 +514,20 @@ void Session::managerShutdown(std::function<void()> onShutdown)
 
 void Session::closeSelf()
 {
-    Log::info("F");
     if (impl_->onShutdownComplete)
     {
-        Log::info("G");
         Log::info("Session shutdown complete");
         Nui::val::global("contentPanelManager").call<void>("removePanel", impl_->id);
+
         impl_->onShutdownComplete();
-        Log::info("H");
+        return;
     }
-    else if (impl_->closeSelf)
+
+    if (impl_->closeSelf)
     {
-        Log::info("I");
         impl_->closeSelf();
-        impl_->closeSelf = {};
-        Log::info("J");
+        return;
     }
-    Log::info("K");
 }
 
 std::optional<std::string> Session::getProcessIdIfExecutingEngine() const
