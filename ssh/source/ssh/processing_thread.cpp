@@ -82,6 +82,13 @@ namespace SecureShell
         }
         return {true, id};
     }
+    void ProcessingThread::clearPermanentTasks()
+    {
+        std::lock_guard lock{taskMutex_};
+        permanentTasksModifiedWithinProcessing_ = true;
+        permanentTasks_.clear();
+        permanentTasksAvailable_ = false;
+    }
     bool ProcessingThread::removePermanentTask(PermanentTaskId const& id)
     {
         std::lock_guard lock{taskMutex_};

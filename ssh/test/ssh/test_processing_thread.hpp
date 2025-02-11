@@ -326,4 +326,13 @@ namespace SecureShell::Test
         EXPECT_TRUE(processingThread.removePermanentTask(result.second));
         EXPECT_FALSE(processingThread.removePermanentTask(result.second));
     }
+
+    TEST_F(ProcessingThreadTest, CanClearPermanentTasks)
+    {
+        ProcessingThread processingThread;
+        processingThread.start(std::chrono::milliseconds{1});
+        processingThread.pushPermanentTask([] {});
+        processingThread.clearPermanentTasks();
+        EXPECT_EQ(0, processingThread.permanentTaskCount());
+    }
 }

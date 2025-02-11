@@ -41,6 +41,7 @@ namespace SecureShell
         std::pair<bool, PermanentTaskId> pushPermanentTask(std::function<void()> task);
         bool removePermanentTask(PermanentTaskId const& id);
         int permanentTaskCount() const;
+        void clearPermanentTasks();
 
       private:
         void run(std::chrono::milliseconds const& waitCycleTimeout, std::chrono::milliseconds const& minimumCycleWait);
