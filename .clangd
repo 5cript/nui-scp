@@ -1,5 +1,5 @@
 If:
-  PathMatch: "(ids\/.*)|(backend\/.*)|(dependencies\/Nui\/.*)"
+  PathMatch: "(ssh\/.*)|(ids\/.*)|(backend\/.*)|(dependencies\/Nui\/.*)"
   PathExclude: "(dependencies\/Nui\/nui\/include\/nui\/frontend.*)"
 CompileFlags:
   CompilationDatabase: "build/clang_debug"

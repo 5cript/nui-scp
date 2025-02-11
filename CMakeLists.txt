@@ -9,6 +9,7 @@ set(SPDLOG_BUILD_SHARED OFF CACHE BOOL "Dont build shared spdlog" FORCE)
 
 option(BUILD_SHARED_LIBS "Do not build shared libraries" OFF)
 option(BUILD_STATIC_LIBS "Build static libraries" ON)
+option(NUI_SCP_ENABLE_TESTING "Enable testing for nui-scp" OFF)
 
 include (${CMAKE_CURRENT_LIST_DIR}/_cmake/common_options.cmake)
 
@@ -42,6 +43,7 @@ if (EMSCRIPTEN)
     add_subdirectory("${CMAKE_SOURCE_DIR}/frontend/source/frontend")
 else()
     include("${CMAKE_CURRENT_LIST_DIR}/_cmake/resource_copy.cmake")
+    add_subdirectory("${CMAKE_SOURCE_DIR}/ssh/source/ssh")
 	add_subdirectory("${CMAKE_SOURCE_DIR}/backend/source/backend")
     add_subdirectory("${CMAKE_SOURCE_DIR}/dependencies/roar")
     add_subdirectory("${CMAKE_SOURCE_DIR}/dependencies/process")
@@ -62,4 +64,10 @@ else()
         COMMAND ${CMAKE_COMMAND} -E rm "$<TARGET_FILE_DIR:${PROJECT_NAME}>/dynamic_sources/index.js"
         VERBATIM
     )
+
+    if (NUI_SCP_ENABLE_TESTING)
+        include(./_cmake/dependencies/gtest.cmake)
+        enable_testing()
+        add_subdirectory(ssh/test/ssh)
+    endif()
 endif()
