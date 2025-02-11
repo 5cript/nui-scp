@@ -188,6 +188,8 @@ struct GenericTerminalChannel
             writeRespectingCache(data, isUserInput);
         };
     }
+
+    ~GenericTerminalChannel() = default;
 };
 
 struct TerminalChannel::Implementation : public GenericTerminalChannel
@@ -196,7 +198,6 @@ struct TerminalChannel::Implementation : public GenericTerminalChannel
 
     ChannelInterface* channel()
     {
-        Log::debug("Getting channel with id: '{}'", channelId.value());
         return engine->channel(channelId);
     }
 
@@ -429,6 +430,8 @@ void Terminal::createChannel(
     Persistence::TerminalOptions const& options,
     std::function<void(std::optional<Ids::ChannelId> /*channelId*/, std::string const& info)> onChannelCreated)
 {
+    using namespace std::string_literals;
+
     Log::info("Creating channel");
 
     if (impl_->isMultiChannel)
@@ -461,12 +464,12 @@ void Terminal::createChannel(
                 }
             },
             [this, channelId, onChannelCreated, host, options](std::optional<Ids::ChannelId> const& creationResult) {
-                Log::info("Channel created.");
                 if (!creationResult)
                 {
                     onChannelCreated(std::nullopt, "Failed to create channel");
                     return;
                 }
+                Log::info("Channel created.");
 
                 *channelId = creationResult;
 
@@ -489,12 +492,15 @@ void Terminal::createChannel(
 
                 Log::info("Opening channel");
                 channelIter->second->open(
-                    host, options, [onChannelCreated, channelId = **channelId](bool success, std::string const& info) {
+                    host,
+                    options,
+                    [onChannelCreated, channelId = **channelId, host](bool success, std::string const& info) mutable {
                         if (!success)
                         {
                             onChannelCreated(std::nullopt, info);
                             return;
                         }
+                        host.call<void>("setAttribute", "data-channelid"s, channelId.value());
                         onChannelCreated(channelId, info);
                     });
             });

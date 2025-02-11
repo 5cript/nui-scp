@@ -24,6 +24,7 @@
 #include <nui/frontend/attributes.hpp>
 
 #include <algorithm>
+#include <vector>
 
 using namespace Nui;
 using namespace Nui::Elements;
@@ -126,6 +127,7 @@ auto Session::makeChannelElement() -> Nui::ElementRenderer
         [this]() -> Nui::ElementRenderer {
             return div{
                 style = "height: 100%; width: 100%",
+                class_ = "terminal-channel",
                 reference.onMaterialize([this](Nui::val element) {
                     Log::info("Channel terminal materialized");
                     if (impl_->terminal.value())
@@ -587,6 +589,38 @@ auto Session::makeOperationQueueElement() -> Nui::ElementRenderer
     // clang-format on
 }
 
+void Session::onChannelClosedByUser(Ids::ChannelId const& channelId)
+{
+    using namespace std::string_literals;
+
+    // Removing element from vector:
+    std::erase_if(impl_->channelElements, [channelId](auto elem) -> bool {
+        const auto val = elem->val();
+        if (val.template call<bool>("hasAttribute", "data-channelid"s))
+        {
+            const auto id = val.template call<std::string>("getAttribute", "data-channelid"s);
+            return id == channelId.value();
+        }
+        else
+        {
+            Log::warn("Channel element does not have a channel id attribute");
+        }
+        return false;
+    });
+
+    // Removing real channel:
+    using namespace std::string_literals;
+    if (auto channel = impl_->terminal.value()->channel(channelId); channel)
+    {
+        Log::info("Closing channel with id '{}'", channelId.value());
+        channel->dispose();
+    }
+    else
+    {
+        Log::warn("Channel with id '{}' not found", channelId.value());
+    }
+}
+
 void Session::initializeLayout()
 {
     Nui::val element;
@@ -628,27 +662,38 @@ void Session::initializeLayout()
             layout.value_or(""),
             Nui::bind([this]() -> Nui::val {
                 Nui::Console::log("Channel factory content panel manager");
-                // if (impl_->terminalElement)
-                // {
-                //     Log::critical("Channel element already exists - make sure that the session is not recreated");
-                //     return Nui::val::undefined();
-                // }
                 auto elem = Nui::Dom::makeStandaloneElement(makeChannelElement());
                 impl_->channelElements.push_back(elem);
                 return elem->val();
             }),
-            Nui::bind([this]() -> Nui::val {
-                // TODO: how do i get back to the channel element??????????
-                // FIXME: critical
+            Nui::bind(
+                [this](Nui::val channelIdVal) -> Nui::val {
+                    Nui::Console::log(channelIdVal);
 
-                // if (!impl_->terminalElement)
-                // {
-                //     Log::critical("Terminal element does not exist - make sure that the session is not recreated");
-                //     return Nui::val::undefined();
-                // }
-                closeSelf();
-                return Nui::val::undefined();
-            }),
+                    if (channelIdVal.isUndefined())
+                    {
+                        Log::critical("Channel id is undefined");
+                        return Nui::val::undefined();
+                    }
+
+                    if (channelIdVal.isString())
+                    {
+                        Ids::ChannelId channelId = Ids::makeChannelId(channelIdVal.as<std::string>());
+                        if (!channelId.isValid())
+                        {
+                            Log::critical("Channel id is not valid");
+                            return Nui::val::undefined();
+                        }
+
+                        onChannelClosedByUser(channelId);
+                    }
+                    else
+                    {
+                        Log::critical("Channel id is not a string");
+                    }
+                    return Nui::val::undefined();
+                },
+                std::placeholders::_1),
             Nui::bind([this]() -> Nui::val {
                 // OpenFileExplorer
                 if (impl_->fileExplorer)

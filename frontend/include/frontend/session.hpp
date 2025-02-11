@@ -59,6 +59,8 @@ class Session
 
     void setupFileGrid();
 
+    void onChannelClosedByUser(Ids::ChannelId const& channelId);
+
     void createExecutingEngine();
     void createSshEngine();
     void fallbackToUserControlEngine();

@@ -63,14 +63,11 @@ int askPassDefault(char const* prompt, char* buf, std::size_t length, int, int, 
 
 SshSessionManager::SshSessionManager()
     : sessions_{}
-{
-    ssh_init();
-}
+{}
 
 SshSessionManager::~SshSessionManager()
 {
     joinSessionAdder();
-    ssh_finalize();
 }
 
 void SshSessionManager::registerRpc(Nui::Window& wnd, Nui::RpcHub& hub)
@@ -185,42 +182,51 @@ void SshSessionManager::registerRpc(Nui::Window& wnd, Nui::RpcHub& hub)
             }
 
             auto& session = sessions_[sessionId];
-            auto channel = session->getChannel(channelId);
 
-            const std::string stdoutReceptacle{"sshTerminalStdout_" + channelId.value()};
-            const std::string stderrReceptacle{"sshTerminalStderr_" + channelId.value()};
-            const std::string exitReceptacle{"sshTerminalOnExit_" + channelId.value()};
+            session->withChannelDo(channelId, [&, hub, wnd](auto* channel) {
+                if (!channel)
+                {
+                    Log::error("No channel found with id: {}", channelId.value());
+                    hub->callRemote(responseId, nlohmann::json{{"error", "No channel found with id"}});
+                    return;
+                }
 
-            channel->startReading(
-                [wnd, hub, sessionId, channelId, stdoutReceptacle](std::string const& msg) {
-                    wnd->runInJavascriptThread([hub, stdoutReceptacle, sessionId, channelId, msg]() {
-                        hub->callRemote(
-                            stdoutReceptacle,
-                            nlohmann::json{
-                                {"sessionId", sessionId.value()},
-                                {"channelId", channelId.value()},
-                                {"data", Roar::base64Encode(msg)}});
+                const std::string stdoutReceptacle{"sshTerminalStdout_" + channelId.value()};
+                const std::string stderrReceptacle{"sshTerminalStderr_" + channelId.value()};
+                const std::string exitReceptacle{"sshTerminalOnExit_" + channelId.value()};
+
+                channel->startReading(
+                    [wnd, hub, sessionId, channelId, stdoutReceptacle](std::string const& msg) {
+                        wnd->runInJavascriptThread([hub, stdoutReceptacle, sessionId, channelId, msg]() {
+                            hub->callRemote(
+                                stdoutReceptacle,
+                                nlohmann::json{
+                                    {"sessionId", sessionId.value()},
+                                    {"channelId", channelId.value()},
+                                    {"data", Roar::base64Encode(msg)}});
+                        });
+                    },
+                    [wnd, hub, sessionId, channelId, stderrReceptacle](std::string const& data) {
+                        wnd->runInJavascriptThread([hub, stderrReceptacle, sessionId, channelId, data]() {
+                            hub->callRemote(
+                                stderrReceptacle,
+                                nlohmann::json{
+                                    {"sessionId", sessionId.value()},
+                                    {"channelId", channelId.value()},
+                                    {"data", Roar::base64Encode(data)}});
+                        });
+                    },
+                    [this, wnd, hub, sessionId, channelId, exitReceptacle]() {
+                        wnd->runInJavascriptThread([this, hub, sessionId, channelId, exitReceptacle]() {
+                            Log::info(
+                                "Channel for session '{}' lost with id: {}", sessionId.value(), channelId.value());
+                            sessions_[sessionId]->closeChannel(channelId);
+                            hub->callRemote(
+                                exitReceptacle,
+                                nlohmann::json{{"sessionId", sessionId.value()}, {"channelId", channelId.value()}});
+                        });
                     });
-                },
-                [wnd, hub, sessionId, channelId, stderrReceptacle](std::string const& data) {
-                    wnd->runInJavascriptThread([hub, stderrReceptacle, sessionId, channelId, data]() {
-                        hub->callRemote(
-                            stderrReceptacle,
-                            nlohmann::json{
-                                {"sessionId", sessionId.value()},
-                                {"channelId", channelId.value()},
-                                {"data", Roar::base64Encode(data)}});
-                    });
-                },
-                [this, wnd, hub, sessionId, channelId, exitReceptacle]() {
-                    wnd->runInJavascriptThread([this, hub, sessionId, channelId, exitReceptacle]() {
-                        Log::info("Channel for session '{}' lost with id: {}", sessionId.value(), channelId.value());
-                        sessions_[sessionId]->closeChannel(channelId);
-                        hub->callRemote(
-                            exitReceptacle,
-                            nlohmann::json{{"sessionId", sessionId.value()}, {"channelId", channelId.value()}});
-                    });
-                });
+            });
 
             hub->callRemote(responseId, nlohmann::json{{"success", true}});
         });
@@ -387,15 +393,15 @@ void SshSessionManager::registerRpc(Nui::Window& wnd, Nui::RpcHub& hub)
 
                 auto& session = sessions_[sessionId];
 
-                auto* channel = session->getChannel(channelId);
-                if (!channel)
-                {
-                    Log::error("Failed to get channel: {}", channelId.value());
-                    hub->callRemote(responseId, nlohmann::json{{"error", "Failed to get channel"}});
-                    return;
-                }
-
-                channel->write(Roar::base64Decode(data));
+                session->withChannelDo(channelId, [hub, &responseId, &channelId, &data](auto* channel) {
+                    if (!channel)
+                    {
+                        Log::error("Failed to get channel: {}", channelId.value());
+                        hub->callRemote(responseId, nlohmann::json{{"error", "Failed to get channel"}});
+                        return;
+                    }
+                    channel->write(Roar::base64Decode(data));
+                });
             }
             catch (std::exception const& e)
             {
@@ -427,22 +433,23 @@ void SshSessionManager::registerRpc(Nui::Window& wnd, Nui::RpcHub& hub)
 
                 auto& session = sessions_[sessionId];
 
-                auto* channel = session->getChannel(channelId);
-                if (!channel)
-                {
-                    Log::error("Failed to get channel: {}", channelId.value());
-                    hub->callRemote(responseId, nlohmann::json{{"error", "Failed to get channel"}});
-                    return;
-                }
+                session->withChannelDo(channelId, [hub, &responseId, &channelId, &cols, &rows](auto* channel) {
+                    if (!channel)
+                    {
+                        Log::error("Failed to get channel: {}", channelId.value());
+                        hub->callRemote(responseId, nlohmann::json{{"error", "Failed to get channel"}});
+                        return;
+                    }
 
-                const auto result = channel->resizePty(cols, rows);
-                if (result != 0)
-                {
-                    Log::error("Failed to resize pty: {}", result);
-                    hub->callRemote(responseId, nlohmann::json{{"error", "Failed to resize pty"}});
-                    return;
-                }
-                hub->callRemote(responseId, nlohmann::json{{"success", true}});
+                    const auto result = channel->resizePty(cols, rows);
+                    if (result != 0)
+                    {
+                        Log::error("Failed to resize pty: {}", result);
+                        hub->callRemote(responseId, nlohmann::json{{"error", "Failed to resize pty"}});
+                        return;
+                    }
+                    hub->callRemote(responseId, nlohmann::json{{"success", true}});
+                });
             }
             catch (std::exception const& e)
             {
@@ -770,6 +777,7 @@ void SshSessionManager::addSession(
 
         sessions_[sessionId] = std::move(session);
         Log::info("Ssh session created with id: {}", sessionId.value());
+        sessions_[sessionId]->startReading();
         onComplete(sessionId);
     });
 }

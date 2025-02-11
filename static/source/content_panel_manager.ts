@@ -7,14 +7,17 @@ import {
     BoxPanel,
     DockPanel,
     Widget,
-    SplitLayout,
+    TabBar,
     DockLayout
 } from '@lumino/widgets';
+import {
+    ChannelId
+} from './ids.ts';
 
 class ContentPanelManager {
     panels: Map<string, ContentPanel>;
     terminalFactory: () => HTMLElement | undefined;
-    terminalDelete: () => any;
+    terminalDelete: (channelId: ChannelId | undefined) => any;
     fileExplorerFactory: () => HTMLElement | undefined;
     fileExplorerDelete: () => any;
     operationQueueFactory: () => HTMLElement | undefined;
@@ -24,7 +27,7 @@ class ContentPanelManager {
 
     constructor() {
         this.panels = new Map<string, ContentPanel>();
-        this.terminalDelete = () => { return undefined; };
+        this.terminalDelete = (_: ChannelId | undefined) => { return undefined; };
         this.terminalFactory = () => { return undefined; };
         this.fileExplorerDelete = () => { return undefined; };
         this.fileExplorerFactory = () => { return undefined; };
@@ -163,7 +166,7 @@ class ContentPanelManager {
         id: string,
         layoutString: string,
         terminalFactory: () => HTMLElement,
-        terminalDelete: () => any,
+        terminalDelete: (channelId: ChannelId | undefined) => any,
         fileExplorerFactory: () => HTMLElement,
         fileExplorerDelete: () => any,
         operationQueueFactory: () => HTMLElement,
@@ -190,8 +193,9 @@ class ContentPanelManager {
             dock = this.makeDockFromLayout(id, layoutString);
         }
 
-        dock.addRequested.connect((sender, widget) => {
+        dock.addRequested.connect((sender: DockPanel, widget: TabBar<Widget>) => {
             console.log("add requested");
+            dock.addWidget(this.fabricateComponentFromId('terminal') as Widget, { ref: widget.titles[0].owner });
         });
         main.addWidget(dock);
 

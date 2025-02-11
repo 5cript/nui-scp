@@ -6,7 +6,7 @@
 #include <vector>
 #include <mutex>
 #include <functional>
-#include <thread>
+#include <atomic>
 
 class Session;
 
@@ -21,12 +21,12 @@ class Channel
     Channel& operator=(Channel&&) = delete;
     ~Channel();
 
+    void close();
+
     operator ssh::Channel&()
     {
         return *channel_;
     }
-
-    void stop();
 
     /**
      * @brief Writes data to the channel.
@@ -56,17 +56,16 @@ class Channel
         std::function<void(std::string const&)> onStderr,
         std::function<void()> onExit);
 
-  private:
-    Channel(std::unique_ptr<ssh::Channel> channel, bool isPty);
-    void doProcessing();
+    bool processOnce(std::chrono::milliseconds pollTimeout = std::chrono::milliseconds{10});
 
   private:
-    std::atomic_bool stopIssued_;
-    std::mutex channelMutex_{};
-    std::unique_ptr<ssh::Channel> channel_;
+    Channel(std::unique_ptr<ssh::Channel> channel, bool isPty);
+
+  private:
+    std::unique_ptr<ssh::Channel> channel_{};
     bool isPty_{false};
+    std::atomic_bool isProcessingReady_{false};
     std::vector<std::string> queuedWrites_{};
-    std::thread processingThread_{};
     std::function<void(std::string const&)> onStdout_{};
     std::function<void(std::string const&)> onStderr_{};
     std::function<void()> onExit_{};

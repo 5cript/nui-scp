@@ -11,6 +11,9 @@
 #include <mutex>
 #include <optional>
 #include <expected>
+#include <thread>
+#include <condition_variable>
+#include <atomic>
 
 class SftpSession;
 
@@ -65,16 +68,41 @@ class Session
     createPtyChannel(std::optional<std::unordered_map<std::string, std::string>> const& environment);
 
     /**
-     * @brief Retrieves a channel by id.
+     * @brief Does something with a channel locked.
      *
      * @param id
      * @return Channel*
      */
-    Channel* getChannel(Ids::ChannelId const& id);
+    void withChannelDo(Ids::ChannelId const& id, std::function<void(Channel*)> const& handler);
+
+    /**
+     * @brief Pause reading to create new channels.
+     */
+    void pauseProcessing(bool paused);
+
+    /**
+     * @brief Start reading of all channels
+     */
+    void startReading();
+    void stopReading();
+
+  private:
+    void doChannelProcessing();
 
   private:
     std::mutex sessionMutex_;
+
+    // Channel processing
+    std::thread processingThread_{};
+    std::atomic_bool stopIssued_{false};
+
+    // Processing pause
+    std::atomic_bool pauseProcessing_{false};
+    std::mutex processingPauseMutex_;
+    std::condition_variable processingCondition_;
+    bool pauseReached_{false};
+
     ssh::Session session_;
-    std::unordered_map<Ids::ChannelId, std::unique_ptr<Channel>, Ids::IdHash> channels_;
     std::vector<std::shared_ptr<SftpSession>> sftpSessions_;
+    std::unordered_map<Ids::ChannelId, std::unique_ptr<Channel>, Ids::IdHash> channels_;
 };

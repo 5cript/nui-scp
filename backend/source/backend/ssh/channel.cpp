@@ -1,29 +1,24 @@
 #include <backend/ssh/channel.hpp>
 
 Channel::Channel(std::unique_ptr<ssh::Channel> channel, bool isPty)
-    : stopIssued_{false}
-    , channel_{std::move(channel)}
+    : channel_{std::move(channel)}
     , isPty_{isPty}
 {}
 
 Channel::~Channel()
 {
-    stop();
+    close();
 }
 
-void Channel::stop()
+void Channel::close()
 {
-    std::scoped_lock guard{channelMutex_};
-
     // Do not fire onExit if stop was issued, this is only for when the channel itself issues that its no longer
     // useable.
     onExit_ = {};
+    isProcessingReady_ = false;
 
     if (channel_)
     {
-        stopIssued_ = true;
-        if (processingThread_.joinable())
-            processingThread_.join();
         if (channel_->isOpen())
         {
             channel_->sendEof();
@@ -38,13 +33,16 @@ int Channel::resizePty(int cols, int rows)
     return channel_->changePtySize(cols, rows);
 }
 
-void Channel::doProcessing()
+bool Channel::processOnce(std::chrono::milliseconds pollTimeout)
 {
+    if (!isProcessingReady_)
+        return true;
+
     constexpr static int bufferSize = 1024;
     char buffer[bufferSize];
 
-    auto readOne = [this, &buffer](bool stdout_) {
-        auto rdy = ssh_channel_poll_timeout(channel_->getCChannel(), 100, stdout_ ? 0 : 1);
+    auto readOne = [this, &buffer, pollTimeout](bool stdout_) {
+        auto rdy = ssh_channel_poll_timeout(channel_->getCChannel(), pollTimeout.count(), stdout_ ? 0 : 1);
         if (rdy < 0)
             return -1;
 
@@ -69,45 +67,33 @@ void Channel::doProcessing()
         return rdy;
     };
 
-    while (!stopIssued_)
+    if (readOne(true) < 0)
     {
-        if (readOne(true) < 0)
-            break;
-        // Lets not read stderr for now and see what happens:
-        // readOne(false);
-
-        std::unique_lock tryGuard{channelMutex_, std::try_to_lock};
-        if (tryGuard.owns_lock())
-        {
-            if (!queuedWrites_.empty())
-            {
-                for (auto const& data : queuedWrites_)
-                {
-                    channel_->write(data.c_str(), data.size());
-                }
-                queuedWrites_.clear();
-            }
-        }
+        if (onExit_)
+            onExit_();
+        return false;
+    }
+    if (readOne(false) < 0)
+    {
+        if (onExit_)
+            onExit_();
+        return false;
     }
 
+    if (!queuedWrites_.empty())
     {
-        if (stopIssued_)
+        for (auto const& data : queuedWrites_)
         {
-            if (onExit_)
-                onExit_();
+            channel_->write(data.c_str(), data.size());
         }
-        else
-        {
-            std::scoped_lock guard{channelMutex_};
-            if (onExit_)
-                onExit_();
-        }
+        queuedWrites_.clear();
     }
+
+    return true;
 }
 
 void Channel::write(std::string const& data)
 {
-    std::scoped_lock guard{channelMutex_};
     queuedWrites_.push_back(data);
 }
 
@@ -116,11 +102,8 @@ void Channel::startReading(
     std::function<void(std::string const&)> onStderr,
     std::function<void()> onExit)
 {
+    isProcessingReady_ = true;
     onStdout_ = onStdout;
     onStderr_ = onStderr;
     onExit_ = onExit;
-
-    processingThread_ = std::thread([this]() {
-        doProcessing();
-    });
 }
