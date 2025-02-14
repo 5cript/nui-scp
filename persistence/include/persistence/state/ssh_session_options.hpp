@@ -16,7 +16,7 @@ namespace Persistence
         std::optional<int> port{std::nullopt};
         std::optional<std::string> user{std::nullopt};
         std::optional<std::string> sshKey{std::nullopt};
-        std::optional<std::unordered_map<std::string, std::string>> environment;
+        std::optional<std::unordered_map<std::string, std::string>> environment{std::nullopt};
         bool openSftpByDefault{true};
         std::optional<std::string> defaultDirectory{std::nullopt};
 
