@@ -62,6 +62,7 @@ namespace SecureShell
         void readTask(std::chrono::milliseconds pollTimeout = std::chrono::milliseconds{0});
 
       private:
+        std::mutex ownerMutex_;
         Session* owner_;
         std::unique_ptr<ssh::Channel> channel_;
         std::function<void(std::string const&)> onStdout_{};

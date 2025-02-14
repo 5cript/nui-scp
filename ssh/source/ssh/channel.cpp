@@ -17,6 +17,7 @@ namespace SecureShell
     {}
     Channel& Channel::operator=(Channel&& other)
     {
+        std::scoped_lock lock{ownerMutex_, other.ownerMutex_};
         if (this != &other)
         {
             owner_ = std::exchange(other.owner_, nullptr);
@@ -25,6 +26,7 @@ namespace SecureShell
     }
     void Channel::close()
     {
+        std::scoped_lock lock{ownerMutex_};
         if (owner_)
         {
             if (readTaskId_)
@@ -38,6 +40,7 @@ namespace SecureShell
     }
     void Channel::write(std::string data)
     {
+        std::scoped_lock lock{ownerMutex_};
         owner_->processingThread_.pushTask([this, data = std::move(data)]() {
             if (channel_)
                 channel_->write(data.data(), data.size());
@@ -45,6 +48,7 @@ namespace SecureShell
     }
     std::future<int> Channel::resizePty(int cols, int rows)
     {
+        std::scoped_lock lock{ownerMutex_};
         auto promise = std::make_shared<std::promise<int>>();
         owner_->processingThread_.pushTask([this, cols, rows, promise]() {
             if (channel_)
@@ -104,6 +108,8 @@ namespace SecureShell
         std::function<void(std::string const&)> onStderr,
         std::function<void()> onExit)
     {
+        std::scoped_lock lock{ownerMutex_};
+
         onStdout_ = std::move(onStdout);
         onStderr_ = std::move(onStderr);
         onExit_ = std::move(onExit);
