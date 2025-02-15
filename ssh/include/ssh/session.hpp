@@ -18,6 +18,7 @@ namespace SecureShell
     {
       public:
         friend class Channel;
+        friend class SftpSession;
 
         Session();
         ~Session();
@@ -50,13 +51,20 @@ namespace SecureShell
          */
         bool isRunning() const;
 
+        struct PtyCreationOptions
+        {
+            std::optional<std::unordered_map<std::string, std::string>> environment = std::nullopt;
+            std::string terminalType = "xterm-256color";
+            int columns = 80;
+            int rows = 24;
+            bool requestShell = true;
+        };
         /**
          * @brief Creates a new channel as a pty.
          *
          * @return std::expected<ChannelId, int> The channel id or an error code
          */
-        std::future<std::expected<std::weak_ptr<Channel>, int>>
-        createPtyChannel(std::optional<std::unordered_map<std::string, std::string>> environment);
+        std::future<std::expected<std::weak_ptr<Channel>, int>> createPtyChannel(PtyCreationOptions options);
 
       private:
         void channelRemoveItself(Channel* channel);

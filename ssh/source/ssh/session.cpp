@@ -89,49 +89,49 @@ namespace SecureShell
         channelsToRemove_.clear();
     }
 
-    std::future<std::expected<std::weak_ptr<Channel>, int>>
-    Session::createPtyChannel(std::optional<std::unordered_map<std::string, std::string>> environment)
+    std::future<std::expected<std::weak_ptr<Channel>, int>> Session::createPtyChannel(PtyCreationOptions options)
     {
         auto promise = std::make_shared<std::promise<std::expected<std::weak_ptr<Channel>, int>>>();
         auto fut = promise->get_future();
-        processingThread_.pushTask(
-            [this, environment = std::move(environment), promise = std::move(promise)]() mutable {
-                auto ptyChannel = std::make_unique<ssh::Channel>(session_);
-                auto& channel = *ptyChannel;
-                auto result = Detail::sequential(
-                    [&channel]() {
-                        if (!channel.isOpen())
-                            return channel.openSession();
+        processingThread_.pushTask([this, options = std::move(options), promise = std::move(promise)]() mutable {
+            auto ptyChannel = std::make_unique<ssh::Channel>(session_);
+            auto& channel = *ptyChannel;
+            auto result = Detail::sequential(
+                [&channel]() {
+                    if (!channel.isOpen())
+                        return channel.openSession();
+                    return 0;
+                },
+                [&channel, &environment = options.environment]() {
+                    if (!environment.has_value())
                         return 0;
-                    },
-                    [&channel, &environment]() {
-                        if (!environment.has_value())
-                            return 0;
-                        for (auto const& [key, value] : *environment)
-                        {
-                            if (channel.requestEnv(key.c_str(), value.c_str()) != 0)
-                                return -1;
-                        }
+                    for (auto const& [key, value] : *environment)
+                    {
+                        if (channel.requestEnv(key.c_str(), value.c_str()) != 0)
+                            return -1;
+                    }
+                    return 0;
+                },
+                [&channel, &options]() {
+                    return channel.requestPty(options.terminalType.c_str(), options.columns, options.rows);
+                },
+                [&channel, &options]() {
+                    if (!options.requestShell)
                         return 0;
-                    },
-                    [&channel]() {
-                        return channel.requestPty("xterm", 80, 24);
-                    },
-                    [&channel]() {
-                        return channel.requestShell();
-                    });
+                    return channel.requestShell();
+                });
 
-                if (result.result != SSH_OK)
-                {
-                    promise->set_value(std::unexpected(session_.getErrorCode()));
-                    return;
-                }
-
-                auto sharedChannel = std::make_shared<Channel>(this, std::move(ptyChannel));
-                channels_.push_back(sharedChannel);
-                promise->set_value(sharedChannel);
+            if (result.result != SSH_OK)
+            {
+                promise->set_value(std::unexpected(session_.getErrorCode()));
                 return;
-            });
+            }
+
+            auto sharedChannel = std::make_shared<Channel>(this, std::move(ptyChannel));
+            channels_.push_back(sharedChannel);
+            promise->set_value(sharedChannel);
+            return;
+        });
         return fut;
     }
 

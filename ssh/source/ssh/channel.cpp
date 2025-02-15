@@ -52,7 +52,9 @@ namespace SecureShell
         auto promise = std::make_shared<std::promise<int>>();
         owner_->processingThread_.pushTask([this, cols, rows, promise]() {
             if (channel_)
-                channel_->changePtySize(cols, rows);
+                promise->set_value(channel_->changePtySize(cols, rows));
+            else
+                promise->set_value(SSH_ERROR);
         });
         return promise->get_future();
     }

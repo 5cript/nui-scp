@@ -21,6 +21,7 @@ namespace SecureShell
         running_ = true;
         shuttingDown_ = false;
         thread_ = std::thread([this, waitCycleTimeout, minimumCycleWait] {
+            processingThreadId_.store(std::this_thread::get_id());
             run(waitCycleTimeout, minimumCycleWait);
         });
     }
@@ -80,7 +81,7 @@ namespace SecureShell
             std::lock_guard lock{taskMutex_};
             ++permanentTaskIdCounter_;
             id = PermanentTaskId{permanentTaskIdCounter_};
-            permanentTasksModifiedWithinProcessing_ = true;
+            permanentTasksModifiedWithinProcessing_ = (std::this_thread::get_id() == processingThreadId_);
             permanentTasks_.insert({id, std::move(task)});
             permanentTasksAvailable_ = true;
         }
@@ -89,7 +90,7 @@ namespace SecureShell
     void ProcessingThread::clearPermanentTasks()
     {
         std::lock_guard lock{taskMutex_};
-        permanentTasksModifiedWithinProcessing_ = true;
+        permanentTasksModifiedWithinProcessing_ = (std::this_thread::get_id() == processingThreadId_);
         permanentTasks_.clear();
         permanentTasksAvailable_ = false;
     }

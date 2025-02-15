@@ -37,6 +37,11 @@ namespace SecureShell
          */
         void write(std::string data);
 
+        struct Dimensions
+        {
+            int columns;
+            int rows;
+        };
         /**
          * @brief Resizes the pty.
          *
@@ -45,6 +50,16 @@ namespace SecureShell
          * @return int 0 on success, otherwise an error code.
          */
         std::future<int> resizePty(int cols, int rows);
+
+        /**
+         * @brief Resizes the pty.
+         *
+         * @param dimensions The new dimensions.
+         */
+        std::future<int> resizePty(Dimensions const& dimensions)
+        {
+            return resizePty(dimensions.columns, dimensions.rows);
+        }
 
         /**
          * @brief Starts reading and processing the channel.

@@ -17,14 +17,23 @@ const { Server, utils: { generateKeyPairSync, parseKey } } = ssh2;
 const allowedUser = Buffer.from('test');
 const allowedPassword = Buffer.from('test');
 
+const programArgs = minimist(process.argv.slice(2));
+
+const port = programArgs.port || 0;
+const verbose = programArgs.verbose || false;
+
 let logFile;
-logFile = {
-    write: () => { }
-}
 // logFile = fs.createWriteStream('./log.txt', { flags: 'w' });
+logFile = {
+    write: (msg) => {
+    }
+}
 
 function logMessage(message) {
-    logFile.write(`${new Date().toISOString()} - ${message}\n`);
+    // logFile.write(`${new Date().toISOString()} - ${message}\n`);
+    if (verbose) {
+        console.log(message);
+    }
 }
 logMessage('Server is starting');
 
@@ -61,7 +70,7 @@ const users = new Map();
 
 const exit = () => {
     users.forEach(user => {
-        user.logout();
+        user.dispose();
     });
     server.close();
     rl.close();
@@ -74,7 +83,7 @@ const exit = () => {
 /**
  * @param {*} directoryEntryArray { name: string, type: 'file' | 'directory', size: number, date: Date, userName: string, groupName: string, accessMask: number }[]
  */
-const makeFakeLs = (directoryEntryArray, options, clientState) => {
+const makeFakeLs = (directoryEntryArray, options, channelState) => {
     const accessBitsToLsRepresentation = (bits) => {
         switch (bits) {
             case 0b000: return '---';
@@ -150,7 +159,7 @@ const makeFakeLs = (directoryEntryArray, options, clientState) => {
         return entries.join('\r\n');
     }
     else {
-        const maxWidth = clientState.columns || 80;
+        const maxWidth = channelState.columns || 80;
         let currentLine = '';
         const lines = [];
 
@@ -170,12 +179,12 @@ const makeFakeLs = (directoryEntryArray, options, clientState) => {
     }
 }
 
-class User {
-    constructor(stream, client, clientState, id) {
+class Channel {
+    constructor(stream, client, channelState, channelId) {
         this.stream = stream;
         this.client = client;
-        this.clientState = clientState;
-        this.id = id;
+        this.channelState = channelState;
+        this.channelId = channelId;
     }
 
     makeScreen() {
@@ -186,21 +195,19 @@ class User {
                 input: this.stream,
                 output: this.stream
             }),
-            terminal: this.clientState.terminal || 'ansi',
+            terminal: this.channelState.terminal || 'ansi',
             cursor: {
-                artificial: true,
+                artificial: false,
                 shape: 'line',
                 blink: true
             }
         });
 
-        this.screen.key(['C-c'], () => {
-            this.client.end();
-            this.screen.destroy();
+        this.screen.key(['C-c'], function () {
+            this.logout();
         });
-        this.screen.key(['C-d'], () => {
-            this.client.end();
-            this.screen.destroy();
+        this.screen.key(['C-d'], function () {
+            this.logout();
         });
 
         this.stream.on('resize', () => {
@@ -208,18 +215,18 @@ class User {
             this.terminal.resize(this.stream.columns, this.stream.rows);
         });
 
-        this.screen.title = 'Hello ' + this.clientState.name;
+        this.screen.title = 'Hello ' + this.channelState.name;
 
         this.stream.on('data', (data) => {
-            logMessage(`Data received: ${makeSemiHexString(data)}`);
+            logMessage(`${this.channelId}: Data received: ${makeSemiHexString(data)}`);
             this.pushData(data);
         });
     }
 
     setupXterm() {
         this.terminal = new Terminal({
-            cols: this.clientState.columns || 80,
-            rows: this.clientState.rows || 24,
+            cols: this.channelState.columns || 80,
+            rows: this.channelState.rows || 24,
             allowProposedApi: true
         });
 
@@ -231,7 +238,7 @@ class User {
             }
 
             if (data === '\x7f') {
-                this.clientState.commandLineBuffer = this.clientState.commandLineBuffer.slice(0, -1);
+                this.channelState.commandLineBuffer = this.channelState.commandLineBuffer.slice(0, -1);
                 this.stream.write('\b \b');
                 return;
             }
@@ -248,7 +255,7 @@ class User {
                 return;
             }
 
-            this.clientState.commandLineBuffer += data;
+            this.channelState.commandLineBuffer += data;
             this.stream.write(data);
         });
     }
@@ -265,10 +272,9 @@ class User {
     }
 
     logout() {
-        this.stream.destroy();
-        this.terminal.dispose();
         this.client.end();
-        users.delete(this.id);
+        this.screen.destroy();
+        this.terminal.dispose();
     }
 
     disableEcho() {
@@ -276,20 +282,20 @@ class User {
     }
 
     makePS1() {
-        return `\x1b[1;32m${this.clientState.name} $ \x1b[0m`;
+        return `\x1b[1;32m${this.channelState.name} $ \x1b[0m`;
     }
 
     executeCommand() {
-        logMessage(`Command executed: ${makeSemiHexString(this.clientState.commandLineBuffer)}`);
-        this.handleCommand(this.clientState.commandLineBuffer);
-        this.clientState.commandLineBuffer = '';
+        logMessage(`${this.channelId}: Command executed: ${makeSemiHexString(this.channelState.commandLineBuffer)}`);
+        this.handleCommand(this.channelState.commandLineBuffer);
+        this.channelState.commandLineBuffer = '';
         this.stream.write('\r\n');
         this.stream.write(this.makePS1());
     }
 
     resize(rows, cols) {
-        this.clientState.rows = rows;
-        this.clientState.columns = cols;
+        this.channelState.rows = rows;
+        this.channelState.columns = cols;
         this.stream.rows = rows;
         this.stream.columns = cols;
         this.terminal.resize(cols, rows);
@@ -305,6 +311,14 @@ class User {
             exit();
         } else if (command === 'logout') {
             this.logout();
+        } else if (command === 'echo') {
+            this.stream.write(parsed._.slice(1).join(' '));
+        } else if (command === 'pwd') {
+            this.stream.write('/home/' + this.channelState.name);
+        } else if (command === 'clear') {
+            this.screen.program.clear();
+            this.screen.program.cursorPos(0, 0);
+            this.screen.program.write(this.makePS1());
         } else if (command === 'ls') {
             const makeSemiRandomDate = () => {
                 const now = new Date();
@@ -312,31 +326,60 @@ class User {
             }
 
             this.stream.write(makeFakeLs([
-                { name: '.', type: 'directory', size: 0, date: makeSemiRandomDate(), userName: this.clientState.name, groupName: this.clientState.name, accessMask: 0o755 },
-                { name: '..', type: 'directory', size: 0, date: makeSemiRandomDate(), userName: this.clientState.name, groupName: this.clientState.name, accessMask: 0o755 },
-                { name: '.bash_history', type: 'file', size: 9500, date: makeSemiRandomDate(), userName: this.clientState.name, groupName: this.clientState.name, accessMask: 0o644 },
-                { name: '.bash_logout', type: 'file', size: 21, date: makeSemiRandomDate(), userName: this.clientState.name, groupName: this.clientState.name, accessMask: 0o644 },
-                { name: '.bash_profile', type: 'file', size: 1300, date: makeSemiRandomDate(), userName: this.clientState.name, groupName: this.clientState.name, accessMask: 0o644 },
-                { name: '.bashrc', type: 'file', size: 6800, date: makeSemiRandomDate(), userName: this.clientState.name, groupName: this.clientState.name, accessMask: 0o644 },
-                { name: '.cache', type: 'directory', size: 0, date: makeSemiRandomDate(), userName: this.clientState.name, groupName: this.clientState.name, accessMask: 0o755 },
-                { name: '.nvm', type: 'directory', size: 0, date: makeSemiRandomDate(), userName: this.clientState.name, groupName: this.clientState.name, accessMask: 0o755 },
-                { name: '.profile', type: 'file', size: 1600, date: makeSemiRandomDate(), userName: this.clientState.name, groupName: this.clientState.name, accessMask: 0o644 },
-                { name: 'file1.txt', type: 'file', size: 1234, date: makeSemiRandomDate(), userName: this.clientState.name, groupName: this.clientState.name, accessMask: 0o644 },
-                { name: 'file2.log', type: 'file', size: 5678, date: makeSemiRandomDate(), userName: this.clientState.name, groupName: this.clientState.name, accessMask: 0o644 },
-                { name: 'Download', type: 'directory', size: 0, date: makeSemiRandomDate(), userName: this.clientState.name, groupName: this.clientState.name, accessMask: 0o755 },
-                { name: 'Documents', type: 'directory', size: 0, date: makeSemiRandomDate(), userName: this.clientState.name, groupName: this.clientState.name, accessMask: 0o755 },
-                { name: 'Pictures', type: 'directory', size: 0, date: makeSemiRandomDate(), userName: this.clientState.name, groupName: this.clientState.name, accessMask: 0o755 },
-                { name: 'Music', type: 'directory', size: 0, date: makeSemiRandomDate(), userName: this.clientState.name, groupName: this.clientState.name, accessMask: 0o755 },
-                { name: 'Videos', type: 'directory', size: 0, date: makeSemiRandomDate(), userName: this.clientState.name, groupName: this.clientState.name, accessMask: 0o755 },
-                { name: 'Desktop', type: 'directory', size: 0, date: makeSemiRandomDate(), userName: this.clientState.name, groupName: this.clientState.name, accessMask: 0o755 },
-            ], parsed, this.clientState));
+                { name: '.', type: 'directory', size: 0, date: makeSemiRandomDate(), userName: this.channelState.name, groupName: this.channelState.name, accessMask: 0o755 },
+                { name: '..', type: 'directory', size: 0, date: makeSemiRandomDate(), userName: this.channelState.name, groupName: this.channelState.name, accessMask: 0o755 },
+                { name: '.bash_history', type: 'file', size: 9500, date: makeSemiRandomDate(), userName: this.channelState.name, groupName: this.channelState.name, accessMask: 0o644 },
+                { name: '.bash_logout', type: 'file', size: 21, date: makeSemiRandomDate(), userName: this.channelState.name, groupName: this.channelState.name, accessMask: 0o644 },
+                { name: '.bash_profile', type: 'file', size: 1300, date: makeSemiRandomDate(), userName: this.channelState.name, groupName: this.channelState.name, accessMask: 0o644 },
+                { name: '.bashrc', type: 'file', size: 6800, date: makeSemiRandomDate(), userName: this.channelState.name, groupName: this.channelState.name, accessMask: 0o644 },
+                { name: '.cache', type: 'directory', size: 0, date: makeSemiRandomDate(), userName: this.channelState.name, groupName: this.channelState.name, accessMask: 0o755 },
+                { name: '.nvm', type: 'directory', size: 0, date: makeSemiRandomDate(), userName: this.channelState.name, groupName: this.channelState.name, accessMask: 0o755 },
+                { name: '.profile', type: 'file', size: 1600, date: makeSemiRandomDate(), userName: this.channelState.name, groupName: this.channelState.name, accessMask: 0o644 },
+                { name: 'file1.txt', type: 'file', size: 1234, date: makeSemiRandomDate(), userName: this.channelState.name, groupName: this.channelState.name, accessMask: 0o644 },
+                { name: 'file2.log', type: 'file', size: 5678, date: makeSemiRandomDate(), userName: this.channelState.name, groupName: this.channelState.name, accessMask: 0o644 },
+                { name: 'Download', type: 'directory', size: 0, date: makeSemiRandomDate(), userName: this.channelState.name, groupName: this.channelState.name, accessMask: 0o755 },
+                { name: 'Documents', type: 'directory', size: 0, date: makeSemiRandomDate(), userName: this.channelState.name, groupName: this.channelState.name, accessMask: 0o755 },
+                { name: 'Pictures', type: 'directory', size: 0, date: makeSemiRandomDate(), userName: this.channelState.name, groupName: this.channelState.name, accessMask: 0o755 },
+                { name: 'Music', type: 'directory', size: 0, date: makeSemiRandomDate(), userName: this.channelState.name, groupName: this.channelState.name, accessMask: 0o755 },
+                { name: 'Videos', type: 'directory', size: 0, date: makeSemiRandomDate(), userName: this.channelState.name, groupName: this.channelState.name, accessMask: 0o755 },
+                { name: 'Desktop', type: 'directory', size: 0, date: makeSemiRandomDate(), userName: this.channelState.name, groupName: this.channelState.name, accessMask: 0o755 },
+            ], parsed, this.channelState));
         }
     }
 
     pushData(data) {
         const dataString = data.toString();
         this.terminal.input(dataString);
-        //this.terminal.write(dataString);
+    }
+}
+
+class Client {
+    constructor(id, client) {
+        this.id = id;
+        this.client = client;
+        this.name = 'unknown';
+        this.channels = new Map();
+    }
+
+    addChannel(channelId, stream, channelState) {
+        this.channels.set(channelId, new Channel(stream, this.client, channelState, channelId));
+    }
+
+    removeChannel(channelId) {
+        this.channels.get(channelId).logout();
+        this.channels.delete(channelId);
+    }
+
+    getChannel(channelId) {
+        return this.channels.get(channelId);
+    }
+
+    dispose() {
+        this.channels.forEach(channel => {
+            channel.logout();
+        });
+
+        users.delete(this.id);
     }
 }
 
@@ -352,13 +395,12 @@ const makeSemiHexString = (data) => {
     return hexData;
 };
 
-const shellEmulator = (stream, client, clientState) => {
-    const id = nanoid();
-    users.set(id, new User(stream, client, clientState, id));
+const shellEmulator = (clientId, channelId, stream, client, channelState) => {
+    users.get(clientId).addChannel(channelId, stream, channelState);
 
-    stream.name = clientState.name;
-    stream.rows = clientState.rows || 24;
-    stream.columns = clientState.columns || 80;
+    stream.name = channelState.name;
+    stream.rows = channelState.rows || 24;
+    stream.columns = channelState.columns || 80;
     stream.isTTY = true;
     stream.setRawMode = (params) => {
         logMessage(`setRawMode (does nothing): ${util.inspect(params)}`);
@@ -367,14 +409,11 @@ const shellEmulator = (stream, client, clientState) => {
         logMessage(`Stream error: ${util.inspect(err)}`);
     });
 
-    users.get(id).makeScreen();
-    users.get(id).setupXterm();
-    users.get(id).greet();
-    return id;
+    const channel = users.get(clientId).getChannel(channelId);
+    channel.makeScreen();
+    channel.setupXterm();
+    channel.greet();
 }
-
-
-const port = process.argv[2] ? parseInt(process.argv[2], 10) : 0;
 
 server = new Server({
     hostKeys: [fs.readFileSync('./key.private')],
@@ -382,19 +421,12 @@ server = new Server({
         logMessage(`Debug: ${message}`);
     }
 }, (client) => {
-    let clientState = {
-        stream: undefined,
-        name: 'unknown',
-        rows: 24,
-        columns: 80,
-        terminal: 'ansi',
-        commandLineBuffer: ''
-    };
-    let id = undefined;
+    const clientId = nanoid();
+    users.set(clientId, new Client(clientId, client));
 
     logMessage(`Client connected: ${client.ip}`);
     client.on('authentication', (ctx) => {
-        clientState.name = ctx.username;
+        users.get(clientId).name = ctx.username;
 
         if (ctx.method === 'password' && ctx.username === allowedUser.toString() && ctx.password === allowedPassword.toString()) {
             logMessage(`User ${ctx.username} authenticated`);
@@ -404,42 +436,54 @@ server = new Server({
             ctx.reject();
         }
     });
+    client.on('error', (err) => {
+        logMessage(`Client error: ${util.inspect(err)}`);
+    });
     client.on('ready', () => {
-        client.once('session', (accept, reject) => {
+        client.on('session', (accept, reject) => {
+            let channelId = nanoid();
+
+            let channelState = {
+                stream: undefined,
+                name: users.get(clientId).name,
+                rows: 24,
+                columns: 80,
+                terminal: 'ansi',
+                commandLineBuffer: ''
+            };
+
             const session = accept();
             session.on('window-change', (accept, reject, info) => {
-                if (id) {
-                    let user = users.get(id);
-                    user.resize(info.rows, info.cols);
+                if (info.rows < 1 || info.cols < 1)
+                    return reject();
+
+                if (clientId && channelId) {
+                    let channel = users.get(clientId).getChannel(channelId);
+                    channel.resize(info.rows, info.cols);
                 }
                 accept && accept();
             });
             session.on('pty', (accept, reject, info) => {
-                clientState.rows = info.rows;
-                clientState.columns = info.cols;
-                clientState.terminal = info.term;
+                if (info.term === 'invalid')
+                    return reject();
+
+                if (info.rows < 1 || info.cols < 1)
+                    return reject();
+
+                channelState.rows = info.rows;
+                channelState.columns = info.cols;
+                channelState.terminal = info.term;
                 logMessage(`PTY requested: ${util.inspect(info)}`);
                 accept && accept();
             });
             session.once('shell', (accept, reject) => {
                 logMessage('Shell requested');
                 const stream = accept();
-                id = shellEmulator(stream, client, clientState);
+                shellEmulator(clientId, channelId, stream, client, channelState);
             });
             session.on('exec', (accept, reject, info) => {
                 logMessage(`Command: ${info.command}`);
                 reject();
-                // TODO:
-
-                // if (info.command === 'noop') {
-                //     const stream = accept();
-                //     stream.stderr.write('noop\n');
-                //     stream.exit(0);
-                //     stream.end();
-                //     server.close();
-                // } else {
-                //     reject();
-                // }
             });
         });
     });

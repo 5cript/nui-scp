@@ -55,6 +55,7 @@ namespace SecureShell
         std::atomic<bool> shuttingDown_ = false;
         std::atomic_bool permanentTasksAvailable_ = false;
         std::atomic<int> permanentTaskIdCounter_ = 0;
+        std::atomic<std::thread::id> processingThreadId_{};
         std::atomic_bool permanentTasksModifiedWithinProcessing_ = false;
 
         std::mutex taskWaitMutex_{};
