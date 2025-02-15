@@ -45,8 +45,8 @@ namespace SecureShell::Test
         {
             std::error_code error;
 
-            if (!path_.empty())
-                std::filesystem::remove_all(path_, error);
+            // if (!path_.empty())
+            //     std::filesystem::remove_all(path_, error);
         }
 
         TemporaryDirectory(TemporaryDirectory const&) = delete;

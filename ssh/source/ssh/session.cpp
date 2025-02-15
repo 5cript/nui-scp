@@ -22,6 +22,11 @@ namespace SecureShell
         processingThread_.stop();
     }
 
+    bool Session::isRunning() const
+    {
+        return processingThread_.isRunning();
+    }
+
     void Session::shutdown()
     {
         removeAllChannels();

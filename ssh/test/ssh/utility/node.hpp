@@ -23,11 +23,15 @@ namespace SecureShell::Test
     struct NodeProcessResult
     {
         boost::asio::deadline_timer timer;
+        boost::asio::writable_pipe stdinPipe;
         boost::asio::readable_pipe stdoutPipe;
+        boost::asio::readable_pipe stderrPipe;
         std::unique_ptr<boost::process::v2::process> mainModule;
         std::atomic_bool killed = false;
         unsigned short port = 0;
         int code = 0;
+
+        void command(std::string const& command);
     };
 
     void npmInstall(
@@ -38,6 +42,5 @@ namespace SecureShell::Test
     std::shared_ptr<NodeProcessResult> nodeProcess(
         boost::asio::any_io_executor executor,
         TemporaryDirectory const& isolateDirectory,
-        std::string const& program,
-        std::optional<nlohmann::json> const& in);
+        std::string const& program);
 }

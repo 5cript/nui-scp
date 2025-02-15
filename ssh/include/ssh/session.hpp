@@ -43,6 +43,14 @@ namespace SecureShell
         void stop();
 
         /**
+         * @brief Returns true if the session is running and processing channels.
+         *
+         * @return true
+         * @return false
+         */
+        bool isRunning() const;
+
+        /**
          * @brief Creates a new channel as a pty.
          *
          * @return std::expected<ChannelId, int> The channel id or an error code

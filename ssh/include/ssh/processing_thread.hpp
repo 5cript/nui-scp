@@ -36,6 +36,8 @@ namespace SecureShell
             std::chrono::milliseconds const& minimumCycleWait = std::chrono::milliseconds{0});
         void stop();
 
+        bool isRunning() const;
+
         bool pushTask(std::function<void()> task);
 
         std::pair<bool, PermanentTaskId> pushPermanentTask(std::function<void()> task);

@@ -13,6 +13,28 @@ namespace SecureShell::Test
 {
     namespace bp2 = boost::process::v2;
 
+    void NodeProcessResult::command(std::string const& command)
+    {
+        if (port == 0 || killed || code != 0)
+            return;
+
+        nlohmann::json j = {
+            {"command", command},
+        };
+#ifdef _WIN32
+        const std::string commandWithNewline = j.dump() + "\r\n";
+#else
+        const std::string commandWithNewline = j.dump() + "\n";
+#endif
+        boost::system::error_code ec;
+        boost::asio::write(stdinPipe, boost::asio::buffer(commandWithNewline), ec);
+        if (ec)
+        {
+            std::cerr << "Failed to write command: " << ec.message() << std::endl;
+            return;
+        }
+    }
+
     void npmInstall(
         boost::asio::any_io_executor executor,
         std::filesystem::path const& directory,
@@ -53,8 +75,7 @@ namespace SecureShell::Test
     std::shared_ptr<NodeProcessResult> nodeProcess(
         boost::asio::any_io_executor executor,
         TemporaryDirectory const& isolateDirectory,
-        std::string const& program,
-        std::optional<nlohmann::json> const& in)
+        std::string const& program)
     {
         using namespace std::string_literals;
 
@@ -65,20 +86,12 @@ namespace SecureShell::Test
 
         const auto nodeExecutable = boost::process::v2::filesystem::path{std::string{node}};
 
-        if (in)
-        {
-            auto stdinPath = isolateDirectory.path() / "stdin";
-            {
-                std::ofstream stdinFile{stdinPath};
-                stdinFile << in->dump(4);
-            }
-        }
-
         auto result = std::make_shared<NodeProcessResult>(
             boost::asio::deadline_timer{executor, boost::posix_time::seconds{processKillTimer.count()}},
+            boost::asio::writable_pipe{executor},
             boost::asio::readable_pipe{executor},
-            nullptr,
-            false);
+            boost::asio::readable_pipe{executor},
+            nullptr);
 
 #ifdef _WIN32
         const auto nodeShell = MSYS2_BASH;
@@ -102,24 +115,11 @@ namespace SecureShell::Test
             std::vector<std::string>{"main.mjs"},
             bp2::process_environment{bp2::environment::current()},
             bp2::process_start_dir{isolateDirectory.path().generic_string()},
-            [&result, &in, &isolateDirectory]() {
-                if (in)
-                {
-                    return bp2::process_stdio{
-                        .in = boost::filesystem::path{isolateDirectory.path() / "stdin"},
-                        .out = result->stdoutPipe,
-                        .err = nullptr,
-                    };
-                }
-                else
-                {
-                    return bp2::process_stdio{
-                        .in = nullptr,
-                        .out = result->stdoutPipe,
-                        .err = nullptr,
-                    };
-                }
-            }());
+            bp2::process_stdio{
+                .in = result->stdinPipe,
+                .out = result->stdoutPipe,
+                .err = result->stderrPipe,
+            });
 
         result->timer.async_wait([weak = std::weak_ptr{result}](boost::system::error_code const& ec) {
             if (ec)

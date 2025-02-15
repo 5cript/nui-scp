@@ -10,6 +10,10 @@ namespace SecureShell
     {
         stop();
     }
+    bool ProcessingThread::isRunning() const
+    {
+        return running_;
+    }
     void ProcessingThread::start(
         std::chrono::milliseconds const& waitCycleTimeout,
         std::chrono::milliseconds const& minimumCycleWait)

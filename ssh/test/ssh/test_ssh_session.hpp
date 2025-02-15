@@ -14,8 +14,11 @@ extern std::filesystem::path programDirectory;
 using namespace std::chrono_literals;
 using namespace std::string_literals;
 
-static const char sshServerNoop[] = {
-#embed "./test_ssh2_servers/noop.mjs"
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wc23-extensions"
+
+static const char sshServerBashEmulator[] = {
+#embed "./test_ssh2_servers/bash_emulator.mjs"
     ,
     '\0',
 };
@@ -31,6 +34,8 @@ static const char publicKey[] = {
     ,
     '\0',
 };
+
+#pragma clang diagnostic pop
 
 namespace SecureShell::Test
 {
@@ -53,12 +58,25 @@ namespace SecureShell::Test
         {
             std::shared_ptr<NodeProcessResult> result{};
             std::promise<void> processResultAvailable{};
-            std::thread processThread{[&]() {
-                result = nodeProcess(pool_.get_executor(), isolateDirectory_, std::string{sshServerNoop}, std::nullopt);
+            std::thread processThread{[this, &result, &processResultAvailable]() mutable {
+                result = nodeProcess(pool_.get_executor(), isolateDirectory_, std::string{sshServerBashEmulator});
+                auto resultShareCopy = result;
                 processResultAvailable.set_value();
-                result->code = result->mainModule->wait();
+                if (resultShareCopy->mainModule)
+                    resultShareCopy->code = resultShareCopy->mainModule->wait();
+                else
+                {
+                    // ???
+                    throw std::runtime_error("No main module, why");
+                }
             }};
             processResultAvailable.get_future().wait();
+            if (result->port == 0)
+            {
+                if (processThread.joinable())
+                    processThread.join();
+                return {nullptr, {}};
+            }
             return {result, std::move(processThread)};
         }
 
@@ -70,6 +88,10 @@ namespace SecureShell::Test
                 .host = "127.0.0.1",
                 .port = port,
                 .user = "test",
+                .sshOptions =
+                    Persistence::SshOptions{
+                        .connectTimeoutSeconds = 2,
+                    },
             };
 
             return makeSession(
@@ -120,6 +142,9 @@ namespace SecureShell::Test
                 {
                     {"ssh2", "1.16.0"},
                     {"blessed", "0.1.81"},
+                    {"nanoid", "5.1.0"},
+                    {"@xterm/headless", "5.6.0-beta.98"},
+                    {"minimist", "1.2.8"},
                 },
             },
         });
@@ -130,9 +155,30 @@ namespace SecureShell::Test
         SecureShell::Session client{};
     }
 
+    TEST_F(SshSessionTests, CanStartAndStopSession)
+    {
+        auto [result, processThread] = createSshServer();
+        ASSERT_TRUE(result);
+        auto joiner = Nui::ScopeExit{[&]() noexcept {
+            result->command("exit");
+            if (processThread.joinable())
+                processThread.join();
+        }};
+
+        auto expectedSession = makePasswordTestSession(result->port);
+
+        ASSERT_TRUE(expectedSession.has_value());
+        auto session = std::move(expectedSession).value();
+        session->start();
+        EXPECT_TRUE(session->isRunning());
+        session->stop();
+        EXPECT_FALSE(session->isRunning());
+    }
+
     TEST_F(SshSessionTests, CanConnectToSshServer)
     {
         auto [result, processThread] = createSshServer();
+        ASSERT_TRUE(result);
         auto joiner = Nui::ScopeExit{[&]() noexcept {
             if (processThread.joinable())
                 processThread.join();
@@ -150,12 +196,37 @@ namespace SecureShell::Test
 
         channelStartReading(channel);
 
-        channel->write("exit\r");
+        channel->write("exit");
+        channel->write("\r");
         ASSERT_EQ(awaitChannelExit(), std::future_status::ready);
 
         channel->close();
 
         EXPECT_EQ(result->killed, false);
         EXPECT_EQ(result->code, 0);
+    }
+
+    TEST_F(SshSessionTests, CanConnectToSshServerAndDestructWithoutCrash)
+    {
+        auto [result, processThread] = createSshServer();
+        ASSERT_TRUE(result);
+        auto joiner = Nui::ScopeExit{[&]() noexcept {
+            if (processThread.joinable())
+                processThread.join();
+        }};
+
+        auto sessionScope = [this, &result]() {
+            auto expectedSession = makePasswordTestSession(result->port);
+
+            ASSERT_TRUE(expectedSession.has_value());
+            auto session = std::move(expectedSession).value();
+            session->start();
+
+            auto expectedChannel = session->createPtyChannel({}).get();
+            ASSERT_TRUE(expectedChannel.has_value());
+            auto channel = expectedChannel.value().lock();
+        };
+
+        ASSERT_NO_FATAL_FAILURE(sessionScope());
     }
 }
