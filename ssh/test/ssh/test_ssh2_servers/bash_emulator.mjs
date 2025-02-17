@@ -2,13 +2,12 @@
 
 import ssh2 from 'ssh2';
 import util from 'node:util';
-import blessed from 'blessed';
 import fs, { write } from 'node:fs';
 import readline from 'node:readline';
 import { nanoid } from 'nanoid';
 import xtermHeadless from '@xterm/headless';
 import minimist from 'minimist';
-
+import tkit from 'terminal-kit/lib/termkit-no-lazy-require.js';
 
 const { Terminal } = xtermHeadless;
 
@@ -156,7 +155,7 @@ const makeFakeLs = (directoryEntryArray, options, channelState) => {
     });
 
     if (options.l) {
-        return entries.join('\r\n');
+        return entries.join('\r\n') + '\r\n';
     }
     else {
         const maxWidth = channelState.columns || 80;
@@ -175,7 +174,7 @@ const makeFakeLs = (directoryEntryArray, options, channelState) => {
             lines.push(currentLine.trim());
         }
 
-        return lines.join('\r\n');
+        return lines.join('\r\n') + '\r\n';
     }
 }
 
@@ -188,39 +187,34 @@ class Channel {
     }
 
     makeScreen() {
-        this.screen = new blessed.screen({
-            autoPadding: true,
-            smartCSR: true,
-            program: new blessed.program({
-                input: this.stream,
-                output: this.stream
-            }),
-            terminal: this.channelState.terminal || 'ansi',
-            cursor: {
-                artificial: false,
-                shape: 'line',
-                blink: true
-            }
+        this.screen = tkit.createTerminal({
+            stdin: this.stream,
+            stdout: this.stream,
         });
 
-        this.screen.key(['C-c'], function () {
-            this.logout();
-        });
-        this.screen.key(['C-d'], function () {
-            this.logout();
-        });
+        this.screen.width = this.channelState.columns || 80;
+        this.screen.height = this.channelState.rows || 24;
 
         this.stream.on('resize', () => {
-            this.screen.program.emit('resize');
-            this.terminal.resize(this.stream.columns, this.stream.rows);
+            this.screen.width = this.stream.columns;
+            this.screen.height = this.stream.rows;
         });
 
-        this.screen.title = 'Hello ' + this.channelState.name;
+        this.screen.grabInput();
+
+        this.screen.on('key', (name, matches, data) => {
+            if (name === 'CTRL_C')
+                this.logout();
+            else if (name === 'CTRL_D')
+                this.logout();
+        });
 
         this.stream.on('data', (data) => {
             logMessage(`${this.channelId}: Data received: ${makeSemiHexString(data)}`);
             this.pushData(data);
         });
+
+        this.clear();
     }
 
     setupXterm() {
@@ -261,24 +255,24 @@ class Channel {
     }
 
     greet() {
-        this.screen.render();
-        // XXX This fake resize event is needed for some terminals in order to
-        // have everything display correctly
-        this.screen.program.emit('resize');
+        this.screen.clear();
+        this.stream.write('Welcome to the test server!\r\n');
+        this.stream.write(this.makePS1());
+    }
 
-        this.screen.program.clear();
-        this.screen.program.write('Welcome to the test server!\r\n');
-        this.screen.program.write(this.makePS1());
+    clear() {
+        this.screen.clear();
+        this.screen.moveTo(1, 1);
     }
 
     logout() {
         this.client.end();
-        this.screen.destroy();
+        //this.screen.destroy();
         this.terminal.dispose();
     }
 
     disableEcho() {
-        this.screen.program.attr('invisible', true);
+        this.stream.write('\x1b[?25l');
     }
 
     makePS1() {
@@ -289,7 +283,6 @@ class Channel {
         logMessage(`${this.channelId}: Command executed: ${makeSemiHexString(this.channelState.commandLineBuffer)}`);
         this.handleCommand(this.channelState.commandLineBuffer);
         this.channelState.commandLineBuffer = '';
-        this.stream.write('\r\n');
         this.stream.write(this.makePS1());
     }
 
@@ -316,9 +309,7 @@ class Channel {
         } else if (command === 'pwd') {
             this.stream.write('/home/' + this.channelState.name);
         } else if (command === 'clear') {
-            this.screen.program.clear();
-            this.screen.program.cursorPos(0, 0);
-            this.screen.program.write(this.makePS1());
+            this.clear();
         } else if (command === 'ls') {
             const makeSemiRandomDate = () => {
                 const now = new Date();
