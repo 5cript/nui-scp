@@ -123,16 +123,48 @@ namespace SecureShell
 
             if (result.result != SSH_OK)
             {
-                promise->set_value(std::unexpected(session_.getErrorCode()));
-                return;
+                return promise->set_value(std::unexpected(session_.getErrorCode()));
             }
 
             auto sharedChannel = std::make_shared<Channel>(this, std::move(ptyChannel));
             channels_.push_back(sharedChannel);
-            promise->set_value(sharedChannel);
-            return;
+            return promise->set_value(sharedChannel);
         });
         return fut;
+    }
+
+    std::future<std::expected<std::weak_ptr<SftpSession>, SftpSession::Error>> Session::createSftpSession()
+    {
+        auto promise = std::make_shared<std::promise<std::expected<std::weak_ptr<SftpSession>, SftpSession::Error>>>();
+
+        processingThread_.pushTask([this, promise]() -> void {
+            auto sftp = sftp_new(session_.getCSession());
+            if (sftp == nullptr)
+            {
+                return promise->set_value(std::unexpected(SftpSession::Error{
+                    .message = ssh_get_error(session_.getCSession()),
+                    .sshError = ssh_get_error_code(session_.getCSession()),
+                    .sftpError = 0,
+                }));
+            }
+
+            auto result = sftp_init(sftp);
+            if (result != SSH_OK)
+            {
+                promise->set_value(std::unexpected(SftpSession::Error{
+                    .message = ssh_get_error(session_.getCSession()),
+                    .sshError = result,
+                    .sftpError = sftp_get_error(sftp),
+                }));
+                sftp_free(sftp);
+            }
+
+            auto sftpSession = std::make_shared<SftpSession>(this, sftp);
+            promise->set_value(sftpSession);
+            sftpSessions_.push_back(sftpSession);
+        });
+
+        return promise->get_future();
     }
 
     std::expected<std::unique_ptr<Session>, std::string> makeSession(
@@ -381,7 +413,7 @@ namespace SecureShell
                     }
                 }
 
-                const auto r = askPass("Password: ", buf.data(), buf.size(), 0, 0, &askPassUserDataPassword);
+                const auto r = askPass("Password: ", buf.data(), buf.size(), 0, 0, askPassUserDataPassword);
                 if (r == 0)
                 {
                     const auto result = static_cast<ssh::Session&>(*session).userauthPassword(buf.data());

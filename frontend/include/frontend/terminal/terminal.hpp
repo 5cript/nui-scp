@@ -11,6 +11,7 @@ class TerminalChannel
 {
   public:
     TerminalChannel(MultiChannelTerminalEngine* engine, Ids::ChannelId channelId);
+    ROAR_PIMPL_SPECIAL_FUNCTIONS(TerminalChannel);
 
     void open(
         Nui::val host,
@@ -22,7 +23,6 @@ class TerminalChannel
     void focus();
     void dispose();
     std::string stealTerminal();
-    ROAR_PIMPL_SPECIAL_FUNCTIONS(TerminalChannel);
 
   private:
     struct Implementation;

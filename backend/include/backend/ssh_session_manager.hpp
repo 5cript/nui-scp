@@ -2,8 +2,10 @@
 
 #include <persistence/state/terminal_engine.hpp>
 #include <backend/password/password_provider.hpp>
-#include <backend/ssh/session.hpp>
-#include <backend/ssh/sftp_session.hpp>
+// #include <backend/ssh/session.hpp>
+// #include <backend/ssh/sftp_session.hpp>
+#include <ssh/session.hpp>
+#include <ssh/sftp_session.hpp>
 #include <ids/ids.hpp>
 
 #include <nui/rpc.hpp>
@@ -37,19 +39,22 @@ class SshSessionManager
     friend int askPassDefault(char const* prompt, char* buf, std::size_t length, int echo, int verify, void* userdata);
 
   private:
-    std::unordered_map<Ids::SessionId, std::unique_ptr<Session>, Ids::IdHash> sessions_;
-    std::mutex passwordProvidersMutex_;
-    std::map<int, PasswordProvider*> passwordProviders_;
-    std::mutex addSessionMutex_;
-    std::unique_ptr<std::thread> addSessionThread_;
-    struct PwCache
-    {
-        std::optional<std::string> user;
-        std::string host;
-        std::optional<int> port;
-        std::optional<std::string> password;
-    };
-    std::vector<PwCache> pwCache_;
+    void registerRpcConnect(Nui::Window& wnd, Nui::RpcHub& hub);
+    void registerRpcCreateChannel(Nui::Window& wnd, Nui::RpcHub& hub);
+    void registerRpcStartChannelRead(Nui::Window& wnd, Nui::RpcHub& hub);
+    void registerRpcChannelClose(Nui::Window& wnd, Nui::RpcHub& hub);
+    void registerRpcEndSession(Nui::Window&, Nui::RpcHub& hub);
+    void registerRpcChannelWrite(Nui::Window&, Nui::RpcHub& hub);
+    void registerRpcChannelPtyResize(Nui::Window&, Nui::RpcHub& hub);
+
+  private:
+    std::mutex passwordProvidersMutex_{};
+    std::mutex addSessionMutex_{};
+    std::unordered_map<Ids::SessionId, std::unique_ptr<SecureShell::Session>, Ids::IdHash> sessions_{};
+    std::unordered_map<Ids::ChannelId, std::weak_ptr<SecureShell::Channel>, Ids::IdHash> channels_{};
+    std::map<int, PasswordProvider*> passwordProviders_{};
+    std::unique_ptr<std::thread> addSessionThread_{};
+    std::vector<SecureShell::PasswordCacheEntry> pwCache_{};
 };
 
 int askPassDefault(char const* prompt, char* buf, std::size_t length, int echo, int verify, void* userdata);

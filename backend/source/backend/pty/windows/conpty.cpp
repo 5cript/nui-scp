@@ -44,11 +44,15 @@ namespace ConPTY
             , inputPipe{}
             , outputPipe{}
             , kernel32{LoadLibrary("kernel32.dll")}
+#pragma clang diagnostic push
+// This is winapi for you.
+#pragma clang diagnostic ignored "-Wcast-function-type-strict"
             , createPseudoConsole{reinterpret_cast<CreatePseudoConsoleFn>(
                   GetProcAddress(kernel32, "CreatePseudoConsole"))}
             , resizePseudoConsole{reinterpret_cast<ResizePseudoConsoleFn>(
                   GetProcAddress(kernel32, "ResizePseudoConsole"))}
             , closePseudoConsole{reinterpret_cast<ClosePseudoConsoleFn>(GetProcAddress(kernel32, "ClosePseudoConsole"))}
+#pragma clang diagnostic pop
             , readerThread{}
             , isReading{false}
             , shallStopReading{false}

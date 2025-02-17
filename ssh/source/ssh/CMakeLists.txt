@@ -4,6 +4,7 @@ add_library(
         processing_thread.cpp
         session.cpp
         channel.cpp
+        sftp_session.cpp
 )
 
 target_include_directories(
@@ -21,4 +22,5 @@ target_link_libraries(
         ids
         persistence
         fmt
+        shared_data
 )

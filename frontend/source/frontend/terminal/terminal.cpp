@@ -284,7 +284,11 @@ void GenericTerminalChannel::writeAfterCache(std::string const& data, bool isUse
 TerminalChannel::TerminalChannel(MultiChannelTerminalEngine* engine, Ids::ChannelId channelId)
     : impl_{std::make_unique<Implementation>(engine, std::move(channelId))}
 {}
-ROAR_PIMPL_SPECIAL_FUNCTIONS_IMPL(TerminalChannel);
+TerminalChannel::~TerminalChannel()
+{
+    dispose();
+}
+ROAR_PIMPL_SPECIAL_FUNCTIONS_IMPL_NO_DTOR(TerminalChannel);
 
 std::string TerminalChannel::stealTerminal()
 {
@@ -365,12 +369,17 @@ void TerminalChannel::dispose()
 {
     if (!impl_->termId.empty())
     {
+        if (impl_->engine)
+        {
+            impl_->engine->closeChannel(impl_->channelId);
+        }
         auto term = impl_->terminal();
         if (term.isUndefined())
         {
             Log::error("Failed to get terminal with id to dispose it: '{}", impl_->termId);
             return;
         }
+        Log::info("Disposing terminal channel with id: '{}'", impl_->termId);
         terminalUtility().call<void>("disposeTerminal", impl_->termId);
     }
     impl_->termId.clear();
@@ -586,7 +595,6 @@ void Terminal::closeChannel(Ids::ChannelId const& channelId)
     if (auto channel = impl_->channels.find(channelId); channel != impl_->channels.end())
     {
         Log::info("Closing channel: '{}'", channelId.value());
-        channel->second->dispose();
         impl_->channels.erase(channel);
     }
 }
