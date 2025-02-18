@@ -18,7 +18,8 @@ export default {
     ],
     output: {
         filename: '[name].mjs',
-        path: path.resolve(__dirname, 'dist')
+        path: path.resolve(__dirname, 'dist'),
+        devtoolModuleFilenameTemplate: '[absolute-resource-path]'
     },
     experiments: {
         outputModule: true,
@@ -36,5 +37,6 @@ export default {
                 use: 'ignore-loader'
             }
         ]
-    }
+    },
+    devtool: 'inline-source-map'
 };

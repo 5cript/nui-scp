@@ -2,7 +2,8 @@
     "type": "module",
     "scripts": {
         "build": "webpack --mode=production",
-        "watch": "webpack --watch"
+        "watch": "webpack --watch",
+        "debugbuild": "webpack --mode=development"
     },
     "dependencies": {
         "@xterm/headless": "5.6.0-beta.98",

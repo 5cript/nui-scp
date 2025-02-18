@@ -2,12 +2,14 @@
 
 import ssh2 from 'ssh2';
 import util from 'node:util';
-import fs, { write } from 'node:fs';
-import readline from 'node:readline';
+import fs from 'node:fs';
 import { nanoid } from 'nanoid';
 import minimist from 'minimist';
-
-const { Server, utils: { generateKeyPairSync, parseKey } } = ssh2;
+import { makeLogger } from './source/log.mjs';
+import { humanFileSize } from './source/human_file_size.mjs';
+import CommandLineInterface from './source/cli.mjs';
+import { makeSemiHexString } from './source/make_semi_hex_string.mjs';
+const { Server } = ssh2;
 
 const allowedUser = Buffer.from('test');
 const allowedPassword = Buffer.from('test');
@@ -17,59 +19,22 @@ const programArgs = minimist(process.argv.slice(2));
 const port = programArgs.port || 0;
 const verbose = programArgs.verbose || false;
 
-let logFile;
-// logFile = fs.createWriteStream('./log.txt', { flags: 'w' });
-logFile = {
-    write: (msg) => {
-    }
-}
+const logMessage = makeLogger(verbose);
 
-function logMessage(message) {
-    // logFile.write(`${new Date().toISOString()} - ${message}\n`);
-    if (verbose) {
-        console.log(message);
-    }
-}
 logMessage('Server is starting');
-
-function humanFileSize(bytes, si = false, dp = 1) {
-    const thresh = si ? 1000 : 1024;
-
-    if (Math.abs(bytes) < thresh) {
-        return bytes + ' B';
-    }
-
-    const units = si
-        ? ['kB', 'MB', 'GB', 'TB', 'PB', 'EB', 'ZB', 'YB']
-        : ['K', 'M', 'G', 'T', 'P', 'E', 'Z', 'Y'];
-    let u = -1;
-    const r = 10 ** dp;
-
-    do {
-        bytes /= thresh;
-        ++u;
-    } while (Math.round(Math.abs(bytes) * r) / r >= thresh && u < units.length - 1);
-
-
-    return bytes.toFixed(dp) + units[u];
-}
 
 let server;
 
-const rl = readline.createInterface({
-    input: process.stdin,
-    output: process.stdout
-});
-
 const users = new Map();
+
+const cli = new CommandLineInterface();
 
 const exit = () => {
     users.forEach(user => {
         user.dispose();
     });
     server.close();
-    rl.close();
-    rl.removeAllListeners();
+    cli.close();
     setTimeout(() => {
         process.exit(0);
     }, 500);
@@ -342,18 +307,6 @@ class Client {
     }
 }
 
-const makeSemiHexString = (data) => {
-    const hexData = data.toString().split('').map(char => {
-        const code = char.charCodeAt(0);
-        if (code < 0x20) {
-            const hex = code.toString(16).toUpperCase();
-            return `\\x${hex.padStart(2, '0')}`;
-        }
-        return char;
-    }).join('');
-    return hexData;
-};
-
 const shellEmulator = (clientId, channelId, stream, client, channelState) => {
     users.get(clientId).addChannel(channelId, stream, channelState);
 
@@ -375,7 +328,7 @@ const shellEmulator = (clientId, channelId, stream, client, channelState) => {
 server = new Server({
     hostKeys: [fs.readFileSync('./key.private')],
     debug: (message) => {
-        // logMessage(`Debug: ${message}`);
+        logMessage(`Debug: ${message}`);
     }
 }, (client) => {
     const clientId = nanoid();
@@ -461,21 +414,14 @@ server.on('close', () => {
     logMessage('Server is closing');
 });
 
-rl.on('line', (input) => {
-    logMessage(`Command from stdin: ${input}`);
-    if (input.length === 0)
-        return;
+cli.on('exit', () => {
+    exit();
+});
 
-    const command = JSON.parse(input);
-    if (Object.hasOwnProperty.call(command, 'command')) {
-        if (command.command === 'exit') {
-            exit();
-        }
-        else if (command.command === 'logout') {
-            users.get(command.id).logout();
-        }
-        else if (command.command === 'list') {
-            console.log(JSON.stringify(Array.from(users.keys())));
-        }
-    }
+cli.on('logout', (command) => {
+    users.get(command.id).logout();
+});
+
+cli.on('list', () => {
+    console.log(JSON.stringify(Array.from(users.keys())));
 });
