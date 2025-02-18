@@ -33,6 +33,24 @@ find_program(NPM npm)
 
 target_compile_definitions(nui-scp-ssh-test PRIVATE -DNODE_EXECUTABLE="${NODE}" -DNPM_EXECUTABLE="${NPM}")
 
+add_custom_command(
+    OUTPUT
+        "${CMAKE_CURRENT_LIST_DIR}/test_ssh2_servers/dist/shell.mjs"
+        "${CMAKE_CURRENT_LIST_DIR}/test_ssh2_servers/dist/sftp.mjs"
+    COMMAND ${NPM} run build
+    WORKING_DIRECTORY "${CMAKE_CURRENT_LIST_DIR}/test_ssh2_servers"
+    DEPENDS
+        "${CMAKE_CURRENT_LIST_DIR}/test_ssh2_servers/package.json"
+        "${CMAKE_CURRENT_LIST_DIR}/test_ssh2_servers/package-lock.json"
+)
+add_custom_target(
+    build_test_ssh2_servers
+    DEPENDS
+        "${CMAKE_CURRENT_LIST_DIR}/test_ssh2_servers/dist/shell.mjs"
+        "${CMAKE_CURRENT_LIST_DIR}/test_ssh2_servers/dist/sftp.mjs"
+)
+add_dependencies(nui-scp-ssh-test build_test_ssh2_servers)
+
 gtest_discover_tests(nui-scp-ssh-test)
 
 # If msys2, copy dynamic libraries to executable directory, visual studio does this automatically.

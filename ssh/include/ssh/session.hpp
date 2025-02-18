@@ -1,3 +1,5 @@
+#pragma once
+
 #include <ssh/processing_thread.hpp>
 #include <persistence/state/terminal_engine.hpp>
 #include <ssh/channel.hpp>
