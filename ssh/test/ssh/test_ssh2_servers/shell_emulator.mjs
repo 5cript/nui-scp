@@ -5,11 +5,7 @@ import util from 'node:util';
 import fs, { write } from 'node:fs';
 import readline from 'node:readline';
 import { nanoid } from 'nanoid';
-import xtermHeadless from '@xterm/headless';
 import minimist from 'minimist';
-import tkit from 'terminal-kit/lib/termkit-no-lazy-require.js';
-
-const { Terminal } = xtermHeadless;
 
 const { Server, utils: { generateKeyPairSync, parseKey } } = ssh2;
 
@@ -184,91 +180,25 @@ class Channel {
         this.client = client;
         this.channelState = channelState;
         this.channelId = channelId;
-    }
-
-    makeScreen() {
-        this.screen = tkit.createTerminal({
-            stdin: this.stream,
-            stdout: this.stream,
-        });
-
-        this.screen.width = this.channelState.columns || 80;
-        this.screen.height = this.channelState.rows || 24;
-
-        this.stream.on('resize', () => {
-            this.screen.width = this.stream.columns;
-            this.screen.height = this.stream.rows;
-        });
-
-        this.screen.grabInput();
-
-        this.screen.on('key', (name, matches, data) => {
-            if (name === 'CTRL_C')
-                this.logout();
-            else if (name === 'CTRL_D')
-                this.logout();
-        });
 
         this.stream.on('data', (data) => {
             logMessage(`${this.channelId}: Data received: ${makeSemiHexString(data)}`);
             this.pushData(data);
         });
-
-        this.clear();
-    }
-
-    setupXterm() {
-        this.terminal = new Terminal({
-            cols: this.channelState.columns || 80,
-            rows: this.channelState.rows || 24,
-            allowProposedApi: true
-        });
-
-        this.terminal.onData((data) => {
-            if (data === '\r') {
-                this.stream.write('\r\n');
-                this.executeCommand();
-                return;
-            }
-
-            if (data === '\x7f') {
-                this.channelState.commandLineBuffer = this.channelState.commandLineBuffer.slice(0, -1);
-                this.stream.write('\b \b');
-                return;
-            }
-
-            // arrow left:
-            if (data === '\x1b[D') {
-                this.stream.write('\b');
-                return;
-            }
-
-            // arrow right:
-            if (data === '\x1b[C') {
-                this.stream.write('\x1b[C');
-                return;
-            }
-
-            this.channelState.commandLineBuffer += data;
-            this.stream.write(data);
-        });
     }
 
     greet() {
-        this.screen.clear();
+        this.clear();
         this.stream.write('Welcome to the test server!\r\n');
         this.stream.write(this.makePS1());
     }
 
-    clear() {
-        this.screen.clear();
-        this.screen.moveTo(1, 1);
-    }
-
     logout() {
         this.client.end();
-        //this.screen.destroy();
-        this.terminal.dispose();
+    }
+
+    clear() {
+        this.stream.write('\x1b[2J\x1b[0;0H');
     }
 
     disableEcho() {
@@ -340,7 +270,45 @@ class Channel {
 
     pushData(data) {
         const dataString = data.toString();
-        this.terminal.input(dataString);
+        if (dataString === '\r') {
+            this.stream.write('\r\n');
+            this.executeCommand();
+            return;
+        }
+
+        if (dataString === '\x7f') {
+            this.channelState.commandLineBuffer = this.channelState.commandLineBuffer.slice(0, -1);
+            this.stream.write('\b \b');
+            return;
+        }
+
+        if (dataString === '\x03') {
+            this.channelState.commandLineBuffer = '';
+            this.stream.write('\r\n');
+            this.stream.write(this.makePS1());
+            return;
+        }
+
+        if (dataString === '\x04') {
+            this.stream.write('^D');
+            this.logout();
+            return;
+        }
+
+        // arrow left:
+        if (dataString === '\x1b[D') {
+            this.stream.write('\b');
+            return;
+        }
+
+        // arrow right:
+        if (dataString === '\x1b[C') {
+            this.stream.write('\x1b[C');
+            return;
+        }
+
+        this.channelState.commandLineBuffer += dataString;
+        this.stream.write(dataString);
     }
 }
 
@@ -401,15 +369,13 @@ const shellEmulator = (clientId, channelId, stream, client, channelState) => {
     });
 
     const channel = users.get(clientId).getChannel(channelId);
-    channel.makeScreen();
-    channel.setupXterm();
     channel.greet();
 }
 
 server = new Server({
     hostKeys: [fs.readFileSync('./key.private')],
     debug: (message) => {
-        logMessage(`Debug: ${message}`);
+        // logMessage(`Debug: ${message}`);
     }
 }, (client) => {
     const clientId = nanoid();
