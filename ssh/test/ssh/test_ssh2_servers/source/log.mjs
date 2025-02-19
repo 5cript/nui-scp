@@ -10,6 +10,11 @@ function logMessage(verbose, ...args) {
     if (verbose) {
         console.log(...args);
     }
+    return {
+        trace: () => {
+            console.trace();
+        }
+    }
 }
 
 function makeLogger(verbose) {

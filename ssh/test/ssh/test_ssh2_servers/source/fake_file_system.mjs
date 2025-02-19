@@ -4,13 +4,28 @@ const defaultStat = {
     mode: 0o644,
     uid: 1000,
     gid: 1000,
+    userName: 'test',
+    groupName: 'test',
     size: 0,
     atime: 0,
     mtime: 0,
     ctime: 0,
-    birthtime: 0
+    birthtime: 0,
+    linkCount: 0
 }
 
+const fdsProto = {
+    path: function () {
+        const parts = [];
+        let current = this;
+        while (current !== undefined) {
+            parts.unshift(current.name);
+            current = current.parent;
+        }
+        parts.filter(part => part.length > 0);
+        return parts.join('/');
+    }
+}
 
 const file = (name, contentString, stat) => {
     return {
@@ -18,24 +33,31 @@ const file = (name, contentString, stat) => {
         name: name,
         stat: {
             ...defaultStat,
+            ...(stat || {}),
             size: contentString.length,
-            ...(stat || {})
         }
     }
 }
 
 const directory = ({ name, stat }, children) => {
     return {
+        root: name === '',
         type: 'directory',
         name: name,
         stat: {
             ...defaultStat,
-            mode: 0o755,
-            ...(stat || {})
+            ...(stat || {}),
+            mode: 0o755
         },
         children: children || [],
         find: function (pathString) {
+            if (pathString === '/' && this.root)
+                return this;
+
             const pathParts = pathString.split('/').filter(part => part.length > 0);
+
+            if (pathString === '')
+                return this;
 
             if (pathParts.length !== 0) {
                 const currentSegment = pathParts[0];
@@ -75,8 +97,8 @@ const symlink = (name, target, stat) => {
         target: target,
         stat: {
             ...defaultStat,
-            mode: 0o777,
-            ...(stat || {})
+            ...(stat || {}),
+            mode: 0o777
         }
     }
 }
@@ -94,6 +116,17 @@ const fillFakeFsParents = (root) => {
 }
 
 const finalizeFakeFs = (root) => {
+    const setProto = (entry) => {
+        Object.setPrototypeOf(entry, fdsProto);
+        if (entry.type === 'directory') {
+            entry.children.forEach(child => {
+                setProto(child);
+            });
+        }
+    }
+
+    setProto(root);
+
     fillFakeFsParents(root);
     return root;
 }

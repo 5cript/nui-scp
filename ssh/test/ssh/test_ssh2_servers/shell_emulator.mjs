@@ -9,6 +9,7 @@ import { makeLogger } from './source/log.mjs';
 import { humanFileSize } from './source/human_file_size.mjs';
 import CommandLineInterface from './source/cli.mjs';
 import { makeSemiHexString } from './source/make_semi_hex_string.mjs';
+import { lsAccessMods } from './source/sftp_longname.mjs';
 const { Server } = ssh2;
 
 const allowedUser = Buffer.from('test');
@@ -44,27 +45,6 @@ const exit = () => {
  * @param {*} directoryEntryArray { name: string, type: 'file' | 'directory', size: number, date: Date, userName: string, groupName: string, accessMask: number }[]
  */
 const makeFakeLs = (directoryEntryArray, options, channelState) => {
-    const accessBitsToLsRepresentation = (bits) => {
-        switch (bits) {
-            case 0b000: return '---';
-            case 0b001: return '--x';
-            case 0b010: return '-w-';
-            case 0b011: return '-wx';
-            case 0b100: return 'r--';
-            case 0b101: return 'r-x';
-            case 0b110: return 'rw-';
-            case 0b111: return 'rwx';
-        }
-        return '???';
-    }
-
-    const lsAccessMods = (accessMask) => {
-        const user = accessBitsToLsRepresentation((accessMask >> 6) & 0b111);
-        const group = accessBitsToLsRepresentation((accessMask >> 3) & 0b111);
-        const other = accessBitsToLsRepresentation(accessMask & 0b111);
-        return `${user}${group}${other}`;
-    }
-
     if (options.a !== true) {
         directoryEntryArray = directoryEntryArray.filter(entry => entry.name[0] !== '.');
     }
