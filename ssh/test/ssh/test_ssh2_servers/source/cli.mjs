@@ -1,7 +1,7 @@
 import readline from 'node:readline';
 
 class CommandLineInterface {
-    constructor() {
+    constructor(logMessage) {
         this.rl = readline.createInterface({
             input: process.stdin,
             output: process.stdout
@@ -38,10 +38,5 @@ class CommandLineInterface {
         this.rl.close();
     }
 };
-
-const rl = readline.createInterface({
-    input: process.stdin,
-    output: process.stdout
-});
 
 export default CommandLineInterface;

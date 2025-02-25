@@ -28,7 +28,7 @@ let server;
 
 const users = new Map();
 
-const cli = new CommandLineInterface();
+const cli = new CommandLineInterface(logMessage);
 
 const exit = () => {
     users.forEach(user => {

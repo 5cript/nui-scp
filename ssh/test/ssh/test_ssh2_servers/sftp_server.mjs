@@ -633,7 +633,7 @@ server.on('error', (error) => {
     exit(1);
 });
 
-const cli = new CommandLineInterface();
+const cli = new CommandLineInterface(logMessage);
 
 cli.on('exit', () => {
     server.close();
