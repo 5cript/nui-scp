@@ -25,7 +25,8 @@ function formatDate(date) {
 }
 
 const makeLongName = (fakeFsEntry) => {
-    const { type, name, target, stat: { mode, uid, gid, userName, groupName, size, atime, mtime, ctime } } = fakeFsEntry;
+    let { type, name, target, stat: { mode, uid, gid, userName, groupName, size: size, atime, mtime, ctime } } = fakeFsEntry;
+    size = size || 0;
 
     /*
         -rwxr-xr-x   1 mjos     staff      348911 Mar 25 14:29 t-filexfer

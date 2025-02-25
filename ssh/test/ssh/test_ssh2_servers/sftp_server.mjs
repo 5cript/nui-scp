@@ -14,9 +14,11 @@ import CommandLineInterface from './source/cli.mjs';
 import { makeSemiHexString } from './source/make_semi_hex_string.mjs';
 import { exit } from 'node:process';
 import crypto from 'node:crypto';
-import { file, directory, symlink, finalizeFakeFs } from './source/fake_file_system.mjs';
+import { file, directory, symlink, finalizeFakeFs, renameInFakeFs } from './source/fake_file_system.mjs';
 import { makeLongName } from './source/sftp_longname.mjs';
 import { log } from 'node:console';
+import pathUtil from 'node:path';
+
 const { Server, sftp } = ssh2;
 const { OPEN_MODE, STATUS_CODE } = ssh2.utils.sftp;
 
@@ -118,6 +120,19 @@ class Handle {
 
 const defaultPath = '/home/test';
 
+const resolveFileName = (path) => {
+    if (path === '.') {
+        return defaultPath;
+    }
+    if (path.startsWith('/')) {
+        return path;
+    }
+    const nonNormalized = pathUtil.join(defaultPath, path);
+    const normalized = pathUtil.normalize(nonNormalized);
+    const linuxified = normalized.replace(/\\/g, '/');
+    return linuxified;
+}
+
 const server = new Server({
     hostKeys: [fs.readFileSync('key.private')],
     debug: (message) => {
@@ -156,18 +171,43 @@ const server = new Server({
                 const handles = new Map();
                 const sftpStream = accept();
                 sftpStream.on('OPEN', (reqid, filename, flags, attrs) => {
+                    filename = resolveFileName(filename);
+
                     logMessage('OPEN', filename, flags, attrs);
 
                     const result = fakeFilesystem.find(filename);
                     if (result === undefined) {
-                        logMessage('File not found');
-                        return sftpStream.status(reqid, STATUS_CODE.FAILURE);
+                        if (flags & OPEN_MODE.READ) {
+                            logMessage('File not found');
+                            return sftpStream.status(reqid, STATUS_CODE.NO_SUCH_FILE);
+                        }
+                        const anyWriteFlag = flags & (OPEN_MODE.WRITE | OPEN_MODE.TRUNC | OPEN_MODE.CREAT | OPEN_MODE.APPEND);
+                        if (anyWriteFlag) {
+                            const parentPath = pathUtil.dirname(filename);
+                            const parent = fakeFilesystem.find(parentPath);
+                            if (parent === undefined || parent.type !== 'directory') {
+                                logMessage('Parent not found');
+                                return sftpStream.status(reqid, STATUS_CODE.NO_SUCH_FILE);
+                            }
+
+                            const name = pathUtil.basename(filename);
+                            parent.insert(file(name, '', attrs));
+                        }
+                    } else {
+                        if (result.type !== 'file') {
+                            logMessage('Not a file');
+                            return sftpStream.status(reqid, STATUS_CODE.FAILURE);
+                        }
+
+                        if (flags & OPEN_MODE.WRITE) {
+                            if (flags & OPEN_MODE.TRUNC) {
+                                result.content = '';
+                            }
+                        }
                     }
 
                     const handle = new Handle(filename, 'file');
                     handles.set(handle.id, handle);
-
-                    logMessage('Opening file for write')
                     sftpStream.handle(reqid, handle.idAsBuffer());
                 });
 
@@ -183,9 +223,59 @@ const server = new Server({
                     }
 
                     // Fake the write operation
+                    const result = fakeFilesystem.find(handle.path);
+                    if (result === undefined) {
+                        logMessage('File not found');
+                        return sftpStream.status(reqid, STATUS_CODE.NO_SUCH_FILE);
+                    }
+
+                    const size = result.stat.size;
+                    if (offset > size) {
+                        logMessage('Invalid offset');
+                        return sftpStream.status(reqid, STATUS_CODE.EOF);
+                    }
+
+                    // Simulate writing data to the file at the specified offset
+                    result.content = Buffer.concat([
+                        Buffer.from(result.content.slice(0, offset)),
+                        data,
+                        Buffer.from(result.content.slice(offset + data.length))
+                    ]).toString('utf8');
+
                     sftpStream.status(reqid, STATUS_CODE.OK);
 
                     logMessage('Write to file at offset ${offset}: ${inspect(data)}');
+                });
+
+                sftpStream.on('READ', (reqid, handleRaw, offset, length) => {
+                    logMessage('READ', handleRaw, offset, length);
+
+                    const handleString = handleRaw.toString('utf8');
+                    if (!handles.has(handleString)) {
+                        logMessage('Invalid handle').trace();
+                        return sftpStream.status(reqid, STATUS_CODE.FAILURE);
+                    }
+
+                    const handle = handles.get(handleString);
+                    if (!handle) {
+                        return sftpStream.status(reqid, STATUS_CODE.FAILURE);
+                    }
+
+                    const result = fakeFilesystem.find(handle.path);
+                    if (result === undefined) {
+                        logMessage('File not found');
+                        return sftpStream.status(reqid, STATUS_CODE.NO_SUCH_FILE);
+                    }
+
+                    const size = result.stat.size;
+                    if (offset >= size) {
+                        logMessage('EOF');
+                        return sftpStream.status(reqid, STATUS_CODE.EOF);
+                    }
+
+                    const data = Buffer.from(result.content.slice(offset, Math.min(offset + length, size)), 'utf8');
+
+                    sftpStream.data(reqid, data);
                 });
 
                 sftpStream.on('CLOSE', (reqid, handleRaw) => {
@@ -202,9 +292,7 @@ const server = new Server({
                 });
 
                 sftpStream.on('REALPATH', (reqid, path) => {
-                    if (path === '.') {
-                        path = defaultPath;
-                    }
+                    path = resolveFileName(path);
 
                     const result = fakeFilesystem.find(path);
 
@@ -227,6 +315,8 @@ const server = new Server({
                 });
 
                 sftpStream.on('STAT', (reqid, path) => {
+                    path = resolveFileName(path);
+
                     logMessage('STAT', path);
 
                     const result = fakeFilesystem.find(path);
@@ -248,7 +338,16 @@ const server = new Server({
                 });
 
                 sftpStream.on('OPENDIR', (reqid, path) => {
+                    path = resolveFileName(path);
+
                     logMessage('OPENDIR', path);
+
+                    const result = fakeFilesystem.find(path);
+                    if (result === undefined || result.type !== 'directory') {
+                        logMessage('Not a directory');
+                        return sftpStream.status(reqid, STATUS_CODE.NO_SUCH_FILE);
+                    }
+
                     const handle = new Handle(path, 'dir');
                     handles.set(handle.id, handle);
 
@@ -300,26 +399,94 @@ const server = new Server({
                 });
 
                 sftpStream.on('REMOVE', (reqid, path) => {
+                    path = resolveFileName(path);
+
                     logMessage('REMOVE', path);
-                    sftpStream.status(reqid, STATUS_CODE.OK);
-                });
 
-                sftpStream.on('MKDIR', (reqid, path) => {
-                    logMessage('MKDIR', path);
-                    sftpStream.status(reqid, STATUS_CODE.OK);
-                });
+                    const result = fakeFilesystem.find(path);
+                    if (result === undefined) {
+                        logMessage('File not found');
+                        return sftpStream.status(reqid, STATUS_CODE.NO_SUCH_FILE);
+                    }
+                    if (result.type === 'directory') {
+                        logMessage('Cannot remove directories');
+                        return sftpStream.status(reqid, STATUS_CODE.FAILURE);
+                    }
 
-                sftpStream.on('RMDIR', (reqid, path) => {
-                    logMessage('RMDIR', path);
+                    result.parent.removeChild(result.name);
+
                     sftpStream.status(reqid, STATUS_CODE.OK);
                 });
 
                 sftpStream.on('RENAME', (reqid, oldPath, newPath) => {
+                    oldPath = resolveFileName(oldPath);
+                    newPath = resolveFileName(newPath);
+
                     logMessage('RENAME', oldPath, newPath);
+
+                    const oldResult = fakeFilesystem.find(oldPath);
+                    if (oldResult === undefined) {
+                        logMessage('Old file not found');
+                        return sftpStream.status(reqid, STATUS_CODE.NO_SUCH_FILE);
+                    }
+                    const newResult = fakeFilesystem.find(newPath);
+                    if (newResult !== undefined) {
+                        logMessage('New file already exists');
+                        return sftpStream.status(reqid, STATUS_CODE.FAILURE);
+                    }
+
+                    renameInFakeFs(oldResult, newPath);
+
+                    sftpStream.status(reqid, STATUS_CODE.OK);
+                });
+
+                sftpStream.on('MKDIR', (reqid, path) => {
+                    path = resolveFileName(path);
+
+                    logMessage('MKDIR', path);
+
+                    const result = fakeFilesystem.find(path);
+                    if (result !== undefined) {
+                        logMessage('File already exists');
+                        return sftpStream.status(reqid, STATUS_CODE.FAILURE);
+                    }
+
+                    const parentPath = path.split('/').slice(0, -1).join('/');
+                    const parent = fakeFilesystem.find(parentPath);
+                    if (parent === undefined || parent.type !== 'directory') {
+                        logMessage('Parent not found');
+                        return sftpStream.status(reqid, STATUS_CODE.FAILURE);
+                    }
+
+                    parent.insert(directory({ name: pathUtil.basename(path) }));
+
+                    sftpStream.status(reqid, STATUS_CODE.OK);
+                });
+
+                sftpStream.on('RMDIR', (reqid, path) => {
+                    path = resolveFileName(path);
+
+                    logMessage('RMDIR', path);
+
+                    const result = fakeFilesystem.find(path);
+                    if (result === undefined || result.type !== 'directory') {
+                        logMessage('Not a directory');
+                        return sftpStream.status(reqid, STATUS_CODE.FAILURE);
+                    }
+
+                    if (result.children.length > 0) {
+                        logMessage('Directory not empty');
+                        return sftpStream.status(reqid, STATUS_CODE.FAILURE);
+                    }
+
+                    result.parent.removeChild(result.name);
+
                     sftpStream.status(reqid, STATUS_CODE.OK);
                 });
 
                 sftpStream.on('READLINK', (reqid, path) => {
+                    path = resolveFileName(path);
+
                     logMessage('READLINK', path);
 
                     const result = fakeFilesystem.find(path);
@@ -342,17 +509,69 @@ const server = new Server({
                 });
 
                 sftpStream.on('SYMLINK', (reqid, targetPath, linkPath) => {
+                    targetPath = resolveFileName(targetPath);
+                    linkPath = resolveFileName(linkPath);
+
                     logMessage('SYMLINK', targetPath, linkPath);
+
+                    const target = fakeFilesystem.find(targetPath);
+                    if (target === undefined) {
+                        // It is unclear whether the target must exist or not
+                        logMessage('Target not found');
+                        return sftpStream.status(reqid, STATUS_CODE.FAILURE);
+                    }
+
+                    const link = fakeFilesystem.find(linkPath);
+                    if (link !== undefined) {
+                        logMessage('Link already exists');
+                        return sftpStream.status(reqid, STATUS_CODE.FAILURE);
+                    };
+
+                    const element = symlink(pathUtil.filename(linkPath), targetPath);
+                    fakeFilesystem.insertDeep(pathUtil.dirname(linkPath), element);
+
                     sftpStream.status(reqid, STATUS_CODE.OK);
                 });
 
                 sftpStream.on('SETSTAT', (reqid, path, attrs) => {
+                    path = resolveFileName(path);
+
                     logMessage('SETSTAT', path, attrs);
+
+                    const result = fakeFilesystem.find(path);
+                    if (result === undefined) {
+                        logMessage('File not found');
+                        return sftpStream.status(reqid, STATUS_CODE.FAILURE);
+                    }
+
+                    Object.assign(result.stat, attrs);
+
                     sftpStream.status(reqid, STATUS_CODE.OK);
                 });
 
                 sftpStream.on('FSETSTAT', (reqid, handle, attrs) => {
                     logMessage('FSETSTAT', handle, attrs);
+
+                    const handleString = handle.toString('utf8');
+                    if (!handles.has(handleString)) {
+                        logMessage('Invalid handle').trace();
+                        return sftpStream.status(reqid, STATUS_CODE.FAILURE);
+                    }
+
+                    const handleObj = handles.get(handleString);
+                    if (!handleObj) {
+                        logMessage('Invalid handle').trace();
+                        return sftpStream.status(reqid, STATUS_CODE.FAILURE);
+                    }
+
+                    const result = fakeFilesystem.find(handleObj.path);
+                    if (result === undefined) {
+                        logMessage('File not found').trace();
+                        return sftpStream.status(reqid, STATUS_CODE.FAILURE);
+                    }
+
+                    Object.assign(result.stat, attrs);
+
                     sftpStream.status(reqid, STATUS_CODE.OK);
                 });
 
@@ -380,6 +599,8 @@ const server = new Server({
                 });
 
                 sftpStream.on('LSTAT', (reqid, path) => {
+                    path = resolveFileName(path);
+
                     logMessage('LSTAT', path);
 
                     const result = fakeFilesystem.find(path);

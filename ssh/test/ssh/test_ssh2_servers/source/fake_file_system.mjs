@@ -1,4 +1,5 @@
 import path from 'node:path';
+import util from 'node:util';
 
 const defaultStat = {
     mode: 0o644,
@@ -28,19 +29,22 @@ const fdsProto = {
 }
 
 const file = (name, contentString, stat) => {
-    return {
+    const result = {
         type: 'file',
         name: name,
         stat: {
-            ...defaultStat,
             ...(stat || {}),
-            size: contentString.length,
-        }
-    }
+            ...defaultStat
+        },
+        content: contentString || '',
+    };
+    result.stat.size = contentString ? contentString.length : 0;
+    Object.setPrototypeOf(result, fdsProto);
+    return result;
 }
 
 const directory = ({ name, stat }, children) => {
-    return {
+    const result = {
         root: name === '',
         type: 'directory',
         name: name,
@@ -50,6 +54,35 @@ const directory = ({ name, stat }, children) => {
             mode: 0o755
         },
         children: children || [],
+        insert: function (entry) {
+            entry.parent = this;
+            this.children.push(entry);
+        },
+        insertDeep: function (pathString, entry) {
+            if (pathString === '/') {
+                this.children.push(entry);
+                return;
+            }
+
+            const pathParts = pathString.split('/').filter(part => part.length > 0);
+            const currentSegment = pathParts[0];
+            const remainingPath = pathParts.slice(1).join('/');
+
+            if (pathParts.length === 1) {
+                entry.parent = this;
+                this.children.push(entry);
+                return;
+            }
+
+            const existingChild = this.children.find(child => child.name === currentSegment);
+            if (existingChild === undefined) {
+                const newDir = directory({ name: currentSegment }, []);
+                this.children.push(newDir);
+                newDir.insertDeep(remainingPath, entry);
+            } else {
+                existingChild.insertDeep(remainingPath, entry);
+            }
+        },
         find: function (pathString) {
             if (pathString === '/' && this.root)
                 return this;
@@ -83,15 +116,23 @@ const directory = ({ name, stat }, children) => {
 
                 return child.find(remainingPath);
             }
+        },
+        removeChild: function (name) {
+            const index = this.children.findIndex(child => child.name === name);
+            if (index !== -1) {
+                this.children.splice(index, 1);
+            }
         }
-    }
+    };
+    Object.setPrototypeOf(result, fdsProto);
+    return result;
 }
 
 const symlink = (name, target, stat) => {
     if (stat === undefined)
         stat = {}
 
-    return {
+    const result = {
         type: 'symlink',
         name: name,
         target: target,
@@ -101,13 +142,15 @@ const symlink = (name, target, stat) => {
             mode: 0o777
         }
     }
+    Object.setPrototypeOf(result, fdsProto);
+    return result;
 }
 
 // Gives every child directory a reference to its parent directory
 const fillFakeFsParents = (root) => {
     const fillParent = (parent, child) => {
+        child.parent = parent;
         if (child.type === 'directory') {
-            child.parent = parent;
             child.children.forEach(c => fillParent(child, c));
         }
     }
@@ -116,19 +159,31 @@ const fillFakeFsParents = (root) => {
 }
 
 const finalizeFakeFs = (root) => {
-    const setProto = (entry) => {
-        Object.setPrototypeOf(entry, fdsProto);
-        if (entry.type === 'directory') {
-            entry.children.forEach(child => {
-                setProto(child);
-            });
-        }
-    }
-
-    setProto(root);
-
     fillFakeFsParents(root);
     return root;
 }
 
-export { file, directory, symlink, finalizeFakeFs };
+const renameInFakeFs = (oldEntry, newPath) => {
+    console.log(util.inspect(oldEntry, { depth: 10 }));
+    console.log('Renaming', oldEntry.path(), 'to', newPath);
+
+    let root = oldEntry.parent;
+    if (root.parent === undefined) {
+        root = oldEntry;
+    }
+    else {
+        while (root.parent !== undefined) {
+            root = root.parent;
+        }
+    }
+
+    const newEntry = { ...oldEntry };
+    Object.setPrototypeOf(newEntry, fdsProto);
+    newEntry.parent = undefined;
+    newEntry.name = path.basename(newPath);
+
+    oldEntry.parent.removeChild(oldEntry.name);
+    root.insertDeep(newPath, newEntry);
+}
+
+export { file, directory, symlink, finalizeFakeFs, renameInFakeFs };
