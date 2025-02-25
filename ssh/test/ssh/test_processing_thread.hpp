@@ -58,9 +58,9 @@ namespace SecureShell::Test
 
     TEST_F(ProcessingThreadTest, PushedTaskIsEventuallyExecuted)
     {
+        std::promise<void> promise{};
         ProcessingThread processingThread;
         processingThread.start(std::chrono::milliseconds{1});
-        std::promise<void> promise{};
         EXPECT_TRUE(processingThread.pushTask([&promise] {
             promise.set_value();
         }));
@@ -100,8 +100,8 @@ namespace SecureShell::Test
 
     TEST_F(ProcessingThreadTest, CannotPushTaskWhileStopping)
     {
-        ProcessingThread processingThread;
         std::promise<void> promise{};
+        ProcessingThread processingThread;
         processingThread.pushTask([&] {
             promise.set_value();
             std::this_thread::sleep_for(std::chrono::milliseconds{100});
@@ -116,8 +116,8 @@ namespace SecureShell::Test
 
     TEST_F(ProcessingThreadTest, PushedTaskIsExecutedOnStopIfNeverRan)
     {
-        ProcessingThread processingThread;
         std::promise<void> promise{};
+        ProcessingThread processingThread;
         processingThread.pushTask([&promise] {
             promise.set_value();
         });
@@ -136,12 +136,13 @@ namespace SecureShell::Test
 
     TEST_F(ProcessingThreadTest, PermanentTaskIsExecuted)
     {
+        std::promise<void> promise{};
         ProcessingThread processingThread;
         processingThread.start(std::chrono::milliseconds{1});
-        std::promise<void> promise{};
         auto result = processingThread.pushPermanentTask([&promise] {
             promise.set_value();
         });
+        ASSERT_TRUE(result.first);
         auto fut = promise.get_future();
         ASSERT_EQ(std::future_status::ready, fut.wait_for(std::chrono::seconds{1}));
     }
@@ -158,6 +159,7 @@ namespace SecureShell::Test
             latch.count_down();
             --counter;
         });
+        ASSERT_TRUE(result.first);
         bool waitResult = false;
         for (int tryWaitCount = 0; tryWaitCount < 5; ++tryWaitCount)
         {
@@ -170,12 +172,13 @@ namespace SecureShell::Test
 
     TEST_F(ProcessingThreadTest, TaskIsExecutedIfIfPermantentTaskIsRunning)
     {
+        std::promise<void> promise{};
         ProcessingThread processingThread;
         processingThread.start(std::chrono::milliseconds{1});
-        std::promise<void> promise{};
         auto result = processingThread.pushPermanentTask([] {
             std::this_thread::sleep_for(std::chrono::milliseconds{10});
         });
+        ASSERT_TRUE(result.first);
         processingThread.pushTask([&promise] {
             promise.set_value();
         });
@@ -185,16 +188,17 @@ namespace SecureShell::Test
 
     TEST_F(ProcessingThreadTest, TaskIsOnlyExecutedOnceIfPermanentTaskIsRunning)
     {
-        ProcessingThread processingThread;
-        processingThread.start(std::chrono::milliseconds{1});
         std::atomic_int counter = 0;
         std::promise<void> promise{};
+        ProcessingThread processingThread;
+        processingThread.start(std::chrono::milliseconds{1});
         auto result = processingThread.pushPermanentTask([&counter, &promise] {
             std::this_thread::sleep_for(std::chrono::milliseconds{10});
             ++counter;
             if (counter.load() == 5)
                 promise.set_value();
         });
+        ASSERT_TRUE(result.first);
 
         std::atomic_int taskCounter = 0;
         processingThread.pushTask([&taskCounter] {
@@ -216,9 +220,9 @@ namespace SecureShell::Test
 
     TEST_F(ProcessingThreadTest, CanRemovePermanentTaskWhenRunning)
     {
+        std::promise<void> promise{};
         ProcessingThread processingThread;
         processingThread.start(std::chrono::milliseconds{1});
-        std::promise<void> promise{};
         auto result = processingThread.pushPermanentTask([&promise] {
             promise.set_value();
         });
@@ -229,9 +233,9 @@ namespace SecureShell::Test
 
     TEST_F(ProcessingThreadTest, CanRemovePermanentTaskFromRegularTask)
     {
+        std::promise<void> promise{};
         ProcessingThread processingThread;
         processingThread.start(std::chrono::milliseconds{1});
-        std::promise<void> promise{};
         auto result = processingThread.pushPermanentTask([&promise] {
             promise.set_value();
         });
@@ -244,30 +248,36 @@ namespace SecureShell::Test
 
     TEST_F(ProcessingThreadTest, CanAddPermanentTaskFromRegularTask)
     {
+        std::promise<void> promise{};
         ProcessingThread processingThread;
         processingThread.start(std::chrono::milliseconds{1});
-        std::promise<void> promise{};
-        processingThread.pushTask([&processingThread, &promise] {
-            auto result = processingThread.pushPermanentTask([&promise] {
-                promise.set_value();
-            });
+        std::atomic_bool pushResult = false;
+        processingThread.pushTask([&processingThread, &promise, &pushResult] {
+            pushResult = processingThread
+                             .pushPermanentTask([&promise] {
+                                 promise.set_value();
+                             })
+                             .first;
         });
         auto fut = promise.get_future();
         ASSERT_EQ(std::future_status::ready, fut.wait_for(std::chrono::seconds{1}));
+        EXPECT_TRUE(pushResult);
     }
 
     TEST_F(ProcessingThreadTest, CanAddRegularTaskFromRegularTask)
     {
+        std::promise<void> promise{};
         ProcessingThread processingThread;
         processingThread.start(std::chrono::milliseconds{1});
-        std::promise<void> promise{};
-        processingThread.pushTask([&processingThread, &promise] {
-            auto result = processingThread.pushTask([&promise] {
+        std::atomic_bool pushResult = false;
+        processingThread.pushTask([&processingThread, &promise, &pushResult] {
+            pushResult = processingThread.pushTask([&promise] {
                 promise.set_value();
             });
         });
         auto fut = promise.get_future();
         ASSERT_EQ(std::future_status::ready, fut.wait_for(std::chrono::seconds{1}));
+        EXPECT_TRUE(pushResult);
     }
 
     TEST_F(ProcessingThreadTest, CanRemovePermanentTaskFromPermanentTask)
