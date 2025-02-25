@@ -60,8 +60,8 @@ namespace SecureShell
         {
             std::lock_guard lock{taskWaitMutex_};
             taskAvailable_ = true;
-            taskCondition_.notify_one();
         }
+        taskCondition_.notify_one();
         return true;
     }
     std::pair<bool, ProcessingThread::PermanentTaskId> ProcessingThread::pushPermanentTask(std::function<void()> task)
