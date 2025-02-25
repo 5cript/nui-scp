@@ -1,5 +1,6 @@
 #pragma once
 
+#include "utility/awaiter.hpp"
 #include <ssh/processing_thread.hpp>
 
 #include <gtest/gtest.h>
@@ -58,34 +59,33 @@ namespace SecureShell::Test
 
     TEST_F(ProcessingThreadTest, PushedTaskIsEventuallyExecuted)
     {
-        std::promise<void> promise{};
+        Awaiter awaiter{};
         ProcessingThread processingThread;
         processingThread.start(std::chrono::milliseconds{1});
-        EXPECT_TRUE(processingThread.pushTask([&promise] {
-            promise.set_value();
+        EXPECT_TRUE(processingThread.pushTask([&awaiter] {
+            awaiter.arrive();
         }));
-        auto fut = promise.get_future();
-        ASSERT_EQ(std::future_status::ready, fut.wait_for(std::chrono::seconds{1}));
+        ASSERT_TRUE(awaiter.waitFor());
     }
 
     TEST_F(ProcessingThreadTest, AllTasksAreExecutedEvenIfDestructed)
     {
         std::atomic_int counter = 0;
-        std::promise<void> promise{};
+        Awaiter awaiter{};
         {
             ProcessingThread processingThread;
             processingThread.start(std::chrono::milliseconds{1}, std::chrono::milliseconds{100});
             for (unsigned int i = 0; i < ProcessingThread::maximumTasksProcessableAtOnce * 3; ++i)
             {
-                EXPECT_TRUE(processingThread.pushTask([&counter, &promise] {
+                EXPECT_TRUE(processingThread.pushTask([&counter, &awaiter] {
                     if (counter.load() == 0)
-                        promise.set_value();
+                        awaiter.arrive();
                     ++counter;
                 }));
             }
             // wait for at least one task to be executed, otherwise it runs into shutdown immediately and the adds
             // are not processed
-            promise.get_future().wait();
+            awaiter.wait();
         }
         ASSERT_EQ(ProcessingThread::maximumTasksProcessableAtOnce * 3, counter.load());
     }
@@ -100,30 +100,29 @@ namespace SecureShell::Test
 
     TEST_F(ProcessingThreadTest, CannotPushTaskWhileStopping)
     {
-        std::promise<void> promise{};
+        Awaiter awaiter{};
         ProcessingThread processingThread;
         processingThread.pushTask([&] {
-            promise.set_value();
+            awaiter.arrive();
             std::this_thread::sleep_for(std::chrono::milliseconds{100});
         });
         std::thread asyncStopper{[&] {
             processingThread.stop();
         }};
-        promise.get_future().wait();
+        awaiter.wait();
         EXPECT_FALSE(processingThread.pushTask([] {}));
         asyncStopper.join();
     }
 
     TEST_F(ProcessingThreadTest, PushedTaskIsExecutedOnStopIfNeverRan)
     {
-        std::promise<void> promise{};
+        Awaiter awaiter{};
         ProcessingThread processingThread;
-        processingThread.pushTask([&promise] {
-            promise.set_value();
+        processingThread.pushTask([&] {
+            awaiter.arrive();
         });
         processingThread.stop();
-        auto fut = promise.get_future();
-        ASSERT_EQ(std::future_status::ready, fut.wait_for(std::chrono::seconds{1}));
+        EXPECT_TRUE(awaiter.waitFor());
     }
 
     TEST_F(ProcessingThreadTest, CanPushPermanentTask)
@@ -136,15 +135,14 @@ namespace SecureShell::Test
 
     TEST_F(ProcessingThreadTest, PermanentTaskIsExecuted)
     {
-        std::promise<void> promise{};
+        Awaiter awaiter{};
         ProcessingThread processingThread;
         processingThread.start(std::chrono::milliseconds{1});
-        auto result = processingThread.pushPermanentTask([&promise] {
-            promise.set_value();
+        auto result = processingThread.pushPermanentTask([&awaiter] {
+            awaiter.arrive();
         });
         ASSERT_TRUE(result.first);
-        auto fut = promise.get_future();
-        ASSERT_EQ(std::future_status::ready, fut.wait_for(std::chrono::seconds{1}));
+        EXPECT_TRUE(awaiter.waitFor());
     }
 
     TEST_F(ProcessingThreadTest, PermanentTaskIsExecutedMultipleTimes)
@@ -172,31 +170,30 @@ namespace SecureShell::Test
 
     TEST_F(ProcessingThreadTest, TaskIsExecutedIfIfPermantentTaskIsRunning)
     {
-        std::promise<void> promise{};
+        Awaiter awaiter{};
         ProcessingThread processingThread;
         processingThread.start(std::chrono::milliseconds{1});
         auto result = processingThread.pushPermanentTask([] {
             std::this_thread::sleep_for(std::chrono::milliseconds{10});
         });
         ASSERT_TRUE(result.first);
-        processingThread.pushTask([&promise] {
-            promise.set_value();
+        processingThread.pushTask([&awaiter] {
+            awaiter.arrive();
         });
-        auto fut = promise.get_future();
-        ASSERT_EQ(std::future_status::ready, fut.wait_for(std::chrono::seconds{1}));
+        EXPECT_TRUE(awaiter.waitFor());
     }
 
     TEST_F(ProcessingThreadTest, TaskIsOnlyExecutedOnceIfPermanentTaskIsRunning)
     {
         std::atomic_int counter = 0;
-        std::promise<void> promise{};
+        Awaiter awaiter{};
         ProcessingThread processingThread;
         processingThread.start(std::chrono::milliseconds{1});
-        auto result = processingThread.pushPermanentTask([&counter, &promise] {
+        auto result = processingThread.pushPermanentTask([&counter, &awaiter] {
             std::this_thread::sleep_for(std::chrono::milliseconds{10});
             ++counter;
             if (counter.load() == 5)
-                promise.set_value();
+                awaiter.arrive();
         });
         ASSERT_TRUE(result.first);
 
@@ -205,8 +202,7 @@ namespace SecureShell::Test
             ++taskCounter;
         });
 
-        auto fut = promise.get_future();
-        ASSERT_EQ(std::future_status::ready, fut.wait_for(std::chrono::seconds{1}));
+        ASSERT_TRUE(awaiter.waitFor());
         EXPECT_EQ(1, taskCounter.load());
     }
 
@@ -220,110 +216,107 @@ namespace SecureShell::Test
 
     TEST_F(ProcessingThreadTest, CanRemovePermanentTaskWhenRunning)
     {
-        std::promise<void> promise{};
+        Awaiter awaiter{};
         ProcessingThread processingThread;
         processingThread.start(std::chrono::milliseconds{1});
-        auto result = processingThread.pushPermanentTask([&promise] {
-            promise.set_value();
+        auto result = processingThread.pushPermanentTask([&awaiter] {
+            awaiter.arrive();
         });
-        auto fut = promise.get_future();
-        ASSERT_EQ(std::future_status::ready, fut.wait_for(std::chrono::seconds{1}));
+        ASSERT_TRUE(result.first);
+        ASSERT_TRUE(awaiter.waitFor());
         ASSERT_NO_FATAL_FAILURE(processingThread.removePermanentTask(result.second));
     }
 
     TEST_F(ProcessingThreadTest, CanRemovePermanentTaskFromRegularTask)
     {
-        std::promise<void> promise{};
+        Awaiter awaiter{};
+        Awaiter awaiter2{};
         ProcessingThread processingThread;
         processingThread.start(std::chrono::milliseconds{1});
-        auto result = processingThread.pushPermanentTask([&promise] {
-            promise.set_value();
+        auto result = processingThread.pushPermanentTask([&awaiter] {
+            awaiter.arrive();
         });
-        processingThread.pushTask([&processingThread, result] {
-            processingThread.removePermanentTask(result.second);
+        ASSERT_TRUE(result.first);
+        ASSERT_TRUE(awaiter.waitFor());
+        std::atomic_bool removeResult = false;
+        processingThread.pushTask([&processingThread, result, &removeResult, &awaiter2] {
+            removeResult = processingThread.removePermanentTask(result.second);
+            awaiter2.arrive();
         });
-        auto fut = promise.get_future();
-        ASSERT_EQ(std::future_status::ready, fut.wait_for(std::chrono::seconds{1}));
+        ASSERT_TRUE(awaiter2.waitFor());
+        EXPECT_TRUE(removeResult);
+        processingThread.stop();
+        awaiter.reset();
+        processingThread.start(std::chrono::milliseconds{1});
+        EXPECT_FALSE(awaiter.waitFor(400ms));
     }
 
     TEST_F(ProcessingThreadTest, CanAddPermanentTaskFromRegularTask)
     {
-        std::promise<void> promise{};
+        Awaiter awaiter{};
         ProcessingThread processingThread;
         processingThread.start(std::chrono::milliseconds{1});
         std::atomic_bool pushResult = false;
-        processingThread.pushTask([&processingThread, &promise, &pushResult] {
+        processingThread.pushTask([&processingThread, &awaiter, &pushResult] {
             pushResult = processingThread
-                             .pushPermanentTask([&promise] {
-                                 promise.set_value();
+                             .pushPermanentTask([&awaiter] {
+                                 awaiter.arrive();
                              })
                              .first;
         });
-        auto fut = promise.get_future();
-        ASSERT_EQ(std::future_status::ready, fut.wait_for(std::chrono::seconds{1}));
+        ASSERT_TRUE(awaiter.waitFor());
         EXPECT_TRUE(pushResult);
     }
 
     TEST_F(ProcessingThreadTest, CanAddRegularTaskFromRegularTask)
     {
-        std::promise<void> promise{};
+        Awaiter awaiter{};
         ProcessingThread processingThread;
         processingThread.start(std::chrono::milliseconds{1});
         std::atomic_bool pushResult = false;
-        processingThread.pushTask([&processingThread, &promise, &pushResult] {
-            pushResult = processingThread.pushTask([&promise] {
-                promise.set_value();
+        processingThread.pushTask([&processingThread, &awaiter, &pushResult] {
+            pushResult = processingThread.pushTask([&awaiter] {
+                awaiter.arrive();
             });
         });
-        auto fut = promise.get_future();
-        ASSERT_EQ(std::future_status::ready, fut.wait_for(std::chrono::seconds{1}));
+        ASSERT_TRUE(awaiter.waitFor());
         EXPECT_TRUE(pushResult);
     }
 
     TEST_F(ProcessingThreadTest, CanRemovePermanentTaskFromPermanentTask)
     {
-        std::promise<void> promise{};
-        std::atomic_bool removeExecuted = false;
+        Awaiter awaiter{};
         ProcessingThread processingThread;
         processingThread.start(std::chrono::milliseconds{1});
         std::shared_ptr<std::pair<bool, ProcessingThread::PermanentTaskId>> result =
             std::make_shared<std::pair<bool, ProcessingThread::PermanentTaskId>>();
-        *result = processingThread.pushPermanentTask([&processingThread, result, &removeExecuted] {
-            removeExecuted = true;
+        *result = processingThread.pushPermanentTask([&processingThread, result, &awaiter] {
             processingThread.removePermanentTask(result->second);
+            awaiter.arrive();
             /*
              * DONT DO ANYTHING HERE WITH CAPTURES, AS THEY ARE DESTROYED
              */
         });
-        processingThread.pushTask([&promise]() {
-            promise.set_value();
-        });
-        auto fut = promise.get_future();
-        ASSERT_EQ(std::future_status::ready, fut.wait_for(std::chrono::seconds{1}));
+        ASSERT_TRUE(awaiter.waitFor());
         processingThread.stop();
         EXPECT_EQ(0, processingThread.permanentTaskCount());
-        EXPECT_TRUE(removeExecuted);
     }
 
     TEST_F(ProcessingThreadTest, RemovedPermanentTaskIsNoLongerCalled)
     {
-        std::promise<void> promise{};
-        std::atomic_bool promiseSet = false;
+        Awaiter awaiter{};
         std::atomic_int counter = 0;
         ProcessingThread processingThread;
         processingThread.start(std::chrono::milliseconds{1});
         std::shared_ptr<std::pair<bool, ProcessingThread::PermanentTaskId>> result =
             std::make_shared<std::pair<bool, ProcessingThread::PermanentTaskId>>();
         *result = processingThread.pushPermanentTask([&]() {
-            if (!promiseSet)
-                promise.set_value();
-            promiseSet = true;
+            awaiter.arrive();
             ++counter;
             processingThread.removePermanentTask(result->second);
         });
 
-        auto fut = promise.get_future();
-        ASSERT_EQ(std::future_status::ready, fut.wait_for(std::chrono::seconds{1}));
+        ASSERT_TRUE(awaiter.waitFor());
         std::this_thread::sleep_for(std::chrono::milliseconds{100});
         processingThread.stop();
         EXPECT_EQ(1, counter.load());
