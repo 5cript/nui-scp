@@ -28,8 +28,8 @@ namespace SecureShell
     {
         DirectoryEntry entry{
             SharedData::DirectoryEntry{
-                .path = attributes->name,
-                .longName = attributes->longname,
+                .path = attributes->name ? std::string{attributes->name} : std::string{},
+                .longName = attributes->longname ? std::string{attributes->longname} : std::string{},
                 .flags = attributes->flags,
                 .type = attributes->type,
                 .size = attributes->size,
@@ -180,6 +180,27 @@ namespace SecureShell
                     });
                 }
                 return {};
+            });
+    }
+
+    std::future<std::expected<SftpSession::DirectoryEntry, SftpSession::Error>>
+    SftpSession::stat(std::filesystem::path const& path)
+    {
+        std::scoped_lock lock{ownerMutex_};
+        return owner_->processingThread_.pushPromiseTask(
+            [this, path = std::move(path)]() -> std::expected<DirectoryEntry, Error> {
+                std::unique_ptr<sftp_attributes_struct, decltype(&sftp_attributes_free)> attributes{
+                    sftp_stat(session_, path.generic_string().c_str()), sftp_attributes_free};
+                if (attributes == nullptr)
+                {
+                    return std::unexpected(Error{
+                        .message = ssh_get_error(session_),
+                        .sshError = ssh_get_error_code(session_),
+                        .sftpError = sftp_get_error(session_),
+                    });
+                }
+
+                return DirectoryEntry::fromSftpAttributes(attributes.get());
             });
     }
 }

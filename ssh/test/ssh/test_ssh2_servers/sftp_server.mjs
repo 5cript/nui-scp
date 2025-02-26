@@ -349,6 +349,8 @@ const server = new Server({
 
                         sftpStream.attrs(reqid, find2.stat);
                     }
+
+                    sftpStream.attrs(reqid, result.stat);
                 });
 
                 sftpStream.on('OPENDIR', (reqid, path) => {

@@ -181,4 +181,17 @@ namespace SecureShell::Test
         auto result = fut.get();
         EXPECT_FALSE(result.has_value());
     }
+
+    TEST_F(SftpTests, CanStatFile)
+    {
+        CREATE_SERVER_AND_JOINER(Sftp);
+        auto [_, sftp] = createSftpSession(serverStartResult->port);
+
+        auto fut = sftp->stat("/home/test/file1.txt");
+        ASSERT_EQ(fut.wait_for(1s), std::future_status::ready);
+        auto result = fut.get();
+        ASSERT_TRUE(result.has_value());
+
+        EXPECT_GT(result.value().size, 0);
+    }
 }
