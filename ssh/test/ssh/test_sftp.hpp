@@ -75,6 +75,17 @@ namespace SecureShell::Test
         EXPECT_NE(it, result.value().end());
     }
 
+    TEST_F(SftpTests, ListingNonExistantDirectoryMayFail)
+    {
+        CREATE_SERVER_AND_JOINER(Sftp);
+        auto [_, sftp] = createSftpSession(serverStartResult->port);
+
+        auto fut = sftp->listDirectory("/home/test/nonexistant");
+        ASSERT_EQ(fut.wait_for(1s), std::future_status::ready);
+        auto result = fut.get();
+        EXPECT_FALSE(result.has_value());
+    }
+
     TEST_F(SftpTests, CanCreateDirectory)
     {
         CREATE_SERVER_AND_JOINER(Sftp);
@@ -96,6 +107,17 @@ namespace SecureShell::Test
         EXPECT_NE(it, listResult.value().end());
     }
 
+    TEST_F(SftpTests, CreatingDirectoryThatAlreadyExistsMayFail)
+    {
+        CREATE_SERVER_AND_JOINER(Sftp);
+        auto [_, sftp] = createSftpSession(serverStartResult->port);
+
+        auto fut = sftp->createDirectory("/home/test");
+        ASSERT_EQ(fut.wait_for(1s), std::future_status::ready);
+        auto result = fut.get();
+        EXPECT_FALSE(result.has_value());
+    }
+
     TEST_F(SftpTests, CanCreateFile)
     {
         CREATE_SERVER_AND_JOINER(Sftp);
@@ -115,5 +137,48 @@ namespace SecureShell::Test
             return entry.path == "newfile.txt";
         });
         EXPECT_NE(it, listResult.value().end());
+    }
+
+    TEST_F(SftpTests, CreatingFileInNonExistantDirectoryMayFail)
+    {
+        CREATE_SERVER_AND_JOINER(Sftp);
+        auto [_, sftp] = createSftpSession(serverStartResult->port);
+
+        auto fut = sftp->createFile("/home/test/nonexistant/newfile.txt");
+        ASSERT_EQ(fut.wait_for(1s), std::future_status::ready);
+        auto result = fut.get();
+        EXPECT_FALSE(result.has_value());
+    }
+
+    TEST_F(SftpTests, CanRemoveFile)
+    {
+        CREATE_SERVER_AND_JOINER(Sftp);
+        auto [_, sftp] = createSftpSession(serverStartResult->port);
+
+        auto fut = sftp->remove("/home/test/file1.txt");
+        ASSERT_EQ(fut.wait_for(1s), std::future_status::ready);
+        auto result = fut.get();
+        ASSERT_TRUE(result.has_value());
+
+        auto listFut = sftp->listDirectory("/home/test");
+        ASSERT_EQ(listFut.wait_for(1s), std::future_status::ready);
+        auto listResult = listFut.get();
+        ASSERT_TRUE(listResult.has_value());
+
+        auto it = std::find_if(listResult.value().begin(), listResult.value().end(), [](const auto& entry) {
+            return entry.path == "file1.txt";
+        });
+        EXPECT_EQ(it, listResult.value().end());
+    }
+
+    TEST_F(SftpTests, RemovingNonExistantFileMayFail)
+    {
+        CREATE_SERVER_AND_JOINER(Sftp);
+        auto [_, sftp] = createSftpSession(serverStartResult->port);
+
+        auto fut = sftp->remove("/home/test/nonexistant.txt");
+        ASSERT_EQ(fut.wait_for(1s), std::future_status::ready);
+        auto result = fut.get();
+        EXPECT_FALSE(result.has_value());
     }
 }

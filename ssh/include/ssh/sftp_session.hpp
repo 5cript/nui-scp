@@ -53,6 +53,7 @@ namespace SecureShell
             std::filesystem::path const& path,
             std::filesystem::perms permissions = std::filesystem::perms::owner_read |
                 std::filesystem::perms::owner_write);
+        std::future<std::expected<void, Error>> remove(std::filesystem::path const& path);
 
       private:
         std::mutex ownerMutex_;

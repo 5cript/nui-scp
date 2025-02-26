@@ -164,4 +164,22 @@ namespace SecureShell
                 return {};
             });
     }
+
+    std::future<std::expected<void, SftpSession::Error>> SftpSession::remove(std::filesystem::path const& path)
+    {
+        std::scoped_lock lock{ownerMutex_};
+        return owner_->processingThread_.pushPromiseTask(
+            [this, path = std::move(path)]() -> std::expected<void, Error> {
+                auto result = sftp_unlink(session_, path.generic_string().c_str());
+                if (result != SSH_OK)
+                {
+                    return std::unexpected(Error{
+                        .message = ssh_get_error(session_),
+                        .sshError = result,
+                        .sftpError = sftp_get_error(session_),
+                    });
+                }
+                return {};
+            });
+    }
 }
