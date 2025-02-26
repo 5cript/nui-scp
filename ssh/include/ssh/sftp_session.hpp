@@ -49,6 +49,10 @@ namespace SecureShell
         std::future<std::expected<void, Error>> createDirectory(
             std::filesystem::path const& path,
             std::filesystem::perms permissions = std::filesystem::perms::owner_all);
+        std::future<std::expected<void, Error>> createFile(
+            std::filesystem::path const& path,
+            std::filesystem::perms permissions = std::filesystem::perms::owner_read |
+                std::filesystem::perms::owner_write);
 
       private:
         std::mutex ownerMutex_;

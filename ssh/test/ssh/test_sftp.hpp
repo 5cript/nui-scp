@@ -95,4 +95,25 @@ namespace SecureShell::Test
         });
         EXPECT_NE(it, listResult.value().end());
     }
+
+    TEST_F(SftpTests, CanCreateFile)
+    {
+        CREATE_SERVER_AND_JOINER(Sftp);
+        auto [_, sftp] = createSftpSession(serverStartResult->port);
+
+        auto fut = sftp->createFile("/home/test/newfile.txt");
+        ASSERT_EQ(fut.wait_for(1s), std::future_status::ready);
+        auto result = fut.get();
+        ASSERT_TRUE(result.has_value());
+
+        auto listFut = sftp->listDirectory("/home/test");
+        ASSERT_EQ(listFut.wait_for(1s), std::future_status::ready);
+        auto listResult = listFut.get();
+        ASSERT_TRUE(listResult.has_value());
+
+        auto it = std::find_if(listResult.value().begin(), listResult.value().end(), [](const auto& entry) {
+            return entry.path == "newfile.txt";
+        });
+        EXPECT_NE(it, listResult.value().end());
+    }
 }

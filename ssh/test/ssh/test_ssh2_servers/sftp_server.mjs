@@ -191,10 +191,6 @@ const server = new Server({
 
                     const result = fakeFilesystem.find(filename);
                     if (result === undefined) {
-                        if (flags & OPEN_MODE.READ) {
-                            logMessage('File not found');
-                            return sftpStream.status(reqid, STATUS_CODE.NO_SUCH_FILE);
-                        }
                         const anyWriteFlag = flags & (OPEN_MODE.WRITE | OPEN_MODE.TRUNC | OPEN_MODE.CREAT | OPEN_MODE.APPEND);
                         if (anyWriteFlag) {
                             const parentPath = pathUtil.dirname(filename);
@@ -206,6 +202,10 @@ const server = new Server({
 
                             const name = pathUtil.basename(filename);
                             parent.insert(file(name, '', attrs));
+                        }
+                        else if (flags & OPEN_MODE.READ) {
+                            logMessage('File not found');
+                            return sftpStream.status(reqid, STATUS_CODE.NO_SUCH_FILE);
                         }
                     } else {
                         if (result.type !== 'file') {

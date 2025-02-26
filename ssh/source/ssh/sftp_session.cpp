@@ -1,6 +1,8 @@
 #include <ssh/sftp_session.hpp>
 #include <ssh/session.hpp>
 
+#include <fcntl.h>
+
 namespace SecureShell
 {
     SftpSession::SftpSession(Session* owner, sftp_session session)
@@ -127,6 +129,38 @@ namespace SecureShell
                         .sftpError = sftp_get_error(session_),
                     });
                 }
+                return {};
+            });
+    }
+
+    std::future<std::expected<void, SftpSession::Error>>
+    SftpSession::createFile(std::filesystem::path const& path, std::filesystem::perms permissions)
+    {
+        std::scoped_lock lock{ownerMutex_};
+        return owner_->processingThread_.pushPromiseTask(
+            [this, path = std::move(path), permissions]() -> std::expected<void, SftpSession::Error> {
+                std::unique_ptr<sftp_file_struct, std::function<void(sftp_file_struct*)>> file{
+                    sftp_open(
+                        session_,
+                        path.generic_string().c_str(),
+                        O_CREAT,
+                        static_cast<unsigned long>(permissions & std::filesystem::perms::mask)),
+                    [&](sftp_file_struct* file) {
+                        if (file != nullptr)
+                        {
+                            sftp_close(file);
+                        }
+                    }};
+
+                if (file == nullptr)
+                {
+                    return std::unexpected(SftpSession::Error{
+                        .message = ssh_get_error(session_),
+                        .sshError = ssh_get_error_code(session_),
+                        .sftpError = sftp_get_error(session_),
+                    });
+                }
+
                 return {};
             });
     }
