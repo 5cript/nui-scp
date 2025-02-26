@@ -2,7 +2,7 @@
 
 #include <libssh/libsshpp.hpp>
 #include <libssh/sftp.h>
-#include <ssh/processing_thread.hpp>
+#include <ssh/async/processing_thread.hpp>
 #include <shared_data/directory_entry.hpp>
 
 #include <memory>
@@ -46,7 +46,9 @@ namespace SecureShell
         };
 
         std::future<std::expected<std::vector<DirectoryEntry>, Error>> listDirectory(std::filesystem::path const& path);
-        std::future<std::optional<Error>> createDirectory(std::filesystem::path const& path);
+        std::future<std::expected<void, Error>> createDirectory(
+            std::filesystem::path const& path,
+            std::filesystem::perms permissions = std::filesystem::perms::owner_all);
 
       private:
         std::mutex ownerMutex_;

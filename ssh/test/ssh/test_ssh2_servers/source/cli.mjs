@@ -9,6 +9,8 @@ class CommandLineInterface {
 
         this.eventMap = new Map();
 
+        logMessage('Command line interface started');
+
         this.rl.on('line', (input) => {
             logMessage(`Command from stdin: ${input}`);
             if (input.length === 0)

@@ -1,6 +1,6 @@
 #pragma once
 
-#include <ssh/processing_thread.hpp>
+#include <ssh/async/processing_thread.hpp>
 #include <persistence/state/terminal_engine.hpp>
 #include <ssh/channel.hpp>
 #include <ssh/sftp_session.hpp>
@@ -79,6 +79,9 @@ namespace SecureShell
       private:
         void channelRemoveItself(Channel* channel);
         void removeAllChannels();
+
+        void sftpSessionRemoveItself(SftpSession* sftpSession);
+        void removeAllSftpSessions();
 
         void removalTask();
 

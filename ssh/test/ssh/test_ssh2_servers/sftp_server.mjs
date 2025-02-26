@@ -25,16 +25,19 @@ const { OPEN_MODE, STATUS_CODE } = ssh2.utils.sftp;
 const args = minimist(process.argv.slice(2), {
     alias: {
         p: 'port',
-        v: 'verbose'
+        v: 'verbose',
+        l: 'log-file'
     },
     default: {
         port: 0,
-        verbose: false
+        verbose: false,
+        'log-file': undefined
     }
 });
 
 const port = args.port;
-const logMessage = makeLogger(args.verbose);
+const logMessage = makeLogger(args.verbose, args['log-file']);
+logMessage('Starting SFTP server');
 
 const allowedUser = Buffer.from('test');
 const allowedPassword = Buffer.from('test');
@@ -151,11 +154,22 @@ const server = new Server({
 
         switch (ctx.method) {
             case 'password':
-                if (!checkValue(Buffer.from(ctx.password), allowedPassword))
-                    return ctx.reject();
-                break;
+                {
+                    if (!checkValue(Buffer.from(ctx.password), allowedPassword)) {
+                        logMessage('Rejecting password');
+                        return ctx.reject();
+                    }
+                    else {
+                        logMessage('Accepting password');
+                        ctx.accept();
+                    }
+                    break;
+                }
             default:
-                return ctx.accept();
+                {
+                    logMessage('Accepting any other method');
+                    return ctx.accept();
+                }
         }
     });
 
@@ -636,5 +650,6 @@ server.on('error', (error) => {
 const cli = new CommandLineInterface(logMessage);
 
 cli.on('exit', () => {
+    logMessage('').end();
     server.close();
 });

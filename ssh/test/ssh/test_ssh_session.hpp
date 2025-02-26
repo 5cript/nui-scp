@@ -16,7 +16,19 @@ using namespace std::string_literals;
 namespace SecureShell::Test
 {
     class SshSessionTests : public CommonFixture
-    {};
+    {
+        void TearDown() override
+        {
+            if (std::filesystem::exists(programDirectory / "temp" / "log.txt"))
+            {
+                std::filesystem::rename(
+                    programDirectory / "temp" / "log.txt",
+                    programDirectory / "temp" /
+                        ("log_"s + ::testing::UnitTest::GetInstance()->current_test_info()->test_case_name() + "_"s +
+                         ::testing::UnitTest::GetInstance()->current_test_info()->name() + ".txt"));
+            }
+        }
+    };
 
     TEST_F(SshSessionTests, CanCreateSshSession)
     {

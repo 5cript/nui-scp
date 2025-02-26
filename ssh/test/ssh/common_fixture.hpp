@@ -21,6 +21,12 @@ static const char sshServerBashEmulator[] = {
     '\0',
 };
 
+static const char sftpServer[] = {
+#embed "./test_ssh2_servers/dist/sftp.mjs"
+    ,
+    '\0',
+};
+
 static const char privateKey[] = {
 #embed "./test_ssh2_servers/key.private"
     ,
@@ -49,12 +55,12 @@ namespace SecureShell::Test
             privateKeyFile.write(privateKey, std::strlen(privateKey));
         }
 
-        std::pair<std::shared_ptr<NodeProcessResult>, std::thread> createSshServer()
+        std::pair<std::shared_ptr<NodeProcessResult>, std::thread> createServer(std::string const& source)
         {
             std::shared_ptr<NodeProcessResult> result{};
             std::promise<void> processResultAvailable{};
-            std::thread processThread{[this, &result, &processResultAvailable]() mutable {
-                result = nodeProcess(pool_.get_executor(), isolateDirectory_, std::string{sshServerBashEmulator});
+            std::thread processThread{[this, &result, &processResultAvailable, source]() mutable {
+                result = nodeProcess(pool_.get_executor(), isolateDirectory_, source);
                 auto resultShareCopy = result;
                 processResultAvailable.set_value();
                 if (resultShareCopy->mainModule)
@@ -75,6 +81,16 @@ namespace SecureShell::Test
             return {result, std::move(processThread)};
         }
 
+        auto createSshServer()
+        {
+            return createServer(sshServerBashEmulator);
+        }
+
+        auto createSftpServer()
+        {
+            return createServer(sftpServer);
+        }
+
         auto
         getSessionOptions(unsigned short port, std::string const& user = "test", std::string const& host = "127.0.0.1")
         {
@@ -92,6 +108,7 @@ namespace SecureShell::Test
             return options;
         }
 
+      public:
         auto makePasswordTestSession(unsigned short port)
         {
             return makeSession(
@@ -106,6 +123,7 @@ namespace SecureShell::Test
                 nullptr);
         }
 
+      protected:
         void channelStartReading(
             std::shared_ptr<SecureShell::Channel> const& channel,
             std::function<void(std::string const&)> onStdout = {},
@@ -156,3 +174,12 @@ namespace SecureShell::Test
         });
     };
 }
+
+#define CREATE_SERVER_AND_JOINER(name) \
+    auto [serverStartResult, processThread] = create##name##Server(); \
+    ASSERT_TRUE(serverStartResult); \
+    auto joiner = Nui::ScopeExit{[&]() noexcept { \
+        serverStartResult->command("exit"); \
+        if (processThread.joinable()) \
+            processThread.join(); \
+    }};

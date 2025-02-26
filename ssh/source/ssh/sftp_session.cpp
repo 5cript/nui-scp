@@ -1,4 +1,5 @@
 #include <ssh/sftp_session.hpp>
+#include <ssh/session.hpp>
 
 namespace SecureShell
 {
@@ -8,16 +9,19 @@ namespace SecureShell
         , session_{session}
     {}
     SftpSession::~SftpSession()
-    {}
-
+    {
+        /* close makes no sense, since this lives in a shared_ptr and will only ever end here when it was already
+         * removed */
+    }
     void SftpSession::close()
     {
-        //     if (session_ != nullptr)
-        //     sftp_free(session_);
-        // session_ = nullptr;
-        throw std::runtime_error("Not implemented");
+        std::scoped_lock lock{ownerMutex_};
+        if (owner_)
+        {
+            owner_->sftpSessionRemoveItself(this);
+            owner_ = nullptr;
+        }
     }
-
     SftpSession::DirectoryEntry SftpSession::DirectoryEntry::fromSftpAttributes(sftp_attributes attributes)
     {
         DirectoryEntry entry{
@@ -29,8 +33,8 @@ namespace SecureShell
                 .size = attributes->size,
                 .uid = attributes->uid,
                 .gid = attributes->gid,
-                .owner = attributes->owner,
-                .group = attributes->group,
+                .owner = attributes->owner ? std::string{attributes->owner} : std::string{},
+                .group = attributes->group ? std::string{attributes->group} : std::string{},
                 .permissions = static_cast<std::filesystem::perms>(attributes->permissions),
                 .atime = attributes->atime,
                 .atimeNsec = attributes->atime_nseconds,
@@ -38,11 +42,9 @@ namespace SecureShell
                 .createTimeNsec = attributes->createtime_nseconds,
                 .mtime = attributes->mtime,
                 .mtimeNsec = attributes->mtime_nseconds,
-                .acl =
-                    std::string{
-                        ssh_string_get_char(attributes->acl),
-                        ssh_string_len(attributes->acl),
-                    },
+                .acl = attributes->acl
+                    ? std::string{ssh_string_get_char(attributes->acl), ssh_string_len(attributes->acl)}
+                    : std::string{},
             },
         };
 
@@ -52,70 +54,80 @@ namespace SecureShell
     std::future<std::expected<std::vector<SftpSession::DirectoryEntry>, SftpSession::Error>>
     SftpSession::listDirectory(std::filesystem::path const& path)
     {
-        // int closeResult = 0;
-        // std::vector<DirectoryEntry> entries{};
+        std::scoped_lock lock{ownerMutex_};
+        return owner_->processingThread_.pushPromiseTask(
+            [this,
+             path = std::move(path)]() -> std::expected<std::vector<SftpSession::DirectoryEntry>, SftpSession::Error> {
+                int closeResult = 0;
+                std::vector<DirectoryEntry> entries{};
 
-        // {
-        //     std::unique_ptr<sftp_dir_struct, std::function<void(sftp_dir_struct*)>> dir{
-        //         sftp_opendir(session_, path.generic_string().c_str()), [&](sftp_dir_struct* dir) {
-        //             if (dir != nullptr)
-        //             {
-        //                 closeResult = sftp_closedir(dir);
-        //             }
-        //         }};
-        //     if (dir == nullptr)
-        //     {
-        //         return std::unexpected(SftpSession::Error{
-        //             .message = ssh_get_error(session_),
-        //             .sshError = ssh_get_error_code(session_),
-        //             .sftpError = sftp_get_error(session_),
-        //         });
-        //     }
+                {
+                    std::unique_ptr<sftp_dir_struct, std::function<void(sftp_dir_struct*)>> dir{
+                        sftp_opendir(session_, path.generic_string().c_str()), [&](sftp_dir_struct* dir) {
+                            if (dir != nullptr)
+                            {
+                                closeResult = sftp_closedir(dir);
+                            }
+                        }};
+                    if (dir == nullptr)
+                    {
+                        return std::unexpected(SftpSession::Error{
+                            .message = ssh_get_error(session_),
+                            .sshError = ssh_get_error_code(session_),
+                            .sftpError = sftp_get_error(session_),
+                        });
+                    }
 
-        //     {
-        //         std::unique_ptr<sftp_attributes_struct, decltype(&sftp_attributes_free)> entry{
-        //             sftp_readdir(session_, dir.get()), sftp_attributes_free};
+                    {
+                        std::unique_ptr<sftp_attributes_struct, decltype(&sftp_attributes_free)> entry{
+                            sftp_readdir(session_, dir.get()), sftp_attributes_free};
 
-        //         for (; entry != nullptr; entry.reset(sftp_readdir(session_, dir.get())))
-        //         {
-        //             entries.push_back(DirectoryEntry::fromSftpAttributes(entry.get()));
-        //         }
-        //     }
+                        for (; entry != nullptr; entry.reset(sftp_readdir(session_, dir.get())))
+                        {
+                            entries.push_back(DirectoryEntry::fromSftpAttributes(entry.get()));
+                        }
+                    }
 
-        //     if (!sftp_dir_eof(dir.get()))
-        //     {
-        //         return std::unexpected(SftpSession::Error{
-        //             .message = ssh_get_error(session_),
-        //             .sshError = ssh_get_error_code(session_),
-        //             .sftpError = sftp_get_error(session_),
-        //         });
-        //     }
-        // }
-        // if (closeResult != SSH_OK)
-        // {
-        //     return std::unexpected(SftpSession::Error{
-        //         .message = ssh_get_error(session_),
-        //         .sshError = closeResult,
-        //         .sftpError = sftp_get_error(session_),
-        //     });
-        // }
+                    if (!sftp_dir_eof(dir.get()))
+                    {
+                        return std::unexpected(SftpSession::Error{
+                            .message = ssh_get_error(session_),
+                            .sshError = ssh_get_error_code(session_),
+                            .sftpError = sftp_get_error(session_),
+                        });
+                    }
+                }
+                if (closeResult != SSH_OK)
+                {
+                    return std::unexpected(SftpSession::Error{
+                        .message = ssh_get_error(session_),
+                        .sshError = closeResult,
+                        .sftpError = sftp_get_error(session_),
+                    });
+                }
 
-        // return entries;
-
-        throw std::runtime_error("Not implemented");
+                return entries;
+            });
     }
-    std::future<std::optional<SftpSession::Error>> SftpSession::createDirectory(std::filesystem::path const& path)
+    std::future<std::expected<void, SftpSession::Error>>
+    SftpSession::createDirectory(std::filesystem::path const& path, std::filesystem::perms permissions)
     {
-        // auto result = sftp_mkdir(session_, path.generic_string().c_str(), S_IRWXU);
-        // if (result != SSH_OK)
-        // {
-        //     return SftpSession::Error{
-        //         .message = ssh_get_error(session_),
-        //         .sshError = result,
-        //         .sftpError = sftp_get_error(session_),
-        //     };
-        // }
-        // return std::nullopt;
-        throw std::runtime_error("Not implemented");
+        std::scoped_lock lock{ownerMutex_};
+        return owner_->processingThread_.pushPromiseTask(
+            [this, path = std::move(path), permissions]() -> std::expected<void, SftpSession::Error> {
+                auto result = sftp_mkdir(
+                    session_,
+                    path.generic_string().c_str(),
+                    static_cast<unsigned long>(permissions & std::filesystem::perms::mask));
+                if (result != SSH_OK)
+                {
+                    return std::unexpected(SftpSession::Error{
+                        .message = ssh_get_error(session_),
+                        .sshError = result,
+                        .sftpError = sftp_get_error(session_),
+                    });
+                }
+                return {};
+            });
     }
 }

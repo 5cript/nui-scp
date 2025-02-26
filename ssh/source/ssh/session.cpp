@@ -30,6 +30,7 @@ namespace SecureShell
     void Session::shutdown()
     {
         removeAllChannels();
+        removeAllSftpSessions();
         processingThread_.pushTask([this]() {
             session_.disconnect();
         });
@@ -87,6 +88,29 @@ namespace SecureShell
             }
         }
         channelsToRemove_.clear();
+    }
+
+    void Session::sftpSessionRemoveItself(SftpSession* sftpSession)
+    {
+        if (sftpSession)
+        {
+            processingThread_.pushTask([this, sftpSession]() {
+                auto it = std::find_if(sftpSessions_.begin(), sftpSessions_.end(), [sftpSession](const auto& s) {
+                    return s.get() == sftpSession;
+                });
+                if (it != sftpSessions_.end())
+                {
+                    sftpSessions_.erase(it);
+                }
+            });
+        }
+    }
+
+    void Session::removeAllSftpSessions()
+    {
+        processingThread_.pushTask([this]() {
+            sftpSessions_.clear();
+        });
     }
 
     std::future<std::expected<std::weak_ptr<Channel>, int>> Session::createPtyChannel(PtyCreationOptions options)

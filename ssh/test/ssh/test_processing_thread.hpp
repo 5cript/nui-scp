@@ -1,7 +1,7 @@
 #pragma once
 
 #include "utility/awaiter.hpp"
-#include <ssh/processing_thread.hpp>
+#include <ssh/async/processing_thread.hpp>
 
 #include <gtest/gtest.h>
 

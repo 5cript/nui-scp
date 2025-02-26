@@ -1,7 +1,7 @@
 add_library(
     secure-shell
     STATIC
-        processing_thread.cpp
+        async/processing_thread.cpp
         session.cpp
         channel.cpp
         sftp_session.cpp

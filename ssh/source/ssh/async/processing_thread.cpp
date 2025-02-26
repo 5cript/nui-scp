@@ -1,4 +1,4 @@
-#include <ssh/processing_thread.hpp>
+#include <ssh/async/processing_thread.hpp>
 
 #include <stdexcept>
 #include <future>
