@@ -165,12 +165,30 @@ namespace SecureShell
             });
     }
 
-    std::future<std::expected<void, SftpSession::Error>> SftpSession::remove(std::filesystem::path const& path)
+    std::future<std::expected<void, SftpSession::Error>> SftpSession::removeFile(std::filesystem::path const& path)
     {
         std::scoped_lock lock{ownerMutex_};
         return owner_->processingThread_.pushPromiseTask(
             [this, path = std::move(path)]() -> std::expected<void, Error> {
                 auto result = sftp_unlink(session_, path.generic_string().c_str());
+                if (result != SSH_OK)
+                {
+                    return std::unexpected(Error{
+                        .message = ssh_get_error(session_),
+                        .sshError = result,
+                        .sftpError = sftp_get_error(session_),
+                    });
+                }
+                return {};
+            });
+    }
+
+    std::future<std::expected<void, SftpSession::Error>> SftpSession::removeDirectory(std::filesystem::path const& path)
+    {
+        std::scoped_lock lock{ownerMutex_};
+        return owner_->processingThread_.pushPromiseTask(
+            [this, path = std::move(path)]() -> std::expected<void, Error> {
+                auto result = sftp_rmdir(session_, path.generic_string().c_str());
                 if (result != SSH_OK)
                 {
                     return std::unexpected(Error{
@@ -201,6 +219,83 @@ namespace SecureShell
                 }
 
                 return DirectoryEntry::fromSftpAttributes(attributes.get());
+            });
+    }
+
+    std::future<std::expected<void, SftpSession::Error>>
+    SftpSession::stat(std::filesystem::path const& path, sftp_attributes attributes)
+    {
+        std::scoped_lock lock{ownerMutex_};
+        return owner_->processingThread_.pushPromiseTask(
+            [this, path = std::move(path), attributes]() -> std::expected<void, Error> {
+                auto result = sftp_setstat(session_, path.generic_string().c_str(), attributes);
+                if (result != SSH_OK)
+                {
+                    return std::unexpected(Error{
+                        .message = ssh_get_error(session_),
+                        .sshError = result,
+                        .sftpError = sftp_get_error(session_),
+                    });
+                }
+                return {};
+            });
+    }
+
+    std::future<std::expected<void, SftpSession::Error>>
+    SftpSession::rename(std::filesystem::path const& source, std::filesystem::path const& destination)
+    {
+        std::scoped_lock lock{ownerMutex_};
+        return owner_->processingThread_.pushPromiseTask(
+            [this, source = std::move(source), destination = std::move(destination)]() -> std::expected<void, Error> {
+                auto result =
+                    sftp_rename(session_, source.generic_string().c_str(), destination.generic_string().c_str());
+                if (result != SSH_OK)
+                {
+                    return std::unexpected(Error{
+                        .message = ssh_get_error(session_),
+                        .sshError = result,
+                        .sftpError = sftp_get_error(session_),
+                    });
+                }
+                return {};
+            });
+    }
+
+    std::future<std::expected<void, SftpSession::Error>>
+    SftpSession::chown(std::filesystem::path const& path, uid_t owner, gid_t group)
+    {
+        std::scoped_lock lock{ownerMutex_};
+        return owner_->processingThread_.pushPromiseTask(
+            [this, path = std::move(path), owner, group]() -> std::expected<void, Error> {
+                auto result = sftp_chown(session_, path.generic_string().c_str(), owner, group);
+                if (result != SSH_OK)
+                {
+                    return std::unexpected(Error{
+                        .message = ssh_get_error(session_),
+                        .sshError = result,
+                        .sftpError = sftp_get_error(session_),
+                    });
+                }
+                return {};
+            });
+    }
+
+    std::future<std::expected<void, SftpSession::Error>>
+    SftpSession::chmod(std::filesystem::path const& path, std::filesystem::perms perms)
+    {
+        std::scoped_lock lock{ownerMutex_};
+        return owner_->processingThread_.pushPromiseTask(
+            [this, path = std::move(path), perms]() -> std::expected<void, Error> {
+                auto result = sftp_chmod(session_, path.generic_string().c_str(), static_cast<mode_t>(perms));
+                if (result != SSH_OK)
+                {
+                    return std::unexpected(Error{
+                        .message = ssh_get_error(session_),
+                        .sshError = result,
+                        .sftpError = sftp_get_error(session_),
+                    });
+                }
+                return {};
             });
     }
 }
