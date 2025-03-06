@@ -14,6 +14,7 @@ class SftpFileEngine : public FileEngine
         std::function<void(std::optional<std::vector<SharedData::DirectoryEntry>> const&)> onComplete) override;
     void dispose() override;
     void createDirectory(std::filesystem::path const& path, std::function<void(bool)> onComplete) override;
+    void createFile(std::filesystem::path const& path, std::function<void(bool)> onComplete) override;
 
     std::optional<Ids::ChannelId> release();
 

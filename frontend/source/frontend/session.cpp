@@ -242,6 +242,34 @@ void Session::setupFileGrid()
                     });
                 });
         }
+        else if (type == NuiFileExplorer::FileGrid::Item::Type::Regular)
+        {
+            impl_->newItemAskDialog->open(
+                "New file",
+                "Enter the name of the new file",
+                "Create a new file",
+                false,
+                [this](std::optional<std::string> const& name) {
+                    if (!name)
+                        return;
+
+                    Log::info("Creating new file: {}", *name);
+                    if (name->find('/') != std::string::npos)
+                    {
+                        Log::error("Invalid file name (cannot contain slashes): {}", *name);
+                        return;
+                    }
+                    impl_->fileEngine->createFile(impl_->currentPath / *name, [this](bool success) {
+                        if (!success)
+                        {
+                            Log::error("Failed to create file");
+                            return;
+                        }
+                        // Refresh list from server:
+                        navigateTo(impl_->currentPath);
+                    });
+                });
+        }
         else
         {
             // TODO: create file

@@ -105,7 +105,7 @@ void SftpFileEngine::createDirectory(std::filesystem::path const& path, std::fun
     lazyOpen([this, path, onComplete = std::move(onComplete)](auto const& channelId) {
         if (!channelId)
         {
-            Log::error("Cannot create directory, no ssh session");
+            Log::error("Cannot create directory, no channel");
             return;
         }
 
@@ -118,6 +118,36 @@ void SftpFileEngine::createDirectory(std::filesystem::path const& path, std::fun
                 if (val.hasOwnProperty("error"))
                 {
                     Log::error("(Frontend) Failed to create directory: {}", val["error"].as<std::string>());
+                    onComplete(false);
+                    return;
+                }
+
+                onComplete(true);
+            },
+            impl_->engine->sshSessionId().value(),
+            channelId.value().value(),
+            path.generic_string());
+    });
+}
+
+void SftpFileEngine::createFile(std::filesystem::path const& path, std::function<void(bool)> onComplete)
+{
+    lazyOpen([this, path, onComplete = std::move(onComplete)](auto const& channelId) {
+        if (!channelId)
+        {
+            Log::error("Cannot create file, no channel");
+            return;
+        }
+
+        Log::info("Creating file: {}", path.generic_string());
+        Nui::RpcClient::callWithBackChannel(
+            "SshSessionManager::sftp::createFile",
+            [onComplete = std::move(onComplete)](Nui::val val) {
+                Nui::Console::log(val);
+
+                if (val.hasOwnProperty("error"))
+                {
+                    Log::error("(Frontend) Failed to create file: {}", val["error"].as<std::string>());
                     onComplete(false);
                     return;
                 }

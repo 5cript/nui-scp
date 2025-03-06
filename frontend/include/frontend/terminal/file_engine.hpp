@@ -21,6 +21,7 @@ class FileEngine
         std::function<void(std::optional<std::vector<SharedData::DirectoryEntry>> const&)> onComplete) = 0;
 
     virtual void createDirectory(std::filesystem::path const& path, std::function<void(bool)> onComplete) = 0;
+    virtual void createFile(std::filesystem::path const& path, std::function<void(bool)> onComplete) = 0;
 
     virtual void dispose() = 0;
 };

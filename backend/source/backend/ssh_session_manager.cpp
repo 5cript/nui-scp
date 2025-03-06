@@ -562,15 +562,15 @@ void SshSessionManager::registerRpcSftpCreateDirectory(Nui::Window&, Nui::RpcHub
                 auto fut = locked->createDirectory(path);
                 if (fut.wait_for(futureTimeout) != std::future_status::ready)
                 {
-                    Log::error("Failed to list directory: timeout");
-                    hub->callRemote(responseId, nlohmann::json{{"error", "Failed to list directory: timeout"}});
+                    Log::error("Failed to create directory: timeout");
+                    hub->callRemote(responseId, nlohmann::json{{"error", "Failed to create directory: timeout"}});
                     return;
                 }
 
                 const auto result = fut.get();
                 if (!result.has_value())
                 {
-                    Log::error("Failed to list directory: {}", result.error().message);
+                    Log::error("Failed to create directory: {}", result.error().message);
                     hub->callRemote(responseId, nlohmann::json{{"error", result.error().message}});
                     return;
                 }
@@ -579,8 +579,72 @@ void SshSessionManager::registerRpcSftpCreateDirectory(Nui::Window&, Nui::RpcHub
             }
             catch (std::exception const& e)
             {
-                Log::error("Error listing directory: {}", e.what());
+                Log::error("Error creating directory: {}", e.what());
                 hub->callRemote(responseId, nlohmann::json{{"error", e.what()}});
+                return;
+            }
+        });
+}
+
+void SshSessionManager::registerRpcSftpCreateFile(Nui::Window&, Nui::RpcHub& hub)
+{
+    hub.registerFunction(
+        "SshSessionManager::sftp::createFile",
+        [this, hub = &hub](
+            std::string const& responseId,
+            std::string const& sessionIdString,
+            std::string const& channelIdString,
+            std::string const& path) {
+            try
+            {
+                const auto sessionId = Ids::makeSessionId(sessionIdString);
+                const auto channelId = Ids::makeChannelId(channelIdString);
+
+                if (sessions_.find(sessionId) == sessions_.end())
+                {
+                    Log::error("No session found with id: {}", sessionId.value());
+                    hub->callRemote(responseId, nlohmann::json{{"error", "No session found with id"}});
+                    return;
+                }
+
+                auto channel = sftpChannels_.find(channelId);
+                if (channel == sftpChannels_.end())
+                {
+                    Log::error("No sftp channel found with id: {}", channelId.value());
+                    hub->callRemote(responseId, nlohmann::json{{"error", "No sftp channel found with id"}});
+                    return;
+                }
+
+                auto locked = channel->second.lock();
+                if (!locked)
+                {
+                    Log::error("Failed to lock sftp channel with id: {}", channelId.value());
+                    hub->callRemote(responseId, nlohmann::json{{"error", "Failed to lock sftp channel"}});
+                    return;
+                }
+
+                auto fut = locked->createFile(path);
+                if (fut.wait_for(futureTimeout) != std::future_status::ready)
+                {
+                    Log::error("Failed to create file: timeout");
+                    hub->callRemote(responseId, nlohmann::json{{"error", "Failed to create file: timeout"}});
+                    return;
+                }
+
+                const auto result = fut.get();
+                if (!result.has_value())
+                {
+                    Log::error("Failed to create file: {}", result.error().message);
+                    hub->callRemote(responseId, nlohmann::json{{"error", result.error().message}});
+                    return;
+                }
+
+                hub->callRemote(responseId, nlohmann::json{{"success", true}});
+            }
+            catch (std::exception const& exc)
+            {
+                Log::error("Error creating file: {}", exc.what());
+                hub->callRemote(responseId, nlohmann::json{{"error", exc.what()}});
                 return;
             }
         });
@@ -595,7 +659,10 @@ void SshSessionManager::registerRpc(Nui::Window& wnd, Nui::RpcHub& hub)
     registerRpcEndSession(wnd, hub);
     registerRpcChannelWrite(wnd, hub);
     registerRpcChannelPtyResize(wnd, hub);
+
     registerRpcSftpListDirectory(wnd, hub);
+    registerRpcSftpCreateDirectory(wnd, hub);
+    registerRpcSftpCreateFile(wnd, hub);
 }
 
 void SshSessionManager::addPasswordProvider(int priority, PasswordProvider* provider)

@@ -52,6 +52,7 @@ class SshSessionManager
     // Sftp:
     void registerRpcSftpListDirectory(Nui::Window&, Nui::RpcHub& hub);
     void registerRpcSftpCreateDirectory(Nui::Window&, Nui::RpcHub& hub);
+    void registerRpcSftpCreateFile(Nui::Window&, Nui::RpcHub& hub);
 
   private:
     std::mutex passwordProvidersMutex_{};
