@@ -9,7 +9,7 @@
 class TerminalEngine
 {
   public:
-    virtual void open(std::function<void(bool, std::string const&)> onOpen, bool fileMode = false) = 0;
+    virtual void open(std::function<void(bool, std::string const&)> onOpen) = 0;
     virtual std::string engineName() const = 0;
     virtual void dispose(std::function<void()> onDisposeComplete) = 0;
     virtual ~TerminalEngine() = default;
@@ -22,6 +22,7 @@ class MultiChannelTerminalEngine : public TerminalEngine
         std::function<void(std::string const&)> handler,
         std::function<void(std::string const&)> errorHandler,
         std::function<void(std::optional<Ids::ChannelId> const&)> onCreated) = 0;
+    virtual void createSftpChannel(std::function<void(std::optional<Ids::ChannelId> const&)> onCreated) = 0;
     virtual void closeChannel(Ids::ChannelId const& channelId, std::function<void()> onClose = []() {}) = 0;
     virtual ChannelInterface* channel(Ids::ChannelId const& channelId) = 0;
 };

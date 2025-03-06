@@ -6,67 +6,69 @@
 
 struct SftpFileEngine::Implementation
 {
-    SshTerminalEngine underlyingEngine;
     bool wasDisposed = false;
+    SshTerminalEngine* engine;
+    std::optional<Ids::ChannelId> sftpChannelId{std::nullopt};
 
-    Implementation(SshTerminalEngine::Settings settings)
-        : underlyingEngine{std::move(settings)}
+    Implementation(SshTerminalEngine* engine)
+        : engine{engine}
     {}
 };
 
-SftpFileEngine::SftpFileEngine(SshTerminalEngine::Settings settings)
-    : impl_{std::make_unique<Implementation>(std::move(settings))}
+SftpFileEngine::SftpFileEngine(SshTerminalEngine* engine)
+    : impl_{std::make_unique<Implementation>(engine)}
 {}
 SftpFileEngine::~SftpFileEngine()
 {
-    if (!moveDetector_.wasMoved() && !impl_->wasDisposed)
+    if (!moveDetector_.wasMoved())
     {
         dispose();
     }
 }
 
+std::optional<Ids::ChannelId> SftpFileEngine::release()
+{
+    return std::move(impl_->sftpChannelId);
+}
+
 void SftpFileEngine::dispose()
 {
-    impl_->wasDisposed = true;
-    if (!impl_->underlyingEngine.sshSessionId().isValid())
+    if (!impl_->wasDisposed)
     {
-        return;
+        if (impl_->sftpChannelId)
+        {
+            Log::info("Closing sftp channel");
+            impl_->engine->closeChannel(impl_->sftpChannelId.value(), []() {});
+        }
     }
-    impl_->underlyingEngine.dispose([]() {});
+    impl_->wasDisposed = true;
 }
 
 ROAR_PIMPL_SPECIAL_FUNCTIONS_IMPL_NO_DTOR(SftpFileEngine);
 
-void SftpFileEngine::lazyOpen(std::function<void(std::optional<Ids::SessionId> const&)> const& onOpen)
+void SftpFileEngine::lazyOpen(std::function<void(std::optional<Ids::ChannelId> const&)> const& onOpen)
 {
-    if (impl_->underlyingEngine.sshSessionId().isValid())
+    if (impl_->sftpChannelId)
     {
-        onOpen(impl_->underlyingEngine.sshSessionId());
+        onOpen(impl_->sftpChannelId);
         return;
     }
 
-    impl_->underlyingEngine.open(
-        [this, onOpen](bool success, std::string const& error) {
-            if (!success)
-            {
-                Log::error("Failed to open SFTP: {}", error);
-                onOpen(std::nullopt);
-                return;
-            }
-
-            onOpen(impl_->underlyingEngine.sshSessionId());
-        },
-        true);
+    Log::info("Creating sftp channel");
+    impl_->engine->createSftpChannel([this, onOpen](auto const& id) {
+        impl_->sftpChannelId = id;
+        onOpen(id);
+    });
 }
 
 void SftpFileEngine::listDirectory(
     std::filesystem::path const& path,
     std::function<void(std::optional<std::vector<SharedData::DirectoryEntry>> const&)> onComplete)
 {
-    lazyOpen([path, onComplete = std::move(onComplete)](auto const& sshSessionId) {
-        if (!sshSessionId)
+    lazyOpen([this, path, onComplete = std::move(onComplete)](auto const& channelId) {
+        if (!channelId)
         {
-            Log::error("Cannot list directory, no ssh session");
+            Log::error("Cannot list directory, no sftp channel");
             return;
         }
 
@@ -92,15 +94,16 @@ void SftpFileEngine::listDirectory(
 
                 onComplete(nlohmann::json::parse(Nui::JSON::stringify(val))["entries"]);
             },
-            sshSessionId->value(),
+            impl_->engine->sshSessionId().value(),
+            channelId.value().value(),
             path.generic_string());
     });
 }
 
 void SftpFileEngine::createDirectory(std::filesystem::path const& path, std::function<void(bool)> onComplete)
 {
-    lazyOpen([path, onComplete = std::move(onComplete)](auto const& sshSessionId) {
-        if (!sshSessionId)
+    lazyOpen([this, path, onComplete = std::move(onComplete)](auto const& channelId) {
+        if (!channelId)
         {
             Log::error("Cannot create directory, no ssh session");
             return;
@@ -121,7 +124,8 @@ void SftpFileEngine::createDirectory(std::filesystem::path const& path, std::fun
 
                 onComplete(true);
             },
-            sshSessionId->value(),
+            impl_->engine->sshSessionId().value(),
+            channelId.value().value(),
             path.generic_string());
     });
 }

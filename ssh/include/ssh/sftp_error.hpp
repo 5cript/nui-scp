@@ -1,5 +1,7 @@
 #pragma once
 
+#include <fmt/format.h>
+
 #include <string>
 
 namespace SecureShell
@@ -21,5 +23,15 @@ namespace SecureShell
         int sshError = 0;
         int sftpError = 0;
         WrapperErrors wrapperError = WrapperErrors::None;
+
+        inline std::string toString() const
+        {
+            return fmt::format(
+                "SftpError: message: {}, sshError: {}, sftpError: {}, wrapperError: {}",
+                message,
+                sshError,
+                sftpError,
+                static_cast<int>(wrapperError));
+        }
     };
 }

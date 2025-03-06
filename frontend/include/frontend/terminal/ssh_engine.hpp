@@ -27,12 +27,13 @@ class SshTerminalEngine : public MultiChannelTerminalEngine
     SshTerminalEngine(Settings settings);
     ROAR_PIMPL_SPECIAL_FUNCTIONS(SshTerminalEngine);
 
-    void open(std::function<void(bool, std::string const&)> onOpen, bool fileMode = false) override;
+    void open(std::function<void(bool, std::string const&)> onOpen) override;
 
     void createChannel(
         std::function<void(std::string const&)> handler,
         std::function<void(std::string const&)> errorHandler,
         std::function<void(std::optional<Ids::ChannelId> const&)> onCreated) override;
+    void createSftpChannel(std::function<void(std::optional<Ids::ChannelId> const&)> onCreated) override;
 
     void closeChannel(Ids::ChannelId const& channelId, std::function<void()> onChannelClosed = []() {}) override;
     SshChannel* channel(Ids::ChannelId const& channelId) override;
@@ -50,6 +51,12 @@ class SshTerminalEngine : public MultiChannelTerminalEngine
     void disconnect(std::function<void()> onDisconnect, bool fromDtor = false);
     // Usually indicates that the entire session is closed
     void onChannelDeath();
+
+    void createChannelImpl(
+        std::function<void(std::string const&)> handler,
+        std::function<void(std::string const&)> errorHandler,
+        std::function<void(std::optional<Ids::ChannelId> const&)> onCreated,
+        bool fileMode);
 
   private:
     struct Implementation;

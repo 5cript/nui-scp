@@ -216,7 +216,6 @@ void Session::setupFileGrid()
         Log::info("New item requested: {}", static_cast<int>(type));
         if (type == NuiFileExplorer::FileGrid::Item::Type::Directory)
         {
-            // impl_->fileEngine->createDirectory(impl_->currentPath);
             impl_->newItemAskDialog->open(
                 "New directory",
                 "Enter the name of the new directory",
@@ -369,24 +368,21 @@ void Session::navigateTo(std::filesystem::path path)
 
 void Session::openSftp()
 {
-    Log::warn("SFTP is not implemented yet");
-    // if (impl_->terminal.value() && impl_->terminal.value()->engine().engineName() == "ssh")
-    // {
-    //     auto const& opts = std::get<Persistence::SshTerminalEngine>(impl_->engine.engine).sshSessionOptions.value();
-    //     if (opts.openSftpByDefault)
-    //     {
-    //         Log::info("Opening SFTP by default");
-    //         impl_->fileEngine = std::make_unique<SftpFileEngine>(SshTerminalEngine::Settings{
-    //             .engineOptions = std::get<Persistence::SshTerminalEngine>(impl_->engine.engine),
-    //             .onExit = std::bind(&Session::onFileExplorerConnectionClose, this),
-    //         });
-    //         navigateTo(opts.defaultDirectory.value_or("/"));
-    //     }
-    // }
-    // else
-    // {
-    //     Log::error("Cannot open SFTP for non-ssh terminal");
-    // }
+    if (impl_->terminal.value() && impl_->terminal.value()->engine().engineName() == "ssh")
+    {
+        auto const& opts = std::get<Persistence::SshTerminalEngine>(impl_->engine.engine).sshSessionOptions.value();
+        if (opts.openSftpByDefault)
+        {
+            Log::info("Opening SFTP by default");
+            impl_->fileEngine =
+                std::make_unique<SftpFileEngine>(static_cast<SshTerminalEngine*>(&impl_->terminal.value()->engine()));
+            navigateTo(opts.defaultDirectory.value_or("/"));
+        }
+    }
+    else
+    {
+        Log::info("Cannot open SFTP for non-ssh terminal");
+    }
 }
 
 void Session::fallbackToUserControlEngine()

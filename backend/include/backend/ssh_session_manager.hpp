@@ -21,6 +21,8 @@
 class SshSessionManager
 {
   public:
+    constexpr static auto futureTimeout = std::chrono::seconds{10};
+
     SshSessionManager();
     ~SshSessionManager();
     SshSessionManager(SshSessionManager const&) = delete;
@@ -47,11 +49,16 @@ class SshSessionManager
     void registerRpcChannelWrite(Nui::Window&, Nui::RpcHub& hub);
     void registerRpcChannelPtyResize(Nui::Window&, Nui::RpcHub& hub);
 
+    // Sftp:
+    void registerRpcSftpListDirectory(Nui::Window&, Nui::RpcHub& hub);
+    void registerRpcSftpCreateDirectory(Nui::Window&, Nui::RpcHub& hub);
+
   private:
     std::mutex passwordProvidersMutex_{};
     std::mutex addSessionMutex_{};
     std::unordered_map<Ids::SessionId, std::unique_ptr<SecureShell::Session>, Ids::IdHash> sessions_{};
     std::unordered_map<Ids::ChannelId, std::weak_ptr<SecureShell::Channel>, Ids::IdHash> channels_{};
+    std::unordered_map<Ids::ChannelId, std::weak_ptr<SecureShell::SftpSession>, Ids::IdHash> sftpChannels_{};
     std::map<int, PasswordProvider*> passwordProviders_{};
     std::unique_ptr<std::thread> addSessionThread_{};
     std::vector<SecureShell::PasswordCacheEntry> pwCache_{};
