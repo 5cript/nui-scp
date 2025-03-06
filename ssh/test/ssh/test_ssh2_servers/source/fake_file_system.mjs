@@ -164,9 +164,6 @@ const finalizeFakeFs = (root) => {
 }
 
 const renameInFakeFs = (oldEntry, newPath) => {
-    console.log(util.inspect(oldEntry, { depth: 10 }));
-    console.log('Renaming', oldEntry.path(), 'to', newPath);
-
     let root = oldEntry.parent;
     if (root.parent === undefined) {
         root = oldEntry;

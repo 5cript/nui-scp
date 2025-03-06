@@ -4,13 +4,18 @@
 #include <libssh/sftp.h>
 #include <ssh/async/processing_thread.hpp>
 #include <shared_data/directory_entry.hpp>
+#include <ssh/file_stream.hpp>
+#include <ssh/sftp_error.hpp>
+#include <ssh/session.hpp>
 
 #include <memory>
-#include <string>
 #include <future>
-#include <optional>
 #include <expected>
 #include <filesystem>
+#include <utility>
+#include <type_traits>
+
+#include <fcntl.h>
 
 namespace SecureShell
 {
@@ -19,12 +24,7 @@ namespace SecureShell
     class SftpSession : public std::enable_shared_from_this<SftpSession>
     {
       public:
-        struct Error
-        {
-            std::string message;
-            int sshError = 0;
-            int sftpError = 0;
-        };
+        using Error = SftpError;
 
         SftpSession(Session* owner, sftp_session session);
         ~SftpSession();
@@ -44,6 +44,36 @@ namespace SecureShell
         {
             static DirectoryEntry fromSftpAttributes(sftp_attributes attributes);
         };
+
+        template <typename FunctionT>
+        void perform(FunctionT&& func)
+        {
+            std::scoped_lock lock{ownerMutex_};
+            if (owner_)
+                owner_->processingThread_.pushTask(std::forward<FunctionT>(func));
+        }
+
+        template <typename FunctionT>
+        auto performPromise(FunctionT&& func) -> std::future<std::invoke_result_t<std::decay_t<FunctionT>>>
+        {
+            using ResultType = std::invoke_result_t<std::decay_t<FunctionT>>;
+            {
+                std::scoped_lock lock{ownerMutex_};
+                if (owner_)
+                    return owner_->processingThread_.pushPromiseTask(std::forward<FunctionT>(func));
+            }
+            std::promise<ResultType> promise{};
+            promise.set_value(std::unexpected(SftpError{
+                .message = "Owner is null",
+                .wrapperError = WrapperErrors::OwnerNull,
+            }));
+            return promise.get_future();
+        }
+
+        /**
+         * @brief Retrieves the last error that occurred. May contain success.
+         */
+        SftpError lastError() const;
 
         /**
          * @brief Lists the contents of a directory.
@@ -133,6 +163,21 @@ namespace SecureShell
          */
         std::future<std::expected<void, Error>>
         rename(std::filesystem::path const& source, std::filesystem::path const& destination);
+
+        enum class OpenType : int
+        {
+            Read = O_RDONLY,
+            Write = O_WRONLY,
+            ReadWrite = O_RDWR,
+            Create = O_CREAT,
+            Truncate = O_TRUNC,
+            Exclusive = O_EXCL,
+        };
+
+        std::future<std::expected<FileStream, Error>>
+        openFile(std::filesystem::path const& path, OpenType openType, std::filesystem::perms permissions);
+
+        std::future<std::expected<sftp_limits_struct, Error>> limits();
 
       private:
         std::mutex ownerMutex_;

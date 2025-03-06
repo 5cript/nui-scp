@@ -1,7 +1,9 @@
 #include <ssh/session.hpp>
 #include <ssh/sequential.hpp>
+#include <ssh/sftp_session.hpp>
 
 #include <fmt/format.h>
+#include <libssh/sftp.h>
 
 namespace SecureShell
 {
@@ -157,15 +159,15 @@ namespace SecureShell
         return fut;
     }
 
-    std::future<std::expected<std::weak_ptr<SftpSession>, SftpSession::Error>> Session::createSftpSession()
+    std::future<std::expected<std::weak_ptr<SftpSession>, SftpError>> Session::createSftpSession()
     {
-        auto promise = std::make_shared<std::promise<std::expected<std::weak_ptr<SftpSession>, SftpSession::Error>>>();
+        auto promise = std::make_shared<std::promise<std::expected<std::weak_ptr<SftpSession>, SftpError>>>();
 
         processingThread_.pushTask([this, promise]() -> void {
             auto sftp = sftp_new(session_.getCSession());
             if (sftp == nullptr)
             {
-                return promise->set_value(std::unexpected(SftpSession::Error{
+                return promise->set_value(std::unexpected(SftpError{
                     .message = ssh_get_error(session_.getCSession()),
                     .sshError = ssh_get_error_code(session_.getCSession()),
                     .sftpError = 0,
@@ -175,7 +177,7 @@ namespace SecureShell
             auto result = sftp_init(sftp);
             if (result != SSH_OK)
             {
-                promise->set_value(std::unexpected(SftpSession::Error{
+                promise->set_value(std::unexpected(SftpError{
                     .message = ssh_get_error(session_.getCSession()),
                     .sshError = result,
                     .sftpError = sftp_get_error(sftp),

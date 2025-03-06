@@ -1,9 +1,9 @@
 #pragma once
 
 #include <ssh/async/processing_thread.hpp>
+#include <ssh/sftp_error.hpp>
 #include <persistence/state/terminal_engine.hpp>
 #include <ssh/channel.hpp>
-#include <ssh/sftp_session.hpp>
 
 #include <libssh/libsshpp.hpp>
 
@@ -17,11 +17,14 @@
 
 namespace SecureShell
 {
+    class SftpSession;
+
     class Session
     {
       public:
         friend class Channel;
         friend class SftpSession;
+        friend class FileStream;
 
         Session();
         ~Session();
@@ -74,7 +77,7 @@ namespace SecureShell
          *
          * @return std::future<std::expected<std::weak_ptr<SftpSession>, int>>
          */
-        std::future<std::expected<std::weak_ptr<SftpSession>, SftpSession::Error>> createSftpSession();
+        std::future<std::expected<std::weak_ptr<SftpSession>, SftpError>> createSftpSession();
 
       private:
         void channelRemoveItself(Channel* channel);

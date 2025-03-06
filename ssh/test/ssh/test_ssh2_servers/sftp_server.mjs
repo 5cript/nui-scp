@@ -84,6 +84,13 @@ const fakeFilesystem = finalizeFakeFs({
                 symlink('link_to_doc1.txt', '/home/user/Documents/doc1.txt'),
                 file('file1.txt', 'Fake file content'),
                 file('file2.txt', 'Fake file content'),
+                file('large.txt', (() => {
+                    const size = 1024 * 1024;
+                    const repeatable = 'abcdefghijklmnopqrstuvwxyz';
+                    const division = size / repeatable.length;
+                    const mod = size % repeatable.length;
+                    return repeatable.repeat(division) + repeatable.slice(0, mod);
+                })())
             ])
         ]),
         directory({ name: 'etc' }, [
