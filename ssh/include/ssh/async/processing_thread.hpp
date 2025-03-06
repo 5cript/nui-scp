@@ -7,6 +7,7 @@
 #include <functional>
 #include <condition_variable>
 #include <map>
+#include <future>
 
 namespace SecureShell
 {
@@ -40,6 +41,25 @@ namespace SecureShell
 
         bool pushTask(std::function<void()> task);
 
+        template <typename Func>
+        auto pushPromiseTask(Func&& func) -> std::future<std::invoke_result_t<std::decay_t<Func>>>
+        {
+            using ReturnType = std::invoke_result_t<std::decay_t<Func>>;
+            auto promise = std::make_shared<std::promise<ReturnType>>();
+            pushTask([promise, func = std::forward<Func>(func)]() mutable {
+                if constexpr (std::is_void_v<ReturnType>)
+                {
+                    func();
+                    promise->set_value();
+                }
+                else
+                {
+                    promise->set_value(func());
+                }
+            });
+            return promise->get_future();
+        }
+
         std::pair<bool, PermanentTaskId> pushPermanentTask(std::function<void()> task);
         bool removePermanentTask(PermanentTaskId const& id);
         int permanentTaskCount() const;
@@ -56,7 +76,8 @@ namespace SecureShell
         std::atomic_bool permanentTasksAvailable_ = false;
         std::atomic<int> permanentTaskIdCounter_ = 0;
         std::atomic<std::thread::id> processingThreadId_{};
-        std::atomic_bool permanentTasksModifiedWithinProcessing_ = false;
+        std::atomic_bool processingPermanents_{false};
+        std::vector<std::function<void()>> deferredTaskModification_{};
 
         std::mutex taskWaitMutex_{};
         std::condition_variable taskCondition_{};

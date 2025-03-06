@@ -1,8 +1,7 @@
 #pragma once
 
-#include "ssh/ssh_session_manager.hpp"
 #include <backend/process/process_store.hpp>
-#include <backend/ssh/ssh_session_manager.hpp>
+#include <backend/ssh_session_manager.hpp>
 #include <persistence/state_holder.hpp>
 #include <backend/password/password_prompter.hpp>
 

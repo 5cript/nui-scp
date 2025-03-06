@@ -50,7 +50,8 @@ namespace Log
             , autoUnregisterOnLog_{Nui::RpcClient::autoRegisterFunction(
                   "log",
                   [this](int integralLevel, std::string const& message) {
-                      log(static_cast<Log::Level>(integralLevel), message);
+                      using namespace std::string_literals;
+                      log(static_cast<Log::Level>(integralLevel), "[MAIN] "s + message);
                   })}
             , autoUnregisterSetLevel_{Nui::RpcClient::autoRegisterFunction(
                   "setLogLevel",

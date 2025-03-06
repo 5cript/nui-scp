@@ -1,4 +1,7 @@
-#include <ssh/processing_thread.hpp>
+#pragma once
+
+#include <ssh/async/processing_thread.hpp>
+#include <ssh/sftp_error.hpp>
 #include <persistence/state/terminal_engine.hpp>
 #include <ssh/channel.hpp>
 
@@ -14,11 +17,14 @@
 
 namespace SecureShell
 {
+    class SftpSession;
+
     class Session
     {
       public:
         friend class Channel;
         friend class SftpSession;
+        friend class FileStream;
 
         Session();
         ~Session();
@@ -66,9 +72,19 @@ namespace SecureShell
          */
         std::future<std::expected<std::weak_ptr<Channel>, int>> createPtyChannel(PtyCreationOptions options);
 
+        /**
+         * @brief Create a Sftp Session object
+         *
+         * @return std::future<std::expected<std::weak_ptr<SftpSession>, int>>
+         */
+        std::future<std::expected<std::weak_ptr<SftpSession>, SftpError>> createSftpSession();
+
       private:
         void channelRemoveItself(Channel* channel);
         void removeAllChannels();
+
+        void sftpSessionRemoveItself(SftpSession* sftpSession);
+        void removeAllSftpSessions();
 
         void removalTask();
 
@@ -83,6 +99,7 @@ namespace SecureShell
         ssh::Session session_;
         std::vector<std::shared_ptr<Channel>> channels_;
         std::vector<std::shared_ptr<Channel>> channelsToRemove_;
+        std::vector<std::shared_ptr<SftpSession>> sftpSessions_;
     };
 
     using AskPassCallback = int (*)(char const* prompt, char* buf, std::size_t length, int, int, void* userdata);

@@ -369,23 +369,24 @@ void Session::navigateTo(std::filesystem::path path)
 
 void Session::openSftp()
 {
-    if (impl_->terminal.value() && impl_->terminal.value()->engine().engineName() == "ssh")
-    {
-        auto const& opts = std::get<Persistence::SshTerminalEngine>(impl_->engine.engine).sshSessionOptions.value();
-        if (opts.openSftpByDefault)
-        {
-            Log::info("Opening SFTP by default");
-            impl_->fileEngine = std::make_unique<SftpFileEngine>(SshTerminalEngine::Settings{
-                .engineOptions = std::get<Persistence::SshTerminalEngine>(impl_->engine.engine),
-                .onExit = std::bind(&Session::onFileExplorerConnectionClose, this),
-            });
-            navigateTo(opts.defaultDirectory.value_or("/"));
-        }
-    }
-    else
-    {
-        Log::error("Cannot open SFTP for non-ssh terminal");
-    }
+    Log::warn("SFTP is not implemented yet");
+    // if (impl_->terminal.value() && impl_->terminal.value()->engine().engineName() == "ssh")
+    // {
+    //     auto const& opts = std::get<Persistence::SshTerminalEngine>(impl_->engine.engine).sshSessionOptions.value();
+    //     if (opts.openSftpByDefault)
+    //     {
+    //         Log::info("Opening SFTP by default");
+    //         impl_->fileEngine = std::make_unique<SftpFileEngine>(SshTerminalEngine::Settings{
+    //             .engineOptions = std::get<Persistence::SshTerminalEngine>(impl_->engine.engine),
+    //             .onExit = std::bind(&Session::onFileExplorerConnectionClose, this),
+    //         });
+    //         navigateTo(opts.defaultDirectory.value_or("/"));
+    //     }
+    // }
+    // else
+    // {
+    //     Log::error("Cannot open SFTP for non-ssh terminal");
+    // }
 }
 
 void Session::fallbackToUserControlEngine()
@@ -603,22 +604,15 @@ void Session::onChannelClosedByUser(Ids::ChannelId const& channelId)
         }
         else
         {
+            // FIXME: I can see this warning, which should not happen, but it does.
             Log::warn("Channel element does not have a channel id attribute");
         }
         return false;
     });
 
-    // Removing real channel:
+    // Removing channel in frontend:
     using namespace std::string_literals;
-    if (auto channel = impl_->terminal.value()->channel(channelId); channel)
-    {
-        Log::info("Closing channel with id '{}'", channelId.value());
-        channel->dispose();
-    }
-    else
-    {
-        Log::warn("Channel with id '{}' not found", channelId.value());
-    }
+    impl_->terminal.value()->closeChannel(channelId);
 }
 
 void Session::initializeLayout()

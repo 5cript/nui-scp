@@ -99,20 +99,20 @@ namespace SecureShell::Test
             "--login",
             "-i",
             "-c",
-            "\"cd "s + isolateDirectory.path().generic_string() + " && node ./main.mjs\"",
+            "\"cd "s + isolateDirectory.path().generic_string() + " && node ./main.mjs --log-file=./log.txt\"",
         };
 #else
         const auto nodeShell = "/bin/bash";
         const auto nodeCommandArgs = std::vector<std::string>{
             "-c",
-            "cd "s + isolateDirectory.path().generic_string() + " && node ./main.mjs",
+            "cd "s + isolateDirectory.path().generic_string() + " && node ./main.mjs --log-file=./log.txt",
         };
 #endif
 
         result->mainModule = std::make_unique<boost::process::v2::process>(
             executor,
             node,
-            std::vector<std::string>{"main.mjs"},
+            std::vector<std::string>{"main.mjs", "--log-file=./log.txt"},
             bp2::process_environment{bp2::environment::current()},
             bp2::process_start_dir{isolateDirectory.path().generic_string()},
             bp2::process_stdio{

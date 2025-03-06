@@ -5,10 +5,7 @@ target_sources(
         process/process.cpp
         process/process_store.cpp
         process/environment.cpp
-        ssh/channel.cpp
-        ssh/ssh_session_manager.cpp
-        ssh/session.cpp
-        ssh/sftp_session.cpp
+        ssh_session_manager.cpp
         main.cpp
 )
 
@@ -49,7 +46,7 @@ target_link_libraries(
         utility
         log
         persistence
-        ssh
+        secure-shell
         ids
         events
 )

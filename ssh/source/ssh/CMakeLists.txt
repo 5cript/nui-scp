@@ -1,9 +1,11 @@
 add_library(
     secure-shell
     STATIC
-        processing_thread.cpp
+        async/processing_thread.cpp
         session.cpp
         channel.cpp
+        sftp_session.cpp
+        file_stream.cpp
 )
 
 target_include_directories(
@@ -21,4 +23,5 @@ target_link_libraries(
         ids
         persistence
         fmt
+        shared_data
 )

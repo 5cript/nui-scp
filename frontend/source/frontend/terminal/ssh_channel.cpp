@@ -68,7 +68,6 @@ void SshChannel::write(std::string const& data)
         [](Nui::val) {
             // TODO: handle error
         },
-        sshSessionId_.value(),
         sshChannelId_.value(),
         Nui::val::global("btoa")(data).as<std::string>());
 }
@@ -79,7 +78,6 @@ void SshChannel::resize(int cols, int rows)
         [](Nui::val) {
             // TODO: handle error
         },
-        sshSessionId_.value(),
         sshChannelId_.value(),
         cols,
         rows);
@@ -91,6 +89,5 @@ void SshChannel::dispose(std::function<void()> onExit)
         [onExit = std::move(onExit)](Nui::val) {
             onExit();
         },
-        sshSessionId_.value(),
         sshChannelId_.value());
 }

@@ -1,7 +1,7 @@
 #pragma once
 
 #include <libssh/libsshpp.hpp>
-#include <ssh/processing_thread.hpp>
+#include <ssh/async/processing_thread.hpp>
 
 #include <memory>
 #include <functional>

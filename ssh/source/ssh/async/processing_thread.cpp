@@ -1,6 +1,7 @@
-#include <ssh/processing_thread.hpp>
+#include <ssh/async/processing_thread.hpp>
 
 #include <stdexcept>
+#include <future>
 
 namespace SecureShell
 {
@@ -20,10 +21,13 @@ namespace SecureShell
     {
         running_ = true;
         shuttingDown_ = false;
-        thread_ = std::thread([this, waitCycleTimeout, minimumCycleWait] {
+        std::promise<void> awaitThreadStart{};
+        thread_ = std::thread([this, &awaitThreadStart, waitCycleTimeout, minimumCycleWait] {
+            awaitThreadStart.set_value();
             processingThreadId_.store(std::this_thread::get_id());
             run(waitCycleTimeout, minimumCycleWait);
         });
+        awaitThreadStart.get_future().wait();
     }
     void ProcessingThread::stop()
     {
@@ -60,8 +64,8 @@ namespace SecureShell
         {
             std::lock_guard lock{taskWaitMutex_};
             taskAvailable_ = true;
-            taskCondition_.notify_one();
         }
+        taskCondition_.notify_one();
         return true;
     }
     std::pair<bool, ProcessingThread::PermanentTaskId> ProcessingThread::pushPermanentTask(std::function<void()> task)
@@ -81,7 +85,6 @@ namespace SecureShell
             std::lock_guard lock{taskMutex_};
             ++permanentTaskIdCounter_;
             id = PermanentTaskId{permanentTaskIdCounter_};
-            permanentTasksModifiedWithinProcessing_ = (std::this_thread::get_id() == processingThreadId_);
             permanentTasks_.insert({id, std::move(task)});
             permanentTasksAvailable_ = true;
         }
@@ -90,14 +93,30 @@ namespace SecureShell
     void ProcessingThread::clearPermanentTasks()
     {
         std::lock_guard lock{taskMutex_};
-        permanentTasksModifiedWithinProcessing_ = (std::this_thread::get_id() == processingThreadId_);
+        if (processingPermanents_)
+        {
+            deferredTaskModification_.push_back([this]() {
+                permanentTasks_.clear();
+                permanentTasksAvailable_ = false;
+            });
+            return;
+        }
+
         permanentTasks_.clear();
         permanentTasksAvailable_ = false;
     }
     bool ProcessingThread::removePermanentTask(PermanentTaskId const& id)
     {
         std::lock_guard lock{taskMutex_};
-        permanentTasksModifiedWithinProcessing_ = true;
+        if (processingPermanents_)
+        {
+            deferredTaskModification_.push_back([this, id]() {
+                permanentTasks_.erase(id);
+                permanentTasksAvailable_ = !permanentTasks_.empty();
+            });
+            return true;
+        }
+
         auto result = permanentTasks_.erase(id);
         permanentTasksAvailable_ = !permanentTasks_.empty();
         return result > 0;
@@ -116,21 +135,39 @@ namespace SecureShell
 
                 if (permanentTasksAvailable_)
                 {
-                    std::lock_guard lock(taskMutex_);
-                    for (auto const& [_, task] : permanentTasks_)
+                    std::unique_lock lock(taskMutex_);
+                    const auto permaTasksMoved = std::move(permanentTasks_);
+                    permanentTasks_ = {};
+                    processingPermanents_ = true;
+                    lock.unlock();
+
+                    for (auto const& [_, task] : permaTasksMoved)
                     {
                         // Task is checked before adding, shouldnt possibly be empty:
                         task();
-
-                        // Stop iteration if task amount was changed!
-                        if (permanentTasksModifiedWithinProcessing_)
-                            break;
 
                         // Stop running if shutdown was requested:
                         if (!running_ || shuttingDown_)
                             break;
                     }
-                    permanentTasksModifiedWithinProcessing_ = false;
+
+                    lock.lock();
+                    processingPermanents_ = false;
+                    if (permanentTasks_.empty())
+                        permanentTasks_ = std::move(permaTasksMoved);
+                    else
+                    {
+                        // Move em back the expensive way:
+                        for (auto& [id, task] : permaTasksMoved)
+                        {
+                            permanentTasks_.insert({id, std::move(task)});
+                        }
+                    }
+                    permanentTasksAvailable_ = !permanentTasks_.empty();
+                    for (auto& modify : deferredTaskModification_)
+                    {
+                        modify();
+                    }
                 }
                 else
                 {
