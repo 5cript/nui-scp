@@ -32,6 +32,7 @@ namespace SecureShell::Test
         int code = 0;
 
         void command(std::string const& command);
+        void terminate();
     };
 
     void npmInstall(

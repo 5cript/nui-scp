@@ -38,11 +38,19 @@ namespace SecureShell
         , file_{other.file_.release(), makeFileDeleter()}
         , limits_{other.limits_}
     {}
+    void FileStream::close()
+    {
+        if (auto sftp = sftp_.lock(); sftp)
+        {
+            sftp->fileStreamRemoveItself(this);
+        }
+    }
     std::function<void(sftp_file)> FileStream::makeFileDeleter()
     {
         return [this](sftp_file file) {
             if (auto sftp = this->sftp_.lock(); sftp)
             {
+                // This is safe because file is just a pointer, even if 'this' is deleted by this point.
                 sftp->perform([file]() {
                     sftp_close(file);
                 });

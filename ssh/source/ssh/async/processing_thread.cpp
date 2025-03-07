@@ -224,4 +224,14 @@ namespace SecureShell
         std::lock_guard lock{taskMutex_};
         return permanentTasks_.size();
     }
+    bool ProcessingThread::awaitCycle(std::chrono::milliseconds maxWait)
+    {
+        if (!withinProcessingThread() && running_)
+        {
+            return pushPromiseTask([]() {
+                       return true;
+                   }).wait_for(maxWait) == std::future_status::ready;
+        }
+        return false;
+    }
 }

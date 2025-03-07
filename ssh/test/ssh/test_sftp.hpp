@@ -260,10 +260,12 @@ namespace SecureShell::Test
         auto result = fut.get();
         ASSERT_TRUE(result.has_value());
 
-        auto file = std::move(result).value();
-        std::byte byte;
+        auto fileWeak = std::move(result).value();
+        auto file = fileWeak.lock();
+        ASSERT_TRUE(file);
 
-        auto readFut = file.read(&byte, 1);
+        std::byte byte;
+        auto readFut = file->read(&byte, 1);
         ASSERT_EQ(readFut.wait_for(1s), std::future_status::ready);
         auto readResult = readFut.get();
         ASSERT_TRUE(readResult.has_value());
@@ -282,9 +284,12 @@ namespace SecureShell::Test
         auto result = fut.get();
         ASSERT_TRUE(result.has_value());
 
-        auto file = std::move(result).value();
+        auto fileWeak = std::move(result).value();
+        auto file = fileWeak.lock();
+        ASSERT_TRUE(file);
+
         std::vector<std::byte> buffer(1024);
-        auto readFut = file.read(buffer.data(), buffer.size());
+        auto readFut = file->read(buffer.data(), buffer.size());
 
         ASSERT_EQ(readFut.wait_for(1s), std::future_status::ready);
         auto readResult = readFut.get();
@@ -305,9 +310,12 @@ namespace SecureShell::Test
         auto result = fut.get();
         ASSERT_TRUE(result.has_value());
 
-        auto file = std::move(result).value();
+        auto fileWeak = std::move(result).value();
+        auto file = fileWeak.lock();
+        ASSERT_TRUE(file);
+
         std::string data;
-        auto readFut = file.read([&data](std::string_view chunk) {
+        auto readFut = file->read([&data](std::string_view chunk) {
             data.append(chunk);
             return true;
         });
@@ -330,9 +338,12 @@ namespace SecureShell::Test
         auto result = fut.get();
         ASSERT_TRUE(result.has_value());
 
-        auto file = std::move(result).value();
+        auto fileWeak = std::move(result).value();
+        auto file = fileWeak.lock();
+        ASSERT_TRUE(file);
+
         std::string data;
-        auto readFut = file.read([&data](std::string_view chunk) {
+        auto readFut = file->read([&data](std::string_view chunk) {
             data.append(chunk);
             return true;
         });
@@ -355,10 +366,13 @@ namespace SecureShell::Test
         auto result = fut.get();
         ASSERT_TRUE(result.has_value());
 
-        auto file = std::move(result).value();
-        ASSERT_EQ(file.seek(2).wait_for(1s), std::future_status::ready);
+        auto fileWeak = std::move(result).value();
+        auto file = fileWeak.lock();
+        ASSERT_TRUE(file);
+
+        ASSERT_EQ(file->seek(2).wait_for(1s), std::future_status::ready);
         std::vector<std::byte> buffer(1024);
-        auto readFut2 = file.read(buffer.data(), buffer.size());
+        auto readFut2 = file->read(buffer.data(), buffer.size());
 
         ASSERT_EQ(readFut2.wait_for(1s), std::future_status::ready);
         auto readResult2 = readFut2.get();
@@ -379,11 +393,14 @@ namespace SecureShell::Test
         auto result = fut.get();
         ASSERT_TRUE(result.has_value());
 
-        auto file = std::move(result).value();
+        auto fileWeak = std::move(result).value();
+        auto file = fileWeak.lock();
+        ASSERT_TRUE(file);
+
         std::vector<std::byte> buffer(1024);
-        ASSERT_EQ(file.seek(2).wait_for(1s), std::future_status::ready);
-        ASSERT_EQ(file.rewind().wait_for(1s), std::future_status::ready);
-        auto readFut2 = file.read(buffer.data(), buffer.size());
+        ASSERT_EQ(file->seek(2).wait_for(1s), std::future_status::ready);
+        ASSERT_EQ(file->rewind().wait_for(1s), std::future_status::ready);
+        auto readFut2 = file->read(buffer.data(), buffer.size());
 
         ASSERT_EQ(readFut2.wait_for(1s), std::future_status::ready);
         auto readResult2 = readFut2.get();
@@ -404,9 +421,12 @@ namespace SecureShell::Test
         auto result = fut.get();
         ASSERT_TRUE(result.has_value());
 
-        auto file = std::move(result).value();
-        ASSERT_EQ(file.seek(2).wait_for(1s), std::future_status::ready);
-        auto tellFut = file.tell();
+        auto fileWeak = std::move(result).value();
+        auto file = fileWeak.lock();
+        ASSERT_TRUE(file);
+
+        ASSERT_EQ(file->seek(2).wait_for(1s), std::future_status::ready);
+        auto tellFut = file->tell();
 
         ASSERT_EQ(tellFut.wait_for(1s), std::future_status::ready);
         auto tellResult = tellFut.get();

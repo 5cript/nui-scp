@@ -28,6 +28,8 @@ namespace SecureShell
             return *channel_;
         }
 
+        void shutdown();
+
         void close();
 
         /**

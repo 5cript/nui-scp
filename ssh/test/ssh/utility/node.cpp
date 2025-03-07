@@ -35,6 +35,21 @@ namespace SecureShell::Test
         }
     }
 
+    void NodeProcessResult::terminate()
+    {
+        if (killed)
+            return;
+        killed = true;
+        try
+        {
+            mainModule->terminate();
+        }
+        catch (std::exception const& e)
+        {
+            std::cerr << "Failed to terminate process: " << e.what() << std::endl;
+        }
+    }
+
     void npmInstall(
         boost::asio::any_io_executor executor,
         std::filesystem::path const& directory,
@@ -127,7 +142,14 @@ namespace SecureShell::Test
             if (auto result = weak.lock())
             {
                 result->killed = true;
-                result->mainModule->terminate();
+                try
+                {
+                    result->mainModule->terminate();
+                }
+                catch (std::exception const& e)
+                {
+                    std::cerr << "Failed to terminate process: " << e.what() << std::endl;
+                }
             }
         });
 

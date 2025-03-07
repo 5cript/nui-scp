@@ -14,7 +14,7 @@ namespace SecureShell
     class ProcessingThread
     {
       public:
-        constexpr static unsigned int maximumTasksProcessableAtOnce = 10;
+        constexpr static unsigned int maximumTasksProcessableAtOnce = 100;
 
         struct PermanentTaskId
         {
@@ -64,6 +64,13 @@ namespace SecureShell
         bool removePermanentTask(PermanentTaskId const& id);
         int permanentTaskCount() const;
         void clearPermanentTasks();
+
+        bool awaitCycle(std::chrono::milliseconds maxWait = std::chrono::seconds{5});
+
+        bool withinProcessingThread() const
+        {
+            return processingThreadId_ == std::this_thread::get_id();
+        }
 
       private:
         void run(std::chrono::milliseconds const& waitCycleTimeout, std::chrono::milliseconds const& minimumCycleWait);

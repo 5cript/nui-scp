@@ -14,7 +14,7 @@ namespace SecureShell
     class Session;
     class SftpSession;
 
-    class FileStream
+    class FileStream : public std::enable_shared_from_this<FileStream>
     {
       public:
         FileStream(std::shared_ptr<SftpSession> sftp, sftp_file file, sftp_limits_struct limits);
@@ -94,6 +94,11 @@ namespace SecureShell
          * @return sftp_file
          */
         sftp_file release();
+
+        /**
+         * @brief Closes the file and removes itself from the sftp session.
+         */
+        void close();
 
       private:
         std::function<void(sftp_file)> makeFileDeleter();

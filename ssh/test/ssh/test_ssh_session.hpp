@@ -268,7 +268,8 @@ namespace SecureShell::Test
         auto [result, processThread] = createSshServer();
         ASSERT_TRUE(result);
         auto joiner = Nui::ScopeExit{[&]() noexcept {
-            result->command("exit");
+            // result->command("exit");
+            result->terminate();
             if (processThread.joinable())
                 processThread.join();
         }};

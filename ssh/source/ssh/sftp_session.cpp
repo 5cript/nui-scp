@@ -11,20 +11,49 @@ namespace SecureShell
         : ownerMutex_{}
         , owner_{owner}
         , session_{session}
+        , fileStreams_{}
     {}
     SftpSession::~SftpSession()
     {
         /* close makes no sense, since this lives in a shared_ptr and will only ever end here when it was already
          * removed */
     }
-    void SftpSession::close()
+    void SftpSession::close(bool removeSelf)
     {
-        std::scoped_lock lock{ownerMutex_};
-        if (owner_)
+        removeAllFileStreams();
         {
-            owner_->sftpSessionRemoveItself(this);
-            owner_ = nullptr;
+            std::scoped_lock lock{ownerMutex_};
+            if (owner_)
+            {
+                if (removeSelf)
+                    owner_->sftpSessionRemoveItself(this);
+                owner_ = nullptr;
+            }
         }
+    }
+    void SftpSession::fileStreamRemoveItself(FileStream* stream)
+    {
+        if (stream)
+        {
+            perform([this, stream]() {
+                fileStreams_.erase(
+                    std::remove_if(
+                        fileStreams_.begin(),
+                        fileStreams_.end(),
+                        [stream](auto const& item) {
+                            return item.get() == stream;
+                        }),
+                    fileStreams_.end());
+            });
+            awaitCycle();
+        }
+    }
+    void SftpSession::removeAllFileStreams()
+    {
+        perform([this]() {
+            fileStreams_.clear();
+        });
+        awaitCycle();
     }
     SftpSession::DirectoryEntry SftpSession::DirectoryEntry::fromSftpAttributes(sftp_attributes attributes)
     {
@@ -256,11 +285,11 @@ namespace SecureShell
         });
     }
 
-    std::future<std::expected<FileStream, SftpSession::Error>>
+    std::future<std::expected<std::weak_ptr<FileStream>, SftpSession::Error>>
     SftpSession::openFile(std::filesystem::path const& path, OpenType openType, std::filesystem::perms permissions)
     {
         return performPromise(
-            [this, path = std::move(path), openType, permissions]() -> std::expected<FileStream, Error> {
+            [this, path = std::move(path), openType, permissions]() -> std::expected<std::weak_ptr<FileStream>, Error> {
                 std::unique_ptr<sftp_file_struct, std::function<void(sftp_file_struct*)>> file{
                     sftp_open(
                         session_,
@@ -281,7 +310,10 @@ namespace SecureShell
                 if (limits == nullptr)
                     return std::unexpected(lastError());
 
-                return FileStream{shared_from_this(), file.release(), *limits};
+                auto stream = std::make_shared<FileStream>(shared_from_this(), file.release(), *limits);
+                fileStreams_.push_back(stream);
+
+                return std::weak_ptr<FileStream>{stream};
             });
     }
 }

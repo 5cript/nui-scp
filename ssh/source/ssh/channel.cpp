@@ -24,19 +24,29 @@ namespace SecureShell
         }
         return *this;
     }
+    void Channel::shutdown()
+    {
+        {
+            std::scoped_lock lock{ownerMutex_};
+            if (owner_ && readTaskId_)
+                owner_->processingThread_.removePermanentTask(*readTaskId_);
+        }
+        if (channel_ && channel_->isOpen())
+        {
+            channel_->sendEof();
+            channel_->close();
+        }
+        channel_.reset();
+    }
     void Channel::close()
     {
-        std::scoped_lock lock{ownerMutex_};
-        if (owner_)
+        shutdown();
+        decltype(owner_) cpy = nullptr;
         {
-            if (readTaskId_)
-            {
-                owner_->processingThread_.removePermanentTask(*readTaskId_);
-            }
-
-            owner_->channelRemoveItself(this);
-            owner_ = nullptr;
+            std::scoped_lock lock{ownerMutex_};
+            cpy = std::exchange(owner_, nullptr);
         }
+        cpy->channelRemoveItself(this);
     }
     void Channel::write(std::string data)
     {

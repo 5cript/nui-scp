@@ -66,9 +66,7 @@ namespace SecureShell
                 {
                     channelsToRemove_.push_back(*it);
                     channels_.erase(it);
-                    processingThread_.pushTask([this]() {
-                        removalTask();
-                    });
+                    removalTask();
                 }
                 else
                 {
@@ -82,12 +80,7 @@ namespace SecureShell
     {
         for (const auto& toRemove : channelsToRemove_)
         {
-            auto& channel = static_cast<ssh::Channel&>(*toRemove);
-            if (channel.isOpen())
-            {
-                channel.sendEof();
-                channel.close();
-            }
+            toRemove->shutdown();
         }
         channelsToRemove_.clear();
     }
@@ -111,6 +104,10 @@ namespace SecureShell
     void Session::removeAllSftpSessions()
     {
         processingThread_.pushTask([this]() {
+            for (auto& sftp : sftpSessions_)
+            {
+                sftp->close(false);
+            }
             sftpSessions_.clear();
         });
     }

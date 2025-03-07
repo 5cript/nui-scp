@@ -25,6 +25,7 @@ namespace SecureShell
     {
       public:
         using Error = SftpError;
+        friend class FileStream;
 
         SftpSession(Session* owner, sftp_session session);
         ~SftpSession();
@@ -38,7 +39,7 @@ namespace SecureShell
             return session_;
         }
 
-        void close();
+        void close(bool removeSelf = true);
 
         struct DirectoryEntry : public SharedData::DirectoryEntry
         {
@@ -68,6 +69,14 @@ namespace SecureShell
                 .wrapperError = WrapperErrors::OwnerNull,
             }));
             return promise.get_future();
+        }
+
+        bool awaitCycle()
+        {
+            std::scoped_lock lock{ownerMutex_};
+            if (owner_)
+                return owner_->processingThread_.awaitCycle();
+            return false;
         }
 
         /**
@@ -174,15 +183,19 @@ namespace SecureShell
             Exclusive = O_EXCL,
         };
 
-        std::future<std::expected<FileStream, Error>>
+        std::future<std::expected<std::weak_ptr<FileStream>, Error>>
         openFile(std::filesystem::path const& path, OpenType openType, std::filesystem::perms permissions);
 
         std::future<std::expected<sftp_limits_struct, Error>> limits();
 
       private:
+        void fileStreamRemoveItself(FileStream* stream);
+        void removeAllFileStreams();
+
+      private:
         std::mutex ownerMutex_;
         Session* owner_;
         sftp_session session_;
-        // std::optional<ProcessingThread::PermanentTaskId> readTaskId_{std::nullopt};
+        std::vector<std::shared_ptr<FileStream>> fileStreams_;
     };
 }

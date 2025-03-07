@@ -339,4 +339,21 @@ namespace SecureShell::Test
         processingThread.clearPermanentTasks();
         EXPECT_EQ(0, processingThread.permanentTaskCount());
     }
+
+    TEST_F(ProcessingThreadTest, CanWaitForCycle)
+    {
+        ProcessingThread processingThread;
+        processingThread.start(std::chrono::milliseconds{1});
+        EXPECT_TRUE(processingThread.awaitCycle());
+    }
+
+    TEST_F(ProcessingThreadTest, CanWaitForCyclesMultipleTimes)
+    {
+        ProcessingThread processingThread;
+        processingThread.start(std::chrono::milliseconds{1});
+        for (int i = 0; i < 5; ++i)
+        {
+            EXPECT_TRUE(processingThread.awaitCycle());
+        }
+    }
 }
