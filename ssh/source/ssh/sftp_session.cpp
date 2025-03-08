@@ -3,8 +3,6 @@
 
 #include <fcntl.h>
 
-#include <iostream>
-
 namespace SecureShell
 {
     SftpSession::SftpSession(Session* owner, std::unique_ptr<ProcessingStrand> strand, sftp_session session)
@@ -18,16 +16,27 @@ namespace SecureShell
         /* close makes no sense, since this lives in a shared_ptr and will only ever end here when it was already
          * removed */
     }
-    void SftpSession::close()
+    bool SftpSession::close(bool isBackElement)
     {
-        strand_->doFinalSync([this]() {
-            removeAllFileStreams();
-            owner_->sftpSessionRemoveItself(this);
-        });
+        if (strand_->isFinalized())
+            return false;
+
+        return strand_
+            ->pushFinalPromiseTask([this, isBackElement]() {
+                removeAllFileStreams();
+                owner_->sftpSessionRemoveItself(this, isBackElement);
+                return true;
+            })
+            .get();
     }
-    void SftpSession::fileStreamRemoveItself(FileStream* stream)
+    void SftpSession::fileStreamRemoveItself(FileStream* stream, bool isBackElement)
     {
-        perform([this, stream]() {
+        if (isBackElement && fileStreams_.back().get() == stream)
+        {
+            fileStreams_.pop_back();
+        }
+        else
+        {
             fileStreams_.erase(
                 std::remove_if(
                     fileStreams_.begin(),
@@ -36,14 +45,14 @@ namespace SecureShell
                         return item.get() == stream;
                     }),
                 fileStreams_.end());
-        });
+        }
     }
     void SftpSession::removeAllFileStreams()
     {
-        perform([this]() {
-            for (auto& stream : fileStreams_)
-                stream->close();
-        });
+        while (!fileStreams_.empty())
+        {
+            fileStreams_.back()->close(true);
+        }
     }
     SftpSession::DirectoryEntry SftpSession::DirectoryEntry::fromSftpAttributes(sftp_attributes attributes)
     {
@@ -216,18 +225,13 @@ namespace SecureShell
     {
         return performPromise(
             [this, source = std::move(source), destination = std::move(destination)]() -> std::expected<void, Error> {
-                std::cout << "X" << std::endl;
                 auto s = source.generic_string();
                 auto d = destination.generic_string();
-
-                std::cout << "Supported: " << sftp_extension_supported(session_, "posix-rename@openssh.com", "1")
-                          << std::endl;
 
                 auto result = sftp_rename(session_, s.c_str(), d.c_str());
                 if (result != SSH_OK)
                 {
                     const auto le = lastError();
-                    std::cout << "Error: " << le.message << " - " << le.sftpError << " - " << le.sshError << std::endl;
                     return std::unexpected(le);
                 }
                 return {};

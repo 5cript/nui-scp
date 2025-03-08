@@ -5,6 +5,10 @@
 
 namespace SecureShell
 {
+#define VERIFY_FILE_STREAM() \
+    if (!file_) \
+    return std::unexpected(SftpError{.message = "File is null", .wrapperError = WrapperErrors::FileNull})
+
     template <typename FunctionT>
     void FileStream::perform(FunctionT&& func)
     {
@@ -38,11 +42,24 @@ namespace SecureShell
         , file_{other.file_.release(), makeFileDeleter()}
         , limits_{other.limits_}
     {}
-    void FileStream::close()
+    void FileStream::close(bool isBackElement)
     {
         if (auto sftp = sftp_.lock(); sftp)
         {
-            sftp->fileStreamRemoveItself(this);
+            if (!sftp->strand_->withinProcessingThread())
+            {
+                sftp->performPromise([this, isBackElement, sftp]() -> bool {
+                        file_.reset();
+                        sftp->fileStreamRemoveItself(this, isBackElement);
+                        return true;
+                    })
+                    .get();
+            }
+            else
+            {
+                file_.reset();
+                sftp->fileStreamRemoveItself(this, isBackElement);
+            }
         }
     }
     std::function<void(sftp_file)> FileStream::makeFileDeleter()
@@ -70,6 +87,7 @@ namespace SecureShell
     std::future<std::expected<void, SftpError>> FileStream::seek(std::size_t pos)
     {
         return performPromise([this, pos]() -> std::expected<void, SftpError> {
+            VERIFY_FILE_STREAM();
             sftp_seek64(file_.get(), pos);
             return {};
         });
@@ -77,12 +95,14 @@ namespace SecureShell
     std::future<std::expected<std::size_t, SftpError>> FileStream::tell()
     {
         return performPromise([this]() -> std::expected<std::size_t, SftpError> {
+            VERIFY_FILE_STREAM();
             return static_cast<std::size_t>(sftp_tell64(file_.get()));
         });
     }
     std::future<std::expected<void, SftpError>> FileStream::rewind()
     {
         return performPromise([this]() -> std::expected<void, SftpError> {
+            VERIFY_FILE_STREAM();
             sftp_rewind(file_.get());
             return {};
         });
@@ -104,6 +124,7 @@ namespace SecureShell
     std::future<std::expected<std::size_t, SftpError>> FileStream::read(std::byte* buffer, std::size_t bufferSize)
     {
         return performPromise([this, buffer, bufferSize]() -> std::expected<std::size_t, SftpError> {
+            VERIFY_FILE_STREAM();
             const auto result = sftp_read(file_.get(), buffer, bufferSize);
             if (result < 0)
                 return std::unexpected(lastError());
@@ -156,6 +177,14 @@ namespace SecureShell
             void doRead()
             {
                 stream.perform([state = shared_from_this()]() {
+                    if (!state->stream.file_)
+                    {
+                        state->promise.set_value(std::unexpected(SftpError{
+                            .message = "File is null",
+                            .wrapperError = WrapperErrors::FileNull,
+                        }));
+                        return;
+                    }
                     state->onRead(sftp_read(state->stream.file_.get(), state->buffer.data(), state->buffer.size()));
                 });
             }
@@ -178,6 +207,9 @@ namespace SecureShell
         std::function<void(std::expected<void, SftpError>&&)> onWriteComplete)
     {
         perform([this, toWrite, onWriteComplete = std::move(onWriteComplete)]() {
+            if (!file_)
+                return;
+
             const auto written = sftp_write(file_.get(), toWrite.data(), std::min(toWrite.size(), writeLengthLimit()));
 
             if (written < 0)
@@ -203,6 +235,7 @@ namespace SecureShell
         if (data.size() <= writeLengthLimit())
         {
             return performPromise([this, data]() -> std::expected<void, SftpError> {
+                VERIFY_FILE_STREAM();
                 const auto written = sftp_write(file_.get(), data.data(), data.size());
                 if (written < 0)
                     return std::unexpected(lastError());

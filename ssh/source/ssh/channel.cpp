@@ -28,21 +28,27 @@ namespace SecureShell
         }
         return *this;
     }
-    void Channel::close()
+    bool Channel::close(bool isBackElement)
     {
-        strand_->doFinalSync([this]() {
-            if (channel_ && channel_->isOpen())
-            {
-                channel_->sendEof();
-                channel_->close();
-            }
-            channel_.reset();
-            owner_->channelRemoveItself(this);
-        });
+        if (strand_->isFinalized())
+            return false;
+
+        return strand_
+            ->pushFinalPromiseTask([this, isBackElement]() {
+                if (channel_ && channel_->isOpen())
+                {
+                    channel_->sendEof();
+                    channel_->close();
+                }
+                channel_.reset();
+                owner_->channelRemoveItself(this, isBackElement);
+                return true;
+            })
+            .get();
     }
-    void Channel::write(std::string data)
+    bool Channel::write(std::string data)
     {
-        strand_->pushTask([this, data = std::move(data)]() {
+        return strand_->pushTask([this, data = std::move(data)]() {
             if (channel_)
                 channel_->write(data.data(), data.size());
         });
@@ -50,18 +56,27 @@ namespace SecureShell
     std::future<int> Channel::resizePty(int cols, int rows)
     {
         auto promise = std::make_shared<std::promise<int>>();
-        strand_->pushTask([this, cols, rows, promise]() {
-            if (channel_)
-                promise->set_value(channel_->changePtySize(cols, rows));
-            else
-                promise->set_value(SSH_ERROR);
-        });
+        if (!strand_->pushTask([this, cols, rows, promise]() {
+                if (channel_)
+                    promise->set_value(channel_->changePtySize(cols, rows));
+                else
+                    promise->set_value(SSH_ERROR);
+            }))
+        {
+            promise->set_value(SSH_ERROR);
+        }
         return promise->get_future();
     }
     void Channel::readTask(std::chrono::milliseconds pollTimeout)
     {
         if (!onStdout_ || !onStderr_ || !onExit_)
             return;
+
+        if (!channel_)
+        {
+            std::this_thread::sleep_for(pollTimeout);
+            return;
+        }
 
         constexpr static int bufferSize = 1024;
         char buffer[bufferSize];

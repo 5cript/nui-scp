@@ -77,6 +77,30 @@ namespace SecureShell
         }
 
         /**
+         * @brief Works like pushFinalTask but returns a future for the return value of the task.
+         *
+         * @param task The task to run.
+         */
+        template <typename FunctionT>
+        auto pushFinalPromiseTask(FunctionT&& func) -> std::future<std::invoke_result_t<std::decay_t<FunctionT>>>
+        {
+            std::scoped_lock lock(mutex_);
+            if (finalized_)
+            {
+                std::promise<std::invoke_result_t<std::decay_t<FunctionT>>> promise{};
+                promise.set_exception(
+                    std::make_exception_ptr(std::runtime_error("Cannot push task to finalized strand.")));
+                return promise.get_future();
+            }
+            finalized_ = true;
+            for (auto const& id : permanentTasks_)
+            {
+                processingThread_->removePermanentTask(id);
+            }
+            return processingThread_->pushPromiseTask(std::forward<FunctionT>(func));
+        }
+
+        /**
          * @brief Does a final task but runs it on the current calling thread.
          * Otherwise behaves like pushFinalTask.
          *
@@ -108,9 +132,22 @@ namespace SecureShell
             std::scoped_lock lock(mutex_);
             if (finalized_)
             {
-                throw std::runtime_error("Cannot push task to finalized strand.");
+                std::promise<std::invoke_result_t<std::decay_t<Func>>> promise{};
+                promise.set_exception(
+                    std::make_exception_ptr(std::runtime_error("Cannot push task to finalized strand.")));
+                return promise.get_future();
             }
             return processingThread_->pushPromiseTask(std::forward<Func>(func));
+        }
+
+        bool withinProcessingThread() const noexcept
+        {
+            return processingThread_->withinProcessingThread();
+        }
+
+        bool isFinalized() const noexcept
+        {
+            return finalized_;
         }
 
       private:

@@ -80,10 +80,10 @@ namespace SecureShell
         std::future<std::expected<std::weak_ptr<SftpSession>, SftpError>> createSftpSession();
 
       private:
-        void channelRemoveItself(Channel* channel);
+        void channelRemoveItself(Channel* channel, bool isBackElement);
         void removeAllChannels();
 
-        void sftpSessionRemoveItself(SftpSession* sftpSession);
+        void sftpSessionRemoveItself(SftpSession* sftpSession, bool isBackElement);
         void removeAllSftpSessions();
 
         /**

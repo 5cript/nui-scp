@@ -13,7 +13,8 @@ namespace SecureShell
         SharedPtrDestroyed,
         // This happens when the client does not respect the server max_write_length.
         // See: https://api.libssh.org/stable/structsftp__limits__struct.html
-        ShortWrite
+        ShortWrite,
+        FileNull,
     };
 
     struct SftpError

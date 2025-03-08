@@ -98,7 +98,7 @@ namespace SecureShell
         /**
          * @brief Closes the file and removes itself from the sftp session.
          */
-        void close();
+        void close(bool isBackElement = false);
 
       private:
         std::function<void(sftp_file)> makeFileDeleter();

@@ -7,6 +7,25 @@
 
 namespace SecureShell
 {
+    namespace
+    {
+        void removeFromContainer(auto& container, auto* ptr, bool isBackElement)
+        {
+            if (isBackElement && container.back().get() == ptr)
+            {
+                container.pop_back();
+            }
+            else
+            {
+                auto it = std::find_if(container.begin(), container.end(), [ptr](const auto& c) {
+                    return c.get() == ptr;
+                });
+                if (it != container.end())
+                    container.erase(it);
+            }
+        }
+    }
+
     Session::Session()
         : processingThread_{}
         , session_{}
@@ -15,7 +34,7 @@ namespace SecureShell
 
     void Session::start()
     {
-        processingThread_.start(std::chrono::milliseconds{100}, std::chrono::milliseconds{1});
+        processingThread_.start(std::chrono::milliseconds{1});
     }
 
     void Session::stop()
@@ -32,10 +51,8 @@ namespace SecureShell
     {
         removeAllChannels();
         removeAllSftpSessions();
-        processingThread_.pushTask([this]() {
-            session_.disconnect();
-        });
         processingThread_.stop();
+        session_.disconnect();
     }
 
     Session::~Session()
@@ -45,46 +62,34 @@ namespace SecureShell
 
     void Session::removeAllChannels()
     {
-        processingThread_.pushTask([this]() {
-            for (auto& channel : channels_)
-                channel->close();
-        });
+        while (!channels_.empty())
+        {
+            channels_.back()->close(true);
+        }
     }
 
     void Session::removeAllSftpSessions()
     {
-        processingThread_.pushTask([this]() {
-            for (auto& sftp : sftpSessions_)
-                sftp->close();
-        });
+        while (!sftpSessions_.empty())
+        {
+            sftpSessions_.back()->close(false);
+        }
     }
 
-    void Session::channelRemoveItself(Channel* channel)
+    void Session::channelRemoveItself(Channel* channel, bool isBackElement)
     {
-        processingThread_.pushTask([this, channel]() {
-            auto it = std::find_if(channels_.begin(), channels_.end(), [channel](const auto& c) {
-                return c.get() == channel;
-            });
-            if (it != channels_.end())
-                channels_.erase(it);
-        });
+        removeFromContainer(channels_, channel, isBackElement);
     }
-    void Session::sftpSessionRemoveItself(SftpSession* sftpSession)
+    void Session::sftpSessionRemoveItself(SftpSession* sftpSession, bool isBackElement)
     {
-        processingThread_.pushTask([this, sftpSession]() {
-            auto it = std::find_if(sftpSessions_.begin(), sftpSessions_.end(), [sftpSession](const auto& s) {
-                return s.get() == sftpSession;
-            });
-            if (it != sftpSessions_.end())
-                sftpSessions_.erase(it);
-        });
+        removeFromContainer(sftpSessions_, sftpSession, isBackElement);
     }
 
     std::future<std::expected<std::weak_ptr<Channel>, int>> Session::createPtyChannel(PtyCreationOptions options)
     {
         auto promise = std::make_shared<std::promise<std::expected<std::weak_ptr<Channel>, int>>>();
-        auto fut = promise->get_future();
-        processingThread_.pushTask([this, options = std::move(options), promise = std::move(promise)]() mutable {
+
+        processingThread_.pushTask([this, options = std::move(options), promise]() mutable {
             auto ptyChannel = std::make_unique<ssh::Channel>(session_);
             auto& channel = *ptyChannel;
             auto result = Detail::sequential(
@@ -122,7 +127,8 @@ namespace SecureShell
             channels_.push_back(sharedChannel);
             return promise->set_value(sharedChannel);
         });
-        return fut;
+
+        return promise->get_future();
     }
 
     std::future<std::expected<std::weak_ptr<SftpSession>, SftpError>> Session::createSftpSession()

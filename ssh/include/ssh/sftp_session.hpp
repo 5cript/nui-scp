@@ -40,7 +40,7 @@ namespace SecureShell
             return session_;
         }
 
-        void close();
+        bool close(bool isBackElement = false);
 
         struct DirectoryEntry : public SharedData::DirectoryEntry
         {
@@ -169,7 +169,7 @@ namespace SecureShell
         std::future<std::expected<sftp_limits_struct, Error>> limits();
 
       private:
-        void fileStreamRemoveItself(FileStream* stream);
+        void fileStreamRemoveItself(FileStream* stream, bool isBackElement);
         void removeAllFileStreams();
 
       private:

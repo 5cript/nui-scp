@@ -74,7 +74,7 @@ namespace SecureShell::Test
         Awaiter awaiter{};
         {
             ProcessingThread processingThread;
-            processingThread.start(std::chrono::milliseconds{1}, std::chrono::milliseconds{100});
+            processingThread.start(std::chrono::milliseconds{1});
             for (unsigned int i = 0; i < ProcessingThread::maximumTasksProcessableAtOnce * 3; ++i)
             {
                 EXPECT_TRUE(processingThread.pushTask([&counter, &awaiter] {

@@ -2,7 +2,7 @@
 
 #include <thread>
 #include <atomic>
-#include <queue>
+#include <deque>
 #include <mutex>
 #include <functional>
 #include <condition_variable>
@@ -21,7 +21,7 @@ namespace SecureShell
     class ProcessingThread
     {
       public:
-        constexpr static unsigned int maximumTasksProcessableAtOnce = 100;
+        constexpr static std::size_t maximumTasksProcessableAtOnce = 100ull;
 
         /**
          * @brief A permanent task id that can be used to remove permanent tasks.
@@ -50,9 +50,7 @@ namespace SecureShell
          * @param minimumCycleWait The minimum wait time between cycles to throttle the processing thread in case of the
          * existence of permanent tasks.
          */
-        void start(
-            std::chrono::milliseconds const& waitCycleTimeout = std::chrono::seconds{1},
-            std::chrono::milliseconds const& minimumCycleWait = std::chrono::milliseconds{0});
+        void start(std::chrono::milliseconds const& minimumCycleWait = std::chrono::milliseconds{0});
 
         /**
          * @brief Stops the processing thread. Executes all pending tasks.
@@ -146,7 +144,7 @@ namespace SecureShell
          * @return true If the current thread is the processing thread.
          * @return false If the current thread is not the processing thread.
          */
-        bool withinProcessingThread() const
+        bool withinProcessingThread() const noexcept
         {
             return processingThreadId_ == std::this_thread::get_id();
         }
@@ -159,7 +157,7 @@ namespace SecureShell
         std::unique_ptr<ProcessingStrand> createStrand();
 
       private:
-        void run(std::chrono::milliseconds const& waitCycleTimeout, std::chrono::milliseconds const& minimumCycleWait);
+        void run(std::chrono::milliseconds const& minimumCycleWait);
 
       private:
         std::thread thread_{};
@@ -172,11 +170,7 @@ namespace SecureShell
         std::atomic_bool processingPermanents_{false};
         std::vector<std::function<void()>> deferredTaskModification_{};
 
-        std::mutex taskWaitMutex_{};
-        std::condition_variable taskCondition_{};
-        bool taskAvailable_ = false;
-
-        std::queue<std::function<void()>> tasks_{};
+        std::deque<std::function<void()>> tasks_{};
         std::map<PermanentTaskId, std::function<void()>> permanentTasks_{};
     };
 }

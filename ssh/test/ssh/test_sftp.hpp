@@ -434,4 +434,36 @@ namespace SecureShell::Test
 
         EXPECT_EQ(tellResult.value(), 2);
     }
+
+    TEST_F(SftpTests, CanLetSftpSessionMoveOutOfScope)
+    {
+        CREATE_SERVER_AND_JOINER(Sftp);
+
+        {
+            auto [_, sftp] = createSftpSession(serverStartResult->port);
+        }
+    }
+
+    TEST_F(SftpTests, CanLetSftpSessionMoveOutOfScopeWithOpenFile)
+    {
+        CREATE_SERVER_AND_JOINER(Sftp);
+
+        {
+            auto [_, sftp] = createSftpSession(serverStartResult->port);
+            auto fut =
+                sftp->openFile("/home/test/file1.txt", SftpSession::OpenType::Read, std::filesystem::perms::owner_read);
+            ASSERT_EQ(fut.wait_for(1s), std::future_status::ready);
+            auto result = fut.get();
+            ASSERT_TRUE(result.has_value());
+        }
+    }
+
+    TEST_F(SftpTests, CannotCloseSftpSessionTwice)
+    {
+        CREATE_SERVER_AND_JOINER(Sftp);
+
+        auto [_, sftp] = createSftpSession(serverStartResult->port);
+        ASSERT_TRUE(sftp->close());
+        EXPECT_FALSE(sftp->close());
+    }
 }

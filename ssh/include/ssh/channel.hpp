@@ -29,14 +29,14 @@ namespace SecureShell
             return *channel_;
         }
 
-        void close();
+        bool close(bool isBackElement = false);
 
         /**
          * @brief Writes data to the channel.
          *
          * @param data The data to write
          */
-        void write(std::string data);
+        bool write(std::string data);
 
         struct Dimensions
         {
