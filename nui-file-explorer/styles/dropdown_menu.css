@@ -35,7 +35,7 @@
 
 .nui-file-grid-head-dropdown-button {
     transition: filter 0.3s ease;
-    border-left: 1px solid color-mix(in srgb, var(--nui-file-grid-border-color), white 20%);
+    border-left: 1px solid color-mix(in srgb, var(--nui-file-grid-border-color), white 35%);
     background-color: var(--nui-file-grid-dropdown-background);
     padding-left: 8px;
     padding-right: 8px;
