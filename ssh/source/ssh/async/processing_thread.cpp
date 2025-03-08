@@ -1,4 +1,5 @@
 #include <ssh/async/processing_thread.hpp>
+#include <ssh/async/processing_strand.hpp>
 
 #include <stdexcept>
 #include <future>
@@ -68,6 +69,10 @@ namespace SecureShell
         taskCondition_.notify_one();
         return true;
     }
+    std::unique_ptr<ProcessingStrand> ProcessingThread::createStrand()
+    {
+        return std::make_unique<ProcessingStrand>(this);
+    }
     std::pair<bool, ProcessingThread::PermanentTaskId> ProcessingThread::pushPermanentTask(std::function<void()> task)
     {
         if (!task)
@@ -107,14 +112,28 @@ namespace SecureShell
     }
     bool ProcessingThread::removePermanentTask(PermanentTaskId const& id)
     {
-        std::lock_guard lock{taskMutex_};
+        std::unique_lock lock{taskMutex_};
         if (processingPermanents_)
         {
-            deferredTaskModification_.push_back([this, id]() {
-                permanentTasks_.erase(id);
-                permanentTasksAvailable_ = !permanentTasks_.empty();
-            });
-            return true;
+            if (withinProcessingThread())
+            {
+                deferredTaskModification_.push_back([this, id]() {
+                    permanentTasks_.erase(id);
+                    permanentTasksAvailable_ = !permanentTasks_.empty();
+                });
+                return true;
+            }
+            else
+            {
+                std::promise<bool> promise{};
+                deferredTaskModification_.push_back([this, id, &promise]() {
+                    const bool result = permanentTasks_.erase(id) > 0;
+                    permanentTasksAvailable_ = !permanentTasks_.empty();
+                    promise.set_value(result);
+                });
+                lock.unlock();
+                return promise.get_future().wait_for(std::chrono::seconds{5}) == std::future_status::ready;
+            }
         }
 
         auto result = permanentTasks_.erase(id);

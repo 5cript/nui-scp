@@ -11,7 +11,6 @@ namespace SecureShell
         : processingThread_{}
         , session_{}
         , channels_{}
-        , channelsToRemove_{}
     {}
 
     void Session::start()
@@ -47,68 +46,37 @@ namespace SecureShell
     void Session::removeAllChannels()
     {
         processingThread_.pushTask([this]() {
-            if (!channelsToRemove_.empty())
-                removalTask();
-            channelsToRemove_ = std::move(channels_);
-            removalTask();
+            for (auto& channel : channels_)
+                channel->close();
         });
-    }
-
-    void Session::channelRemoveItself(Channel* channel)
-    {
-        if (channel)
-        {
-            processingThread_.pushTask([this, channel]() {
-                auto it = std::find_if(channels_.begin(), channels_.end(), [channel](const auto& c) {
-                    return c.get() == channel;
-                });
-                if (it != channels_.end())
-                {
-                    channelsToRemove_.push_back(*it);
-                    channels_.erase(it);
-                    removalTask();
-                }
-                else
-                {
-                    // Possibly already flagged for removal
-                }
-            });
-        }
-    }
-
-    void Session::removalTask()
-    {
-        for (const auto& toRemove : channelsToRemove_)
-        {
-            toRemove->shutdown();
-        }
-        channelsToRemove_.clear();
-    }
-
-    void Session::sftpSessionRemoveItself(SftpSession* sftpSession)
-    {
-        if (sftpSession)
-        {
-            processingThread_.pushTask([this, sftpSession]() {
-                auto it = std::find_if(sftpSessions_.begin(), sftpSessions_.end(), [sftpSession](const auto& s) {
-                    return s.get() == sftpSession;
-                });
-                if (it != sftpSessions_.end())
-                {
-                    sftpSessions_.erase(it);
-                }
-            });
-        }
     }
 
     void Session::removeAllSftpSessions()
     {
         processingThread_.pushTask([this]() {
             for (auto& sftp : sftpSessions_)
-            {
-                sftp->close(false);
-            }
-            sftpSessions_.clear();
+                sftp->close();
+        });
+    }
+
+    void Session::channelRemoveItself(Channel* channel)
+    {
+        processingThread_.pushTask([this, channel]() {
+            auto it = std::find_if(channels_.begin(), channels_.end(), [channel](const auto& c) {
+                return c.get() == channel;
+            });
+            if (it != channels_.end())
+                channels_.erase(it);
+        });
+    }
+    void Session::sftpSessionRemoveItself(SftpSession* sftpSession)
+    {
+        processingThread_.pushTask([this, sftpSession]() {
+            auto it = std::find_if(sftpSessions_.begin(), sftpSessions_.end(), [sftpSession](const auto& s) {
+                return s.get() == sftpSession;
+            });
+            if (it != sftpSessions_.end())
+                sftpSessions_.erase(it);
         });
     }
 
@@ -149,7 +117,8 @@ namespace SecureShell
                 return promise->set_value(std::unexpected(session_.getErrorCode()));
             }
 
-            auto sharedChannel = std::make_shared<Channel>(this, std::move(ptyChannel));
+            auto sharedChannel =
+                std::make_shared<Channel>(this, processingThread_.createStrand(), std::move(ptyChannel));
             channels_.push_back(sharedChannel);
             return promise->set_value(sharedChannel);
         });
@@ -182,7 +151,7 @@ namespace SecureShell
                 sftp_free(sftp);
             }
 
-            auto sftpSession = std::make_shared<SftpSession>(this, sftp);
+            auto sftpSession = std::make_shared<SftpSession>(this, processingThread_.createStrand(), sftp);
             promise->set_value(sftpSession);
             sftpSessions_.push_back(sftpSession);
         });

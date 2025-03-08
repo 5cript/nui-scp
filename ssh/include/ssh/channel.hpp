@@ -2,6 +2,7 @@
 
 #include <libssh/libsshpp.hpp>
 #include <ssh/async/processing_thread.hpp>
+#include <ssh/async/processing_strand.hpp>
 
 #include <memory>
 #include <functional>
@@ -16,7 +17,7 @@ namespace SecureShell
     class Channel : public std::enable_shared_from_this<Channel>
     {
       public:
-        Channel(Session* owner, std::unique_ptr<ssh::Channel>);
+        Channel(Session* owner, std::unique_ptr<ProcessingStrand> strand, std::unique_ptr<ssh::Channel>);
         ~Channel();
         Channel(Channel const&) = delete;
         Channel& operator=(Channel const&) = delete;
@@ -27,8 +28,6 @@ namespace SecureShell
         {
             return *channel_;
         }
-
-        void shutdown();
 
         void close();
 
@@ -79,12 +78,11 @@ namespace SecureShell
         void readTask(std::chrono::milliseconds pollTimeout = std::chrono::milliseconds{0});
 
       private:
-        std::mutex ownerMutex_;
         Session* owner_;
+        std::unique_ptr<ProcessingStrand> strand_;
         std::unique_ptr<ssh::Channel> channel_;
         std::function<void(std::string const&)> onStdout_{};
         std::function<void(std::string const&)> onStderr_{};
         std::function<void()> onExit_{};
-        std::optional<ProcessingThread::PermanentTaskId> readTaskId_{std::nullopt};
     };
 }

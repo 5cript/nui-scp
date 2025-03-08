@@ -79,7 +79,7 @@ namespace SecureShell::Test
         ASSERT_EQ(fut.wait_for(1s), std::future_status::ready);
         auto result = fut.get();
 
-        ASSERT_TRUE(result.has_value());
+        ASSERT_TRUE(result.has_value()) << result.error().toString();
         EXPECT_GT(result.value().size(), 0);
         auto it = std::find_if(result.value().begin(), result.value().end(), [](const auto& entry) {
             return entry.path == "file1.txt";

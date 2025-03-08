@@ -3,6 +3,7 @@
 #include <libssh/libsshpp.hpp>
 #include <libssh/sftp.h>
 #include <ssh/async/processing_thread.hpp>
+#include <ssh/async/processing_strand.hpp>
 #include <shared_data/directory_entry.hpp>
 #include <ssh/file_stream.hpp>
 #include <ssh/sftp_error.hpp>
@@ -27,7 +28,7 @@ namespace SecureShell
         using Error = SftpError;
         friend class FileStream;
 
-        SftpSession(Session* owner, sftp_session session);
+        SftpSession(Session* owner, std::unique_ptr<ProcessingStrand> strand, sftp_session session);
         ~SftpSession();
         SftpSession(SftpSession const&) = delete;
         SftpSession& operator=(SftpSession const&) = delete;
@@ -39,7 +40,7 @@ namespace SecureShell
             return session_;
         }
 
-        void close(bool removeSelf = true);
+        void close();
 
         struct DirectoryEntry : public SharedData::DirectoryEntry
         {
@@ -49,34 +50,13 @@ namespace SecureShell
         template <typename FunctionT>
         void perform(FunctionT&& func)
         {
-            std::scoped_lock lock{ownerMutex_};
-            if (owner_)
-                owner_->processingThread_.pushTask(std::forward<FunctionT>(func));
+            strand_->pushTask(std::forward<FunctionT>(func));
         }
 
         template <typename FunctionT>
         auto performPromise(FunctionT&& func) -> std::future<std::invoke_result_t<std::decay_t<FunctionT>>>
         {
-            using ResultType = std::invoke_result_t<std::decay_t<FunctionT>>;
-            {
-                std::scoped_lock lock{ownerMutex_};
-                if (owner_)
-                    return owner_->processingThread_.pushPromiseTask(std::forward<FunctionT>(func));
-            }
-            std::promise<ResultType> promise{};
-            promise.set_value(std::unexpected(SftpError{
-                .message = "Owner is null",
-                .wrapperError = WrapperErrors::OwnerNull,
-            }));
-            return promise.get_future();
-        }
-
-        bool awaitCycle()
-        {
-            std::scoped_lock lock{ownerMutex_};
-            if (owner_)
-                return owner_->processingThread_.awaitCycle();
-            return false;
+            return strand_->pushPromiseTask(std::forward<FunctionT>(func));
         }
 
         /**
@@ -193,8 +173,8 @@ namespace SecureShell
         void removeAllFileStreams();
 
       private:
-        std::mutex ownerMutex_;
         Session* owner_;
+        std::unique_ptr<ProcessingStrand> strand_;
         sftp_session session_;
         std::vector<std::shared_ptr<FileStream>> fileStreams_;
     };

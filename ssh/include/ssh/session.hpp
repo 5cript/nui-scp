@@ -86,8 +86,6 @@ namespace SecureShell
         void sftpSessionRemoveItself(SftpSession* sftpSession);
         void removeAllSftpSessions();
 
-        void removalTask();
-
         /**
          * @brief Shuts down the session and closes all channels.
          * The session is not usable after this.
@@ -98,7 +96,6 @@ namespace SecureShell
         SecureShell::ProcessingThread processingThread_;
         ssh::Session session_;
         std::vector<std::shared_ptr<Channel>> channels_;
-        std::vector<std::shared_ptr<Channel>> channelsToRemove_;
         std::vector<std::shared_ptr<SftpSession>> sftpSessions_;
     };
 

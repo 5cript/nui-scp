@@ -7,9 +7,9 @@
 
 namespace SecureShell
 {
-    SftpSession::SftpSession(Session* owner, sftp_session session)
-        : ownerMutex_{}
-        , owner_{owner}
+    SftpSession::SftpSession(Session* owner, std::unique_ptr<ProcessingStrand> strand, sftp_session session)
+        : owner_{owner}
+        , strand_{std::move(strand)}
         , session_{session}
         , fileStreams_{}
     {}
@@ -18,42 +18,32 @@ namespace SecureShell
         /* close makes no sense, since this lives in a shared_ptr and will only ever end here when it was already
          * removed */
     }
-    void SftpSession::close(bool removeSelf)
+    void SftpSession::close()
     {
-        removeAllFileStreams();
-        {
-            std::scoped_lock lock{ownerMutex_};
-            if (owner_)
-            {
-                if (removeSelf)
-                    owner_->sftpSessionRemoveItself(this);
-                owner_ = nullptr;
-            }
-        }
+        strand_->doFinalSync([this]() {
+            removeAllFileStreams();
+            owner_->sftpSessionRemoveItself(this);
+        });
     }
     void SftpSession::fileStreamRemoveItself(FileStream* stream)
     {
-        if (stream)
-        {
-            perform([this, stream]() {
-                fileStreams_.erase(
-                    std::remove_if(
-                        fileStreams_.begin(),
-                        fileStreams_.end(),
-                        [stream](auto const& item) {
-                            return item.get() == stream;
-                        }),
-                    fileStreams_.end());
-            });
-            awaitCycle();
-        }
+        perform([this, stream]() {
+            fileStreams_.erase(
+                std::remove_if(
+                    fileStreams_.begin(),
+                    fileStreams_.end(),
+                    [stream](auto const& item) {
+                        return item.get() == stream;
+                    }),
+                fileStreams_.end());
+        });
     }
     void SftpSession::removeAllFileStreams()
     {
         perform([this]() {
-            fileStreams_.clear();
+            for (auto& stream : fileStreams_)
+                stream->close();
         });
-        awaitCycle();
     }
     SftpSession::DirectoryEntry SftpSession::DirectoryEntry::fromSftpAttributes(sftp_attributes attributes)
     {

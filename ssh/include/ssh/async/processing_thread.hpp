@@ -8,9 +8,12 @@
 #include <condition_variable>
 #include <map>
 #include <future>
+#include <memory>
 
 namespace SecureShell
 {
+    class ProcessingStrand;
+
     class ProcessingThread
     {
       public:
@@ -71,6 +74,8 @@ namespace SecureShell
         {
             return processingThreadId_ == std::this_thread::get_id();
         }
+
+        std::unique_ptr<ProcessingStrand> createStrand();
 
       private:
         void run(std::chrono::milliseconds const& waitCycleTimeout, std::chrono::milliseconds const& minimumCycleWait);

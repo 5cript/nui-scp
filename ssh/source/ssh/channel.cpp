@@ -3,8 +3,9 @@
 
 namespace SecureShell
 {
-    Channel::Channel(Session* owner, std::unique_ptr<ssh::Channel> channel)
+    Channel::Channel(Session* owner, std::unique_ptr<ProcessingStrand> strand, std::unique_ptr<ssh::Channel> channel)
         : owner_{owner}
+        , strand_{std::move(strand)}
         , channel_{std::move(channel)}
     {}
     Channel::~Channel()
@@ -14,53 +15,42 @@ namespace SecureShell
     }
     Channel::Channel(Channel&& other)
         : owner_{std::exchange(other.owner_, nullptr)}
+        , strand_{std::move(other.strand_)}
+        , channel_{std::move(other.channel_)}
     {}
     Channel& Channel::operator=(Channel&& other)
     {
-        std::scoped_lock lock{ownerMutex_, other.ownerMutex_};
         if (this != &other)
         {
             owner_ = std::exchange(other.owner_, nullptr);
+            strand_ = std::exchange(other.strand_, nullptr);
+            channel_ = std::exchange(other.channel_, nullptr);
         }
         return *this;
     }
-    void Channel::shutdown()
-    {
-        {
-            std::scoped_lock lock{ownerMutex_};
-            if (owner_ && readTaskId_)
-                owner_->processingThread_.removePermanentTask(*readTaskId_);
-        }
-        if (channel_ && channel_->isOpen())
-        {
-            channel_->sendEof();
-            channel_->close();
-        }
-        channel_.reset();
-    }
     void Channel::close()
     {
-        shutdown();
-        decltype(owner_) cpy = nullptr;
-        {
-            std::scoped_lock lock{ownerMutex_};
-            cpy = std::exchange(owner_, nullptr);
-        }
-        cpy->channelRemoveItself(this);
+        strand_->doFinalSync([this]() {
+            if (channel_ && channel_->isOpen())
+            {
+                channel_->sendEof();
+                channel_->close();
+            }
+            channel_.reset();
+            owner_->channelRemoveItself(this);
+        });
     }
     void Channel::write(std::string data)
     {
-        std::scoped_lock lock{ownerMutex_};
-        owner_->processingThread_.pushTask([this, data = std::move(data)]() {
+        strand_->pushTask([this, data = std::move(data)]() {
             if (channel_)
                 channel_->write(data.data(), data.size());
         });
     }
     std::future<int> Channel::resizePty(int cols, int rows)
     {
-        std::scoped_lock lock{ownerMutex_};
         auto promise = std::make_shared<std::promise<int>>();
-        owner_->processingThread_.pushTask([this, cols, rows, promise]() {
+        strand_->pushTask([this, cols, rows, promise]() {
             if (channel_)
                 promise->set_value(channel_->changePtySize(cols, rows));
             else
@@ -120,22 +110,17 @@ namespace SecureShell
         std::function<void(std::string const&)> onStderr,
         std::function<void()> onExit)
     {
-        std::scoped_lock lock{ownerMutex_};
-
         onStdout_ = std::move(onStdout);
         onStderr_ = std::move(onStderr);
         onExit_ = std::move(onExit);
 
-        auto [success, id] = owner_->processingThread_.pushPermanentTask([this]() {
+        auto [success, id] = strand_->pushPermanentTask([this]() {
             readTask();
         });
         if (!success)
         {
-            // TODO: ???
-        }
-        else
-        {
-            readTaskId_ = id;
+            // TODO: Do I want to throw here?
+            throw std::runtime_error("Failed to start reading.");
         }
     }
 }
