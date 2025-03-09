@@ -21,9 +21,12 @@ namespace SecureShell::Test
         {
             if (std::filesystem::exists(programDirectory / "temp" / "log.txt"))
             {
+                if (!std::filesystem::exists(programDirectory / "logs"))
+                    std::filesystem::create_directory(programDirectory / "logs");
+
                 std::filesystem::rename(
                     programDirectory / "temp" / "log.txt",
-                    programDirectory / "temp" /
+                    programDirectory / "logs" /
                         ("log_"s + ::testing::UnitTest::GetInstance()->current_test_info()->test_case_name() + "_"s +
                          ::testing::UnitTest::GetInstance()->current_test_info()->name() + ".txt"));
             }
@@ -465,5 +468,28 @@ namespace SecureShell::Test
         auto [_, sftp] = createSftpSession(serverStartResult->port);
         ASSERT_TRUE(sftp->close());
         EXPECT_FALSE(sftp->close());
+    }
+
+    TEST_F(SftpTests, CanStatFileUsingFileStream)
+    {
+        CREATE_SERVER_AND_JOINER(Sftp);
+        auto [_, sftp] = createSftpSession(serverStartResult->port);
+
+        auto fut =
+            sftp->openFile("/home/test/file1.txt", SftpSession::OpenType::Read, std::filesystem::perms::owner_read);
+        ASSERT_EQ(fut.wait_for(1s), std::future_status::ready);
+        auto result = fut.get();
+        ASSERT_TRUE(result.has_value());
+
+        auto fileWeak = std::move(result).value();
+        auto file = fileWeak.lock();
+        ASSERT_TRUE(file);
+
+        auto statFut = file->stat();
+        ASSERT_EQ(statFut.wait_for(1s), std::future_status::ready);
+        auto statResult = statFut.get();
+        ASSERT_TRUE(statResult.has_value());
+
+        EXPECT_GT(statResult.value().size, 0);
     }
 }

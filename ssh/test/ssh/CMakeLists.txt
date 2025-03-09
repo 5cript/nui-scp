@@ -11,6 +11,7 @@ find_package(Boost CONFIG REQUIRED COMPONENTS filesystem asio system process)
 target_link_libraries(
     nui-scp-ssh-test
     PUBLIC
+        utility
         secure-shell
         GTest::GTest
         GTest::Main

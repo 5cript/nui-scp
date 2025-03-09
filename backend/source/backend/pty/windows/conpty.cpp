@@ -47,6 +47,7 @@ namespace ConPTY
 #pragma clang diagnostic push
 // This is winapi for you.
 #pragma clang diagnostic ignored "-Wcast-function-type-strict"
+#pragma clang diagnostic ignored "-Wcast-function-type-mismatch"
             , createPseudoConsole{reinterpret_cast<CreatePseudoConsoleFn>(
                   GetProcAddress(kernel32, "CreatePseudoConsole"))}
             , resizePseudoConsole{reinterpret_cast<ResizePseudoConsoleFn>(

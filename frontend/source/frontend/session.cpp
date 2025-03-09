@@ -8,6 +8,7 @@
 #include <frontend/classes.hpp>
 #include <frontend/dialog/input_dialog.hpp>
 #include <frontend/session_components/session_options.hpp>
+#include <frontend/session_components/operation_queue.hpp>
 #include <nui-file-explorer/file_grid.hpp>
 #include <persistence/state_holder.hpp>
 #include <constants/layouts.hpp>
@@ -53,7 +54,8 @@ struct Session::Implementation
     ConfirmDialog* confirmDialog;
 
     // Operation Queue for File Explorer
-    std::shared_ptr<Nui::Dom::Element> operationQueue;
+    OperationQueue operationQueue;
+    std::shared_ptr<Nui::Dom::Element> operationQueueElement;
 
     // File Explorer Things:
     NuiFileExplorer::FileGrid fileGrid;
@@ -101,6 +103,8 @@ struct Session::Implementation
         , options{this->engine.terminalOptions.value()}
         , newItemAskDialog{newItemAskDialog}
         , confirmDialog{confirmDialog}
+        , operationQueue{this->stateHolder, this->events, this->initialName, this->id, this->confirmDialog}
+        , operationQueueElement{}
         , fileGrid{{
               .pathBarOnTop = uiOptions.fileGridPathBarOnTop,
           }}
@@ -602,16 +606,7 @@ void Session::visible(bool value)
 
 auto Session::makeOperationQueueElement() -> Nui::ElementRenderer
 {
-    using Nui::Elements::div; // because of the global div.
-    using namespace Nui::Attributes;
-
-    // clang-format off
-    return div{
-        style = "width: 100%; height: auto; display: block",
-    }(
-        "OPERATION QUEUE HERE"
-    );
-    // clang-format on
+    return impl_->operationQueue();
 }
 
 void Session::onChannelClosedByUser(Ids::ChannelId const& channelId)
@@ -733,21 +728,21 @@ void Session::initializeLayout()
                 return Nui::val::undefined();
             }),
             Nui::bind([this]() -> Nui::val {
-                if (impl_->operationQueue)
+                if (impl_->operationQueueElement)
                 {
                     Log::warn("There is already an operation queue, cannot open another one");
                     return Nui::val::undefined();
                 }
-                impl_->operationQueue = Nui::Dom::makeStandaloneElement(makeOperationQueueElement());
-                return impl_->operationQueue->val();
+                impl_->operationQueueElement = Nui::Dom::makeStandaloneElement(makeOperationQueueElement());
+                return impl_->operationQueueElement->val();
             }),
             Nui::bind([this]() -> Nui::val {
-                if (!impl_->operationQueue)
+                if (!impl_->operationQueueElement)
                 {
                     Log::warn("There is no operation queue to remove");
                     return Nui::val::undefined();
                 }
-                impl_->operationQueue.reset();
+                impl_->operationQueueElement.reset();
                 return Nui::val::undefined();
             }),
             Nui::bind([this]() -> Nui::val {

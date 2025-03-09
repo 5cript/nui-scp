@@ -1,12 +1,11 @@
 #pragma once
 
-#include <ssh/file_stream_interface.hpp>
+#include <ssh/async/processing_strand.hpp>
 #include <ssh/sftp_error.hpp>
 #include <ssh/file_information.hpp>
 
 #include <libssh/sftp.h>
 
-#include <memory>
 #include <functional>
 #include <future>
 #include <expected>
@@ -16,43 +15,41 @@ namespace SecureShell
     class Session;
     class SftpSession;
 
-    class FileStream
-        : public IFileStream
-        , public std::enable_shared_from_this<FileStream>
+    class IFileStream
     {
       public:
-        FileStream(std::shared_ptr<SftpSession> sftp, sftp_file file, sftp_limits_struct limits);
-        ~FileStream() override;
-        FileStream(FileStream const&) = delete;
-        FileStream& operator=(FileStream const&) = delete;
-        FileStream(FileStream&&);
-        FileStream& operator=(FileStream&&);
+        IFileStream() = default;
+        virtual ~IFileStream() = default;
+        IFileStream(IFileStream const&) = default;
+        IFileStream& operator=(IFileStream const&) = default;
+        IFileStream(IFileStream&&) = default;
+        IFileStream& operator=(IFileStream&&) = default;
 
         /**
          * @brief Moves the file pointer to the specified position.
          *
          * @param pos Where to move the file pointer to.
          */
-        std::future<std::expected<void, SftpError>> seek(std::size_t pos) override;
+        virtual std::future<std::expected<void, SftpError>> seek(std::size_t pos) = 0;
 
         /**
          * @brief Tells the current position in the file.
          *
          * @return std::future<std::expected<std::size_t, SftpError>> The current position or an error.
          */
-        std::future<std::expected<std::size_t, SftpError>> tell() override;
+        virtual std::future<std::expected<std::size_t, SftpError>> tell() = 0;
 
         /**
          * @brief Retrieves information about the file.
          *
          * @return std::future<std::expected<FileInformation, SftpError>>
          */
-        std::future<std::expected<FileInformation, SftpError>> stat() override;
+        virtual std::future<std::expected<FileInformation, SftpError>> stat() = 0;
 
         /**
          * @brief Rewind the file to the beginning.
          */
-        std::future<std::expected<void, SftpError>> rewind() override;
+        virtual std::future<std::expected<void, SftpError>> rewind() = 0;
 
         /**
          * @brief Reads some bytes from the file. Not necessarily fills the buffer. bufferSize MUST be less than or
@@ -62,7 +59,7 @@ namespace SecureShell
          * @param bufferSize
          * @return std::future<std::expected<std::size_t, SftpError>>
          */
-        std::future<std::expected<std::size_t, SftpError>> read(std::byte* buffer, std::size_t bufferSize) override;
+        virtual std::future<std::expected<std::size_t, SftpError>> read(std::byte* buffer, std::size_t bufferSize) = 0;
 
         /**
          * @brief Reads all bytes from the file.
@@ -70,8 +67,8 @@ namespace SecureShell
          * @param onRead Let this function return false to stop reading.
          * @return std::future<std::expected<std::size_t, SftpError>> The number of bytes read or an error.
          */
-        std::future<std::expected<std::size_t, SftpError>>
-        read(std::function<bool(std::string_view data)> onRead) override;
+        virtual std::future<std::expected<std::size_t, SftpError>>
+        read(std::function<bool(std::string_view data)> onRead) = 0;
 
         /**
          * @brief Writes some bytes to the file.
@@ -82,7 +79,7 @@ namespace SecureShell
          * @param bufferSize
          * @return std::future<std::expected<void, SftpError>>
          */
-        std::future<std::expected<void, SftpError>> write(std::string_view data) override;
+        virtual std::future<std::expected<void, SftpError>> write(std::string_view data) = 0;
 
         /**
          * @brief Returns the maximum number of bytes that can be written in a single pure write operation.
@@ -90,14 +87,14 @@ namespace SecureShell
          *
          * @return std::size_t
          */
-        std::size_t writeLengthLimit() const override;
+        virtual std::size_t writeLengthLimit() const = 0;
 
         /**
          * @brief Returns the maximum number of bytes that can be read in a single pure read operation.
          *
          * @return std::size_t
          */
-        std::size_t readLengthLimit() const override;
+        virtual std::size_t readLengthLimit() const = 0;
 
         /**
          * @brief Brings this class into an invalid state and returns the sftp_file. The ownership of the file is
@@ -105,31 +102,18 @@ namespace SecureShell
          *
          * @return sftp_file
          */
-        sftp_file release() override;
+        virtual sftp_file release() = 0;
 
         /**
          * @brief Closes the file and removes itself from the sftp session.
          */
-        void close(bool isBackElement = false) override;
+        virtual void close(bool isBackElement = false) = 0;
 
-        ProcessingStrand* strand() const override;
-
-      private:
-        std::function<void(sftp_file)> makeFileDeleter();
-
-        template <typename FunctionT>
-        void perform(FunctionT&& func);
-
-        template <typename FunctionT>
-        auto performPromise(FunctionT&& func);
-
-        SftpError lastError() const;
-
-        void writePart(std::string_view toWrite, std::function<void(std::expected<void, SftpError>&&)> onWriteComplete);
-
-      private:
-        std::weak_ptr<SftpSession> sftp_;
-        std::unique_ptr<sftp_file_struct, std::function<void(sftp_file)>> file_;
-        sftp_limits_struct limits_;
+        /**
+         * @brief Returns the processing strand of the file stream.
+         *
+         * @return void*
+         */
+        virtual ProcessingStrand* strand() const = 0;
     };
 }

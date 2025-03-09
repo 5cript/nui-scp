@@ -54,12 +54,23 @@ class SshSessionManager
     void registerRpcSftpCreateDirectory(Nui::Window&, Nui::RpcHub& hub);
     void registerRpcSftpCreateFile(Nui::Window&, Nui::RpcHub& hub);
 
+    // Sftp Files:
+
   private:
     std::mutex passwordProvidersMutex_{};
     std::mutex addSessionMutex_{};
     std::unordered_map<Ids::SessionId, std::unique_ptr<SecureShell::Session>, Ids::IdHash> sessions_{};
     std::unordered_map<Ids::ChannelId, std::weak_ptr<SecureShell::Channel>, Ids::IdHash> channels_{};
-    std::unordered_map<Ids::ChannelId, std::weak_ptr<SecureShell::SftpSession>, Ids::IdHash> sftpChannels_{};
+    struct SftpSession
+    {
+        std::weak_ptr<SecureShell::SftpSession> sftp{};
+        std::unordered_map<Ids::FileId, SecureShell::FileStream, Ids::IdHash> fileStreams{};
+
+        SftpSession(std::weak_ptr<SecureShell::SftpSession> sftp)
+            : sftp{std::move(sftp)}
+        {}
+    };
+    std::unordered_map<Ids::ChannelId, SftpSession, Ids::IdHash> sftpChannels_{};
     std::map<int, PasswordProvider*> passwordProviders_{};
     std::unique_ptr<std::thread> addSessionThread_{};
     std::vector<SecureShell::PasswordCacheEntry> pwCache_{};

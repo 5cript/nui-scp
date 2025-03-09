@@ -311,8 +311,9 @@ void SshSessionManager::registerRpcChannelClose(Nui::Window&, Nui::RpcHub& hub)
                 }
                 else if (auto iter = sftpChannels_.find(channelId); iter != sftpChannels_.end())
                 {
-                    if (auto channel = iter->second.lock(); channel)
+                    if (auto channel = iter->second.sftp.lock(); channel)
                     {
+                        iter->second.fileStreams.clear();
                         channel->close();
                     }
                     sftpChannels_.erase(iter);
@@ -487,7 +488,7 @@ void SshSessionManager::registerRpcSftpListDirectory(Nui::Window&, Nui::RpcHub& 
                     return;
                 }
 
-                auto locked = channel->second.lock();
+                auto locked = channel->second.sftp.lock();
                 if (!locked)
                 {
                     Log::error("Failed to lock sftp channel with id: {}", channelId.value());
@@ -551,7 +552,7 @@ void SshSessionManager::registerRpcSftpCreateDirectory(Nui::Window&, Nui::RpcHub
                     return;
                 }
 
-                auto locked = channel->second.lock();
+                auto locked = channel->second.sftp.lock();
                 if (!locked)
                 {
                     Log::error("Failed to lock sftp channel with id: {}", channelId.value());
@@ -615,7 +616,7 @@ void SshSessionManager::registerRpcSftpCreateFile(Nui::Window&, Nui::RpcHub& hub
                     return;
                 }
 
-                auto locked = channel->second.lock();
+                auto locked = channel->second.sftp.lock();
                 if (!locked)
                 {
                     Log::error("Failed to lock sftp channel with id: {}", channelId.value());

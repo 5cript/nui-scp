@@ -2,10 +2,10 @@
 
 #include <ssh/async/processing_thread.hpp>
 
-#include <set>
 #include <future>
 #include <functional>
 #include <mutex>
+#include <set>
 
 namespace SecureShell
 {

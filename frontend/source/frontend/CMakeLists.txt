@@ -13,6 +13,7 @@ target_sources(
         dialog/password_prompter.cpp
         dialog/confirm_dialog.cpp
         session_components/session_options.cpp
+        session_components/operation_queue.cpp
         terminal/terminal.cpp
         terminal/executing_engine.cpp
         terminal/sftp_file_engine.cpp

@@ -4,7 +4,7 @@
 #include <libssh/sftp.h>
 #include <ssh/async/processing_thread.hpp>
 #include <ssh/async/processing_strand.hpp>
-#include <shared_data/directory_entry.hpp>
+#include <ssh/file_information.hpp>
 #include <ssh/file_stream.hpp>
 #include <ssh/sftp_error.hpp>
 #include <ssh/session.hpp>
@@ -42,11 +42,6 @@ namespace SecureShell
 
         bool close(bool isBackElement = false);
 
-        struct DirectoryEntry : public SharedData::DirectoryEntry
-        {
-            static DirectoryEntry fromSftpAttributes(sftp_attributes attributes);
-        };
-
         template <typename FunctionT>
         void perform(FunctionT&& func)
         {
@@ -68,9 +63,10 @@ namespace SecureShell
          * @brief Lists the contents of a directory.
          *
          * @param path
-         * @return std::future<std::expected<std::vector<DirectoryEntry>, Error>>
+         * @return std::future<std::expected<std::vector<FileInformation>, Error>>
          */
-        std::future<std::expected<std::vector<DirectoryEntry>, Error>> listDirectory(std::filesystem::path const& path);
+        std::future<std::expected<std::vector<FileInformation>, Error>>
+        listDirectory(std::filesystem::path const& path);
 
         /**
          * @brief Create a directory.
@@ -115,16 +111,16 @@ namespace SecureShell
          * @brief Gets the attributes of a file or directory.
          *
          * @param path
-         * @return std::future<std::expected<DirectoryEntry, Error>>
+         * @return std::future<std::expected<FileInformation, Error>>
          */
-        std::future<std::expected<DirectoryEntry, Error>> stat(std::filesystem::path const& path);
+        std::future<std::expected<FileInformation, Error>> stat(std::filesystem::path const& path);
 
         /**
          * @brief Sets the attributes of a file or directory.
          *
          * @param path
          * @param attributes
-         * @return std::future<std::expected<DirectoryEntry, Error>>
+         * @return std::future<std::expected<FileInformation, Error>>
          */
         std::future<std::expected<void, Error>> stat(std::filesystem::path const& path, sftp_attributes attributes);
 

@@ -92,6 +92,17 @@ namespace SecureShell
             return {};
         });
     }
+    std::future<std::expected<FileInformation, SftpError>> FileStream::stat()
+    {
+        return performPromise([this]() -> std::expected<FileInformation, SftpError> {
+            VERIFY_FILE_STREAM();
+            std::unique_ptr<sftp_attributes_struct, decltype(&sftp_attributes_free)> attributes{
+                sftp_fstat(file_.get()), sftp_attributes_free};
+            if (attributes == nullptr)
+                return std::unexpected(lastError());
+            return FileInformation::fromSftpAttributes(attributes.get());
+        });
+    }
     std::future<std::expected<std::size_t, SftpError>> FileStream::tell()
     {
         return performPromise([this]() -> std::expected<std::size_t, SftpError> {
@@ -141,12 +152,14 @@ namespace SecureShell
             std::string buffer;
             std::function<bool(std::string_view data)> callback;
             std::promise<std::expected<std::size_t, SftpError>> promise;
+            std::size_t totalRead;
 
             ReadState(FileStream& stream, std::size_t limit, std::function<bool(std::string_view data)> callback)
                 : stream{stream}
                 , buffer(std::min(4096ull, limit), '\0')
                 , callback{std::move(callback)}
                 , promise{}
+                , totalRead{0}
             {}
 
             void onRead(std::make_signed_t<std::size_t> amount)
@@ -160,14 +173,16 @@ namespace SecureShell
 
                 if (amount == 0)
                 {
-                    promise.set_value(static_cast<std::size_t>(buffer.size()));
+                    promise.set_value(totalRead);
                     callback({});
                     return;
                 }
 
+                totalRead += amount;
+
                 if (!callback({buffer.data(), static_cast<std::size_t>(amount)}))
                 {
-                    promise.set_value(static_cast<std::size_t>(buffer.size()));
+                    promise.set_value(totalRead);
                     return;
                 }
 
@@ -228,6 +243,11 @@ namespace SecureShell
 
             writePart(toWrite.substr(written), std::move(onWriteComplete));
         });
+    }
+    ProcessingStrand* FileStream::strand() const
+    {
+        auto sftp = sftp_.lock();
+        return sftp ? sftp->strand_.get() : nullptr;
     }
     std::future<std::expected<void, SftpError>> FileStream::write(std::string_view data)
     {
