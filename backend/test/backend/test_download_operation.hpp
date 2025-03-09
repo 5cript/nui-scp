@@ -8,6 +8,12 @@
 
 #include <gtest/gtest.h>
 
+#include <thread>
+#include <string>
+#include <memory>
+#include <tuple>
+#include <vector>
+
 using namespace std::chrono_literals;
 using namespace std::string_literals;
 
@@ -20,6 +26,9 @@ namespace Test
       protected:
         void SetUp() override
         {
+            for (int i = 0; i != 10; ++i)
+                fakeFileContent_ += "This is a test file content.\n";
+
             processingThread_.start(5ms);
         }
 
@@ -84,14 +93,19 @@ namespace Test
             if (chunkSize == 0)
             {
                 readPromise_.set_value(readOffset_);
-                onRead_({});
+                onReadResult_ = onRead_({});
                 return;
             }
 
             if (onRead_)
             {
-                onRead_(std::string_view{fakeFileContent_}.substr(readOffset_, chunkSize));
+                onReadResult_ = onRead_(std::string_view{fakeFileContent_}.substr(readOffset_, chunkSize));
                 readOffset_ += chunkSize;
+                if (!onReadResult_)
+                {
+                    readPromise_.set_value(readOffset_);
+                    return;
+                }
             }
             else
             {
@@ -99,14 +113,21 @@ namespace Test
             }
         }
 
+        std::string readFile(std::filesystem::path const& path)
+        {
+            std::ifstream file{path};
+            return std::string{std::istreambuf_iterator<char>{file}, std::istreambuf_iterator<char>{}};
+        }
+
       protected:
-        std::string fakeFileContent_{"Hello, World!"};
+        std::string fakeFileContent_{};
         Utility::TemporaryDirectory isolateDirectory_{programDirectory / "temp", true};
         SecureShell::ProcessingThread processingThread_{};
         std::unique_ptr<SecureShell::ProcessingStrand> strand_{processingThread_.createStrand()};
         std::promise<std::expected<std::size_t, SecureShell::SftpError>> readPromise_{};
         std::function<bool(std::string_view data)> onRead_{};
         std::size_t readOffset_{0};
+        bool onReadResult_{true};
     };
 
     TEST_F(DownloadOperationTests, CanCreateDownloadOperation)
@@ -340,7 +361,7 @@ namespace Test
         EXPECT_TRUE(result.has_value());
         EXPECT_TRUE(std::filesystem::exists(options.localPath.generic_string() + ".filepart"));
 
-        operation.cancel();
+        EXPECT_TRUE(operation.cancel().has_value());
 
         EXPECT_TRUE(std::filesystem::exists(options.localPath.generic_string() + ".filepart"));
     }
@@ -371,7 +392,7 @@ namespace Test
         EXPECT_TRUE(result.has_value());
         EXPECT_TRUE(std::filesystem::exists(options.localPath.generic_string() + ".filepart"));
 
-        operation.cancel();
+        EXPECT_TRUE(operation.cancel().has_value());
 
         EXPECT_FALSE(std::filesystem::exists(options.localPath.generic_string() + ".filepart"));
     }
@@ -398,7 +419,7 @@ namespace Test
 
         auto result = operation.prepare();
         EXPECT_TRUE(result.has_value());
-        operation.cancel();
+        EXPECT_TRUE(operation.cancel().has_value());
 
         auto future = completionPromise.get_future();
         ASSERT_EQ(future.wait_for(1s), std::future_status::ready);
@@ -460,5 +481,438 @@ namespace Test
         result = operation.start();
         EXPECT_FALSE(result.has_value());
         EXPECT_EQ(result.error().type, DownloadOperation::ErrorType::FileStreamExpired);
+    }
+
+    TEST_F(DownloadOperationTests, StartCallsReadOnFileStream)
+    {
+        using namespace SecureShell;
+
+        auto fileStream = makeFileStreamMock();
+        giveMockDefaultStat(fileStream, 42);
+        giveMockExpectedRead(fileStream);
+
+        auto options = DownloadOperation::DownloadOperationOptions{
+            .localPath = isolateDirectory_.path() / "file.txt",
+        };
+        DownloadOperation operation{fileStream, options};
+
+        auto result = operation.prepare();
+        EXPECT_TRUE(result.has_value());
+
+        result = operation.start();
+        EXPECT_TRUE(result.has_value());
+    }
+
+    TEST_F(DownloadOperationTests, PrepareReservesSpaceForFile)
+    {
+        using namespace SecureShell;
+
+        auto fileStream = makeFileStreamMock();
+        giveMockDefaultStat(fileStream, fakeFileContent_.size());
+        giveMockExpectedRead(fileStream);
+
+        auto options = DownloadOperation::DownloadOperationOptions{
+            .localPath = isolateDirectory_.path() / "file.txt",
+            .reserveSpace = true,
+            .doCleanup = false,
+        };
+        DownloadOperation operation{fileStream, options};
+
+        auto result = operation.prepare();
+        EXPECT_TRUE(result.has_value());
+
+        EXPECT_TRUE(operation.cancel().has_value());
+
+        EXPECT_EQ(
+            std::filesystem::file_size(options.localPath.generic_string() + ".filepart"), fakeFileContent_.size());
+    }
+
+    TEST_F(DownloadOperationTests, ReadCycleWritesDataToFile)
+    {
+        using namespace SecureShell;
+
+        auto fileStream = makeFileStreamMock();
+        giveMockDefaultStat(fileStream, fakeFileContent_.size());
+        giveMockExpectedRead(fileStream);
+
+        auto options = DownloadOperation::DownloadOperationOptions{
+            .localPath = isolateDirectory_.path() / "file.txt",
+            .doCleanup = false,
+        };
+        DownloadOperation operation{fileStream, options};
+
+        auto result = operation.prepare();
+        EXPECT_TRUE(result.has_value());
+
+        result = operation.start();
+        EXPECT_TRUE(result.has_value());
+
+        fakeReadCycle(5);
+        fakeReadCycle(0); // EOF Cycle
+
+        EXPECT_TRUE(operation.cancel().has_value());
+
+        EXPECT_EQ(std::filesystem::file_size(options.localPath.generic_string() + ".filepart"), 5);
+        EXPECT_EQ(readFile(options.localPath.generic_string() + ".filepart"), fakeFileContent_.substr(0, 5));
+    }
+
+    TEST_F(DownloadOperationTests, ReadWritesFileThroughMultipleCycles)
+    {
+        using namespace SecureShell;
+
+        auto fileStream = makeFileStreamMock();
+        giveMockDefaultStat(fileStream, fakeFileContent_.size());
+        giveMockExpectedRead(fileStream);
+
+        auto options = DownloadOperation::DownloadOperationOptions{
+            .localPath = isolateDirectory_.path() / "file.txt",
+            .doCleanup = false,
+        };
+        DownloadOperation operation{fileStream, options};
+
+        auto result = operation.prepare();
+        EXPECT_TRUE(result.has_value());
+
+        result = operation.start();
+        EXPECT_TRUE(result.has_value());
+
+        for (std::size_t i = 0; i < fakeFileContent_.size(); ++i)
+            fakeReadCycle(1);
+        fakeReadCycle(0); // EOF Cycle
+
+        EXPECT_TRUE(operation.cancel().has_value());
+
+        EXPECT_EQ(
+            std::filesystem::file_size(options.localPath.generic_string() + ".filepart"), fakeFileContent_.size());
+        EXPECT_EQ(readFile(options.localPath.generic_string() + ".filepart"), fakeFileContent_);
+    }
+
+    TEST_F(DownloadOperationTests, ReadWritesFileThroughSingleCycle)
+    {
+        using namespace SecureShell;
+
+        auto fileStream = makeFileStreamMock();
+        giveMockDefaultStat(fileStream, fakeFileContent_.size());
+        giveMockExpectedRead(fileStream);
+
+        auto options = DownloadOperation::DownloadOperationOptions{
+            .localPath = isolateDirectory_.path() / "file.txt",
+            .doCleanup = false,
+        };
+        DownloadOperation operation{fileStream, options};
+
+        auto result = operation.prepare();
+        EXPECT_TRUE(result.has_value());
+
+        result = operation.start();
+        EXPECT_TRUE(result.has_value());
+
+        fakeReadCycle(fakeFileContent_.size());
+        fakeReadCycle(0); // EOF Cycle
+
+        EXPECT_TRUE(operation.cancel().has_value());
+
+        EXPECT_EQ(
+            std::filesystem::file_size(options.localPath.generic_string() + ".filepart"), fakeFileContent_.size());
+        EXPECT_EQ(readFile(options.localPath.generic_string() + ".filepart"), fakeFileContent_);
+    }
+
+    TEST_F(DownloadOperationTests, CanPauseRead)
+    {
+        using namespace SecureShell;
+
+        auto fileStream = makeFileStreamMock();
+        giveMockDefaultStat(fileStream, fakeFileContent_.size());
+        giveMockExpectedRead(fileStream);
+
+        auto options = DownloadOperation::DownloadOperationOptions{
+            .localPath = isolateDirectory_.path() / "file.txt",
+            .doCleanup = false,
+        };
+        DownloadOperation operation{fileStream, options};
+
+        auto result = operation.prepare();
+        EXPECT_TRUE(result.has_value());
+
+        result = operation.start();
+        EXPECT_TRUE(result.has_value());
+
+        fakeReadCycle(5);
+
+        std::expected<void, DownloadOperation::Error> pauseResult;
+        std::promise<void> threadStarted;
+        std::thread asyncPause{[&operation, &pauseResult, &threadStarted]() {
+            threadStarted.set_value();
+            pauseResult = operation.pause();
+        }};
+        threadStarted.get_future().wait();
+        // dont know actually how to wait for the pause, except for burdening the wait on the user.
+        std::this_thread::sleep_for(200ms);
+
+        // This one still goes through but now signals a stop to the read.
+        fakeReadCycle(5);
+
+        asyncPause.join();
+
+        EXPECT_TRUE(operation.cancel().has_value());
+
+        EXPECT_EQ(onReadResult_, false);
+        EXPECT_EQ(std::filesystem::file_size(options.localPath.generic_string() + ".filepart"), 10);
+        EXPECT_EQ(readFile(options.localPath.generic_string() + ".filepart"), fakeFileContent_.substr(0, 10));
+    }
+
+    TEST_F(DownloadOperationTests, CanContinueReadingAfterPause)
+    {
+        using namespace SecureShell;
+
+        auto fileStream = makeFileStreamMock();
+        giveMockDefaultStat(fileStream, fakeFileContent_.size());
+        giveMockExpectedRead(fileStream);
+
+        auto options = DownloadOperation::DownloadOperationOptions{
+            .localPath = isolateDirectory_.path() / "file.txt",
+            .doCleanup = false,
+        };
+        DownloadOperation operation{fileStream, options};
+
+        auto result = operation.prepare();
+        EXPECT_TRUE(result.has_value());
+
+        result = operation.start();
+        EXPECT_TRUE(result.has_value());
+
+        fakeReadCycle(5);
+
+        std::expected<void, DownloadOperation::Error> pauseResult;
+        std::promise<void> threadStarted;
+        std::thread asyncPause{[&operation, &pauseResult, &threadStarted]() {
+            threadStarted.set_value();
+            pauseResult = operation.pause();
+        }};
+        threadStarted.get_future().wait();
+        // dont know actually how to wait for the pause, except for burdening the wait on the user.
+        std::this_thread::sleep_for(200ms);
+
+        // This one still goes through but now signals a stop to the read.
+        fakeReadCycle(5);
+
+        asyncPause.join();
+
+        EXPECT_EQ(onReadResult_, false);
+
+        result = operation.start();
+        EXPECT_TRUE(result.has_value());
+
+        // This one should go through and continue the read.
+        fakeReadCycle(fakeFileContent_.size() - 10);
+        fakeReadCycle(0); // EOF Cycle
+
+        result = operation.cancel();
+        EXPECT_TRUE(result.has_value());
+
+        EXPECT_EQ(onReadResult_, true);
+        EXPECT_EQ(
+            std::filesystem::file_size(options.localPath.generic_string() + ".filepart"), fakeFileContent_.size());
+        EXPECT_EQ(readFile(options.localPath.generic_string() + ".filepart"), fakeFileContent_);
+    }
+
+    TEST_F(DownloadOperationTests, CannotFinalizeWhileReading)
+    {
+        using namespace SecureShell;
+
+        auto fileStream = makeFileStreamMock();
+        giveMockDefaultStat(fileStream, fakeFileContent_.size());
+        giveMockExpectedRead(fileStream);
+
+        auto options = DownloadOperation::DownloadOperationOptions{
+            .localPath = isolateDirectory_.path() / "file.txt",
+            .doCleanup = false,
+        };
+        DownloadOperation operation{fileStream, options};
+
+        auto result = operation.prepare();
+        EXPECT_TRUE(result.has_value());
+
+        result = operation.start();
+        EXPECT_TRUE(result.has_value());
+
+        fakeReadCycle(5);
+
+        auto fin = operation.finalize();
+        EXPECT_FALSE(fin.has_value());
+        EXPECT_EQ(fin.error().type, DownloadOperation::ErrorType::CannotFinalizeDuringRead);
+    }
+
+    TEST_F(DownloadOperationTests, FinalizeFailsIfFileExistsButOverwriteIsForbidden)
+    {
+        using namespace SecureShell;
+
+        auto fileStream = makeFileStreamMock();
+        giveMockDefaultStat(fileStream, fakeFileContent_.size());
+        giveMockExpectedRead(fileStream);
+
+        auto options = DownloadOperation::DownloadOperationOptions{
+            .localPath = isolateDirectory_.path() / "file.txt",
+            .mayOverwrite = false,
+        };
+        DownloadOperation operation{fileStream, options};
+
+        auto result = operation.prepare();
+        EXPECT_TRUE(result.has_value());
+
+        result = operation.start();
+        EXPECT_TRUE(result.has_value());
+
+        fakeReadCycle(fakeFileContent_.size());
+        fakeReadCycle(0); // EOF Cycle
+
+        {
+            std::ofstream file{options.localPath};
+        }
+
+        auto fin = operation.finalize();
+        EXPECT_FALSE(fin.has_value());
+        EXPECT_EQ(fin.error().type, DownloadOperation::ErrorType::FileExists);
+    }
+
+    TEST_F(DownloadOperationTests, CanFinalizeOperation)
+    {
+        using namespace SecureShell;
+
+        auto fileStream = makeFileStreamMock();
+        giveMockDefaultStat(fileStream, fakeFileContent_.size());
+        giveMockExpectedRead(fileStream);
+
+        auto options = DownloadOperation::DownloadOperationOptions{
+            .localPath = isolateDirectory_.path() / "file.txt",
+            .mayOverwrite = false,
+        };
+        DownloadOperation operation{fileStream, options};
+
+        auto result = operation.prepare();
+        EXPECT_TRUE(result.has_value());
+
+        result = operation.start();
+        EXPECT_TRUE(result.has_value());
+
+        fakeReadCycle(fakeFileContent_.size());
+        fakeReadCycle(0); // EOF Cycle
+
+        auto fin = operation.finalize();
+        EXPECT_TRUE(fin.has_value());
+
+        EXPECT_EQ(readFile(options.localPath), fakeFileContent_);
+        EXPECT_FALSE(std::filesystem::exists(options.localPath.generic_string() + ".filepart"));
+    }
+
+    TEST_F(DownloadOperationTests, FinalizeSucceedsIfFileExistsButOverwriteIsAllowed)
+    {
+        using namespace SecureShell;
+
+        auto fileStream = makeFileStreamMock();
+        giveMockDefaultStat(fileStream, fakeFileContent_.size());
+        giveMockExpectedRead(fileStream);
+
+        auto options = DownloadOperation::DownloadOperationOptions{
+            .localPath = isolateDirectory_.path() / "file.txt",
+            .mayOverwrite = true,
+        };
+        DownloadOperation operation{fileStream, options};
+
+        auto result = operation.prepare();
+        EXPECT_TRUE(result.has_value());
+
+        result = operation.start();
+        EXPECT_TRUE(result.has_value());
+
+        fakeReadCycle(fakeFileContent_.size());
+        fakeReadCycle(0); // EOF Cycle
+
+        {
+            std::ofstream file{options.localPath};
+        }
+
+        auto fin = operation.finalize();
+        EXPECT_TRUE(fin.has_value());
+    }
+
+    TEST_F(DownloadOperationTests, ProgressCallbackIsCalledDuringRead)
+    {
+        using namespace SecureShell;
+
+        auto fileStream = makeFileStreamMock();
+        giveMockDefaultStat(fileStream, fakeFileContent_.size());
+        giveMockExpectedRead(fileStream);
+
+        std::vector<std::tuple<std::int64_t, std::int64_t, std::int64_t>> progressCalls;
+
+        auto options = DownloadOperation::DownloadOperationOptions{
+            .progressCallback =
+                [&progressCalls](std::int64_t min, std::int64_t max, std::int64_t current) {
+                    progressCalls.emplace_back(min, max, current);
+                },
+            .localPath = isolateDirectory_.path() / "file.txt",
+            .doCleanup = false,
+        };
+        DownloadOperation operation{fileStream, options};
+
+        auto result = operation.prepare();
+        EXPECT_TRUE(result.has_value());
+
+        result = operation.start();
+        EXPECT_TRUE(result.has_value());
+
+        for (std::size_t i = 0; i < fakeFileContent_.size(); ++i)
+            fakeReadCycle(1);
+        fakeReadCycle(0); // EOF Cycle
+
+        EXPECT_TRUE(operation.cancel().has_value());
+
+        EXPECT_EQ(progressCalls.size(), fakeFileContent_.size());
+        for (std::size_t i = 0; i < fakeFileContent_.size(); ++i)
+        {
+            EXPECT_EQ(std::get<0>(progressCalls[i]), 0);
+            EXPECT_EQ(std::get<1>(progressCalls[i]), fakeFileContent_.size());
+            EXPECT_EQ(std::get<2>(progressCalls[i]), i + 1);
+        }
+
+        EXPECT_EQ(std::get<0>(progressCalls.back()), 0);
+        EXPECT_EQ(std::get<1>(progressCalls.back()), fakeFileContent_.size());
+        EXPECT_EQ(std::get<2>(progressCalls.back()), fakeFileContent_.size());
+    }
+
+    TEST_F(DownloadOperationTests, CompletionCallbackIsCalled)
+    {
+        using namespace SecureShell;
+
+        std::promise<bool> completionPromise;
+
+        auto fileStream = makeFileStreamMock();
+        giveMockDefaultStat(fileStream, fakeFileContent_.size());
+        giveMockExpectedRead(fileStream);
+
+        auto options = DownloadOperation::DownloadOperationOptions{
+            .onCompletionCallback =
+                [&completionPromise](bool success) {
+                    completionPromise.set_value(success);
+                },
+            .localPath = isolateDirectory_.path() / "file.txt",
+            .doCleanup = false,
+        };
+        DownloadOperation operation{fileStream, options};
+
+        auto result = operation.prepare();
+        EXPECT_TRUE(result.has_value());
+
+        result = operation.start();
+        EXPECT_TRUE(result.has_value());
+
+        for (std::size_t i = 0; i < fakeFileContent_.size(); ++i)
+            fakeReadCycle(1);
+        fakeReadCycle(0); // EOF Cycle
+
+        auto future = completionPromise.get_future();
+        ASSERT_EQ(future.wait_for(1s), std::future_status::ready);
+        EXPECT_TRUE(future.get());
     }
 }

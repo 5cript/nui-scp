@@ -37,7 +37,7 @@ class DownloadOperation : public Operation
 
     std::expected<void, Error> prepare() override;
     std::expected<void, Error> start() override;
-    void cancel() override;
+    std::expected<void, Error> cancel() override;
     std::expected<void, Error> pause() override;
     std::expected<void, Error> finalize() override;
 
@@ -74,6 +74,7 @@ class DownloadOperation : public Operation
     bool inheritPermissions_;
     bool doCleanup_;
     bool preparationDone_;
+    bool isReading_;
     std::atomic_bool interuptRead_;
     std::optional<std::filesystem::perms> permissions_;
     std::ofstream localFile_;

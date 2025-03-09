@@ -18,6 +18,9 @@ DownloadOperation::DownloadOperation(
         if (once)
             return;
         once = true;
+
+        std::scoped_lock lock{mutex_};
+        isReading_ = false;
         progressCallback_(0, fileSize_, fileSize_);
         cb(success);
     }}
@@ -27,6 +30,7 @@ DownloadOperation::DownloadOperation(
     , inheritPermissions_{options.inheritPermissions}
     , doCleanup_{options.doCleanup}
     , preparationDone_{false}
+    , isReading_{false}
     , interuptRead_{false}
     , permissions_{options.permissions}
     , localFile_{}
@@ -199,29 +203,40 @@ std::expected<void, Operation::Error> DownloadOperation::start()
         return std::unexpected(Error{.type = ErrorType::FileStreamExpired});
     }
 
+    isReading_ = true;
     readFuture_ = stream->read([this](std::string_view data) {
         if (data.size() == 0)
         {
-            Log::info("DownloadOperation: Remote file read complete or error.");
             {
-                std::scoped_lock lock{mutex_};
-                localFile_.close();
+                std::lock_guard lock{mutex_};
+                isReading_ = false;
             }
+            Log::info("DownloadOperation: Remote file read complete or error.");
             // Defer completion by pushing it onto the strand.
             perform([this]() {
                 std::scoped_lock lock{mutex_};
                 onCompletionCallback_(true);
             });
-            return false;
+            return true;
         }
 
-        std::scoped_lock lock{mutex_};
-        localFile_.write(data.data(), data.size());
-        progressCallback_(0, fileSize_, localFile_.tellp());
-        const auto doContinue = localFile_.good() || interuptRead_;
+        std::uint64_t fileSize = 0;
+        std::uint64_t tellp = 0;
+        bool doContinue = true;
+        bool good = true;
+        {
+            std::scoped_lock lock{mutex_};
+            localFile_.write(data.data(), data.size());
+            fileSize = fileSize_;
+            tellp = static_cast<uint64_t>(localFile_.tellp());
+            good = localFile_.good();
+            doContinue = good && !interuptRead_;
+            isReading_ = doContinue;
+        }
+        progressCallback_(0, fileSize, tellp);
         if (!doContinue)
         {
-            if (!localFile_.good())
+            if (!good)
             {
                 Log::error("DownloadOperation read cycle stopped: localFile_.good() == false");
                 perform([this]() {
@@ -235,14 +250,26 @@ std::expected<void, Operation::Error> DownloadOperation::start()
 
     return {};
 }
-void DownloadOperation::cancel()
+std::expected<void, DownloadOperation::Error> DownloadOperation::cancel()
 {
-    std::scoped_lock lock{mutex_};
+    {
+        std::scoped_lock lock{mutex_};
 
-    Log::info(
-        "DownloadOperation: Download of '{}' to '{}' canceled.",
-        remotePath_.generic_string(),
-        localPath_.generic_string());
+        if (isReading_)
+        {
+            const auto res = pause();
+            if (!res.has_value())
+            {
+                Log::error("DownloadOperation: Failed to pause download.");
+                return res;
+            }
+        }
+
+        Log::info(
+            "DownloadOperation: Download of '{}' to '{}' canceled.",
+            remotePath_.generic_string(),
+            localPath_.generic_string());
+    }
 
     perform([this]() {
         std::scoped_lock lock{mutex_};
@@ -250,6 +277,8 @@ void DownloadOperation::cancel()
     });
 
     cleanup();
+
+    return {};
 }
 void DownloadOperation::cleanup()
 {
@@ -264,19 +293,31 @@ void DownloadOperation::cleanup()
 }
 std::expected<void, DownloadOperation::Error> DownloadOperation::pause()
 {
-    std::scoped_lock lock{mutex_};
-    interuptRead_ = true;
+    {
+        std::scoped_lock lock{mutex_};
+        interuptRead_ = true;
+    }
 
     if (readFuture_.wait_for(futureTimeout_) != std::future_status::ready)
     {
         Log::error("DownloadOperation: Failed to pause download.");
         return std::unexpected(Error{.type = ErrorType::FutureTimeout});
     }
+    {
+        std::scoped_lock lock{mutex_};
+        isReading_ = false;
+    }
     return {};
 }
 std::expected<void, DownloadOperation::Error> DownloadOperation::finalize()
 {
     std::scoped_lock lock{mutex_};
+
+    if (isReading_)
+    {
+        Log::error("DownloadOperation: Cannot finalize while reading.");
+        return std::unexpected(Error{.type = ErrorType::CannotFinalizeDuringRead});
+    }
 
     if (readFuture_.wait_for(futureTimeout_) != std::future_status::ready)
     {

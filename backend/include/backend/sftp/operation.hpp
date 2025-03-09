@@ -20,7 +20,8 @@ BOOST_DEFINE_ENUM_CLASS(
     RenameFailure,
     CannotSetFilePermissions,
     FutureTimeout,
-    OperationNotPrepared);
+    OperationNotPrepared,
+    CannotFinalizeDuringRead);
 
 class Operation
 {
@@ -60,7 +61,7 @@ class Operation
     /**
      * @brief Cancels the operation and possibly does some cleanup.
      */
-    virtual void cancel() = 0;
+    virtual std::expected<void, Error> cancel() = 0;
 
     /**
      * @brief Pauses the operation.
