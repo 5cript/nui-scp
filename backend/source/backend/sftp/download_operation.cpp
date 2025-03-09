@@ -47,11 +47,7 @@ DownloadOperation::~DownloadOperation()
     if (auto stream = fileStream_.lock(); stream)
     {
         // wait for all tasks of the operation to finish
-        stream->strand()
-            ->pushPromiseTask([]() {
-                return true;
-            })
-            .get();
+        stream->strand()->pushPromiseTask([]() {}).get();
     }
 }
 
