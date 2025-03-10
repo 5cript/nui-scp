@@ -17,6 +17,7 @@ namespace Persistence
         if (!defaultDirectory.has_value())
             defaultDirectory = other.defaultDirectory;
 
+        sftpOptions.useDefaultsFrom(other.sftpOptions.value());
         sshOptions.useDefaultsFrom(other.sshOptions.value());
     }
 
@@ -31,6 +32,7 @@ namespace Persistence
         TO_JSON_OPTIONAL(j, options, defaultDirectory);
         j["openSftpByDefault"] = options.openSftpByDefault;
         j["sshOptions"] = options.sshOptions;
+        j["sftpOptions"] = options.sftpOptions;
     }
     void from_json(nlohmann::json const& j, SshSessionOptions& options)
     {
@@ -47,5 +49,7 @@ namespace Persistence
             j.at("sshOptions").get_to(options.sshOptions);
         if (j.contains("openSftpByDefault"))
             j.at("openSftpByDefault").get_to(options.openSftpByDefault);
+        if (j.contains("sftpOptions"))
+            j.at("sftpOptions").get_to(options.sftpOptions);
     }
 }

@@ -42,13 +42,14 @@ include("${CMAKE_CURRENT_LIST_DIR}/../../../_cmake/dependencies/libssh.cmake")
 # Link backend of nui outside of emscripten
 target_link_libraries(
     backend
-    PRIVATE
+    PUBLIC
         nui-backend
         efsw-static
         Boost::filesystem
         Boost::asio
         Boost::system
         Boost::process
+        roar-include-only
         shared_data
         utility
         log

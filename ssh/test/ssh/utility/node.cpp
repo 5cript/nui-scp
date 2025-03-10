@@ -89,7 +89,7 @@ namespace SecureShell::Test
 
     std::shared_ptr<NodeProcessResult> nodeProcess(
         boost::asio::any_io_executor executor,
-        TemporaryDirectory const& isolateDirectory,
+        Utility::TemporaryDirectory const& isolateDirectory,
         std::string const& program)
     {
         using namespace std::string_literals;

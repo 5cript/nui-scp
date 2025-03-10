@@ -21,7 +21,8 @@ BOOST_DEFINE_ENUM_CLASS(
     CannotSetFilePermissions,
     FutureTimeout,
     OperationNotPrepared,
-    CannotFinalizeDuringRead);
+    CannotFinalizeDuringRead,
+    InvalidOptionsKey);
 
 class Operation
 {
@@ -40,6 +41,14 @@ class Operation
     {
         ErrorType type;
         std::optional<SecureShell::SftpError> sftpError = std::nullopt;
+
+        std::string toString() const
+        {
+            const auto enumString = boost::describe::enum_to_string(type, "INVALID_ENUM_VALUE");
+            if (sftpError.has_value())
+                return fmt::format("{}: {}", enumString, sftpError->toString());
+            return enumString;
+        }
     };
 
     Ids::OperationId id() const

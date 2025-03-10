@@ -59,7 +59,8 @@ int askPassDefault(char const* prompt, char* buf, std::size_t length, int, int, 
     return -1;
 }
 
-SshSessionManager::SshSessionManager()
+SshSessionManager::SshSessionManager(Persistence::StateHolder* stateHolder)
+    : stateHolder_(stateHolder)
 {}
 
 SshSessionManager::~SshSessionManager()
@@ -311,9 +312,8 @@ void SshSessionManager::registerRpcChannelClose(Nui::Window&, Nui::RpcHub& hub)
                 }
                 else if (auto iter = sftpChannels_.find(channelId); iter != sftpChannels_.end())
                 {
-                    if (auto channel = iter->second.sftp.lock(); channel)
+                    if (auto channel = iter->second.lock(); channel)
                     {
-                        iter->second.fileStreams.clear();
                         channel->close();
                     }
                     sftpChannels_.erase(iter);
@@ -424,8 +424,8 @@ void SshSessionManager::registerRpcChannelPtyResize(Nui::Window&, Nui::RpcHub& h
                         // if (fut.wait_for(std::chrono::milliseconds{500}) != std::future_status::ready)
                         // {
                         //     Log::error("Failed to resize pty: timeout");
-                        //     hub->callRemote(responseId, nlohmann::json{{"error", "Failed to resize pty: timeout"}});
-                        //     return;
+                        //     hub->callRemote(responseId, nlohmann::json{{"error", "Failed to resize pty:
+                        //     timeout"}}); return;
                         // }
                         // const auto result = fut.get();
                         // if (result != 0)
@@ -488,7 +488,7 @@ void SshSessionManager::registerRpcSftpListDirectory(Nui::Window&, Nui::RpcHub& 
                     return;
                 }
 
-                auto locked = channel->second.sftp.lock();
+                auto locked = channel->second.lock();
                 if (!locked)
                 {
                     Log::error("Failed to lock sftp channel with id: {}", channelId.value());
@@ -552,7 +552,7 @@ void SshSessionManager::registerRpcSftpCreateDirectory(Nui::Window&, Nui::RpcHub
                     return;
                 }
 
-                auto locked = channel->second.sftp.lock();
+                auto locked = channel->second.lock();
                 if (!locked)
                 {
                     Log::error("Failed to lock sftp channel with id: {}", channelId.value());
@@ -616,7 +616,7 @@ void SshSessionManager::registerRpcSftpCreateFile(Nui::Window&, Nui::RpcHub& hub
                     return;
                 }
 
-                auto locked = channel->second.sftp.lock();
+                auto locked = channel->second.lock();
                 if (!locked)
                 {
                     Log::error("Failed to lock sftp channel with id: {}", channelId.value());
@@ -651,6 +651,60 @@ void SshSessionManager::registerRpcSftpCreateFile(Nui::Window&, Nui::RpcHub& hub
         });
 }
 
+void SshSessionManager::registerRpcSftpAddDownloadOperation(Nui::Window&, Nui::RpcHub& hub)
+{
+    hub.registerFunction(
+        "SshSessionManager::sftp::addDownload",
+        [this, hub = &hub](
+            std::string const& responseId,
+            std::string const& sessionIdString,
+            std::string const& channelIdString,
+            std::string const& newOperationIdString,
+            std::string const& sshSessionOptionsKey,
+            std::string const& localPath,
+            std::string const& remotePath) {
+            auto const& state = stateHolder_->stateCache();
+
+            const auto sessionId = Ids::makeSessionId(sessionIdString);
+            const auto channelId = Ids::makeChannelId(channelIdString);
+
+            if (sessions_.find(sessionId) == sessions_.end())
+            {
+                Log::error("No session found with id: {}", sessionId.value());
+                hub->callRemote(responseId, nlohmann::json{{"error", "No session found with id"}});
+                return;
+            }
+
+            auto channel = sftpChannels_.find(channelId);
+            if (channel == sftpChannels_.end())
+            {
+                Log::error("No sftp channel found with id: {}", channelId.value());
+                hub->callRemote(responseId, nlohmann::json{{"error", "No sftp channel found with id"}});
+                return;
+            }
+
+            auto sftp = channel->second.lock();
+            if (!sftp)
+            {
+                Log::error("Failed to lock sftp channel with id: {}", channelId.value());
+                hub->callRemote(responseId, nlohmann::json{{"error", "Failed to lock sftp channel"}});
+                return;
+            }
+
+            const auto result = operationQueue_.addDownloadOperation(
+                state, sshSessionOptionsKey, *sftp, Ids::makeOperationId(newOperationIdString), localPath, remotePath);
+
+            if (!result.has_value())
+            {
+                Log::error("Failed to add download operation: {}", result.error().toString());
+                hub->callRemote(responseId, nlohmann::json{{"error", result.error().toString()}});
+                return;
+            }
+
+            hub->callRemote(responseId, nlohmann::json{{"success", true}});
+        });
+}
+
 void SshSessionManager::registerRpc(Nui::Window& wnd, Nui::RpcHub& hub)
 {
     registerRpcConnect(wnd, hub);
@@ -664,6 +718,8 @@ void SshSessionManager::registerRpc(Nui::Window& wnd, Nui::RpcHub& hub)
     registerRpcSftpListDirectory(wnd, hub);
     registerRpcSftpCreateDirectory(wnd, hub);
     registerRpcSftpCreateFile(wnd, hub);
+
+    registerRpcSftpAddDownloadOperation(wnd, hub);
 }
 
 void SshSessionManager::addPasswordProvider(int priority, PasswordProvider* provider)

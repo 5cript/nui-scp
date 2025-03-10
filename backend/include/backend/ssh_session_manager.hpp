@@ -1,9 +1,9 @@
 #pragma once
 
 #include <persistence/state/terminal_engine.hpp>
+#include <persistence/state_holder.hpp>
 #include <backend/password/password_provider.hpp>
-// #include <backend/ssh/session.hpp>
-// #include <backend/ssh/sftp_session.hpp>
+#include <backend/sftp/operation_queue.hpp>
 #include <ssh/session.hpp>
 #include <ssh/sftp_session.hpp>
 #include <ids/ids.hpp>
@@ -23,7 +23,7 @@ class SshSessionManager
   public:
     constexpr static auto futureTimeout = std::chrono::seconds{10};
 
-    SshSessionManager();
+    SshSessionManager(Persistence::StateHolder* stateHolder);
     ~SshSessionManager();
     SshSessionManager(SshSessionManager const&) = delete;
     SshSessionManager& operator=(SshSessionManager const&) = delete;
@@ -55,22 +55,16 @@ class SshSessionManager
     void registerRpcSftpCreateFile(Nui::Window&, Nui::RpcHub& hub);
 
     // Sftp Files:
+    void registerRpcSftpAddDownloadOperation(Nui::Window&, Nui::RpcHub& hub);
 
   private:
     std::mutex passwordProvidersMutex_{};
     std::mutex addSessionMutex_{};
+    Persistence::StateHolder* stateHolder_{};
     std::unordered_map<Ids::SessionId, std::unique_ptr<SecureShell::Session>, Ids::IdHash> sessions_{};
     std::unordered_map<Ids::ChannelId, std::weak_ptr<SecureShell::Channel>, Ids::IdHash> channels_{};
-    struct SftpSession
-    {
-        std::weak_ptr<SecureShell::SftpSession> sftp{};
-        std::unordered_map<Ids::FileId, SecureShell::FileStream, Ids::IdHash> fileStreams{};
-
-        SftpSession(std::weak_ptr<SecureShell::SftpSession> sftp)
-            : sftp{std::move(sftp)}
-        {}
-    };
-    std::unordered_map<Ids::ChannelId, SftpSession, Ids::IdHash> sftpChannels_{};
+    std::unordered_map<Ids::ChannelId, std::weak_ptr<SecureShell::SftpSession>, Ids::IdHash> sftpChannels_{};
+    OperationQueue operationQueue_{};
     std::map<int, PasswordProvider*> passwordProviders_{};
     std::unique_ptr<std::thread> addSessionThread_{};
     std::vector<SecureShell::PasswordCacheEntry> pwCache_{};

@@ -13,6 +13,7 @@ namespace Persistence
         j["sessions"] = state.sessions;
         j["termios"] = state.termios;
         j["sshOptions"] = state.sshOptions;
+        j["sftpOptions"] = state.sftpOptions;
         j["sshSessionOptions"] = state.sshSessionOptions;
         j["uiOptions"] = state.uiOptions;
         j["logLevel"] = [&]() {
@@ -32,6 +33,9 @@ namespace Persistence
 
         if (j.contains("sshOptions"))
             j.at("sshOptions").get_to(state.sshOptions);
+
+        if (j.contains("sftpOptions"))
+            j.at("sftpOptions").get_to(state.sftpOptions);
 
         if (j.contains("sshSessionOptions"))
             j.at("sshSessionOptions").get_to(state.sshSessionOptions);

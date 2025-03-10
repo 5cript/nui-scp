@@ -2,6 +2,7 @@ add_library(
     persistence
     STATIC
         state/ssh_options.cpp
+        state/sftp_options.cpp
         state/ssh_session_options.cpp
         state/state.cpp
         state/terminal_engine.cpp

@@ -2,6 +2,7 @@
 
 #include <persistence/state_core.hpp>
 #include <persistence/state/ssh_options.hpp>
+#include <persistence/state/sftp_options.hpp>
 #include <persistence/reference.hpp>
 
 #include <string>
@@ -21,6 +22,7 @@ namespace Persistence
         std::optional<std::string> defaultDirectory{std::nullopt};
 
         Referenceable<SshOptions> sshOptions{};
+        Referenceable<SftpOptions> sftpOptions{};
         void useDefaultsFrom(SshSessionOptions const& other);
     };
     void to_json(nlohmann::json& j, SshSessionOptions const& options);
