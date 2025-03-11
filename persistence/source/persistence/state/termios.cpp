@@ -9,10 +9,12 @@ namespace Persistence
 {
     namespace
     {
+#ifndef _WIN32
         bool unpackBoolOptional(std::optional<bool> const& value)
         {
             return value.has_value() ? value.value() : false;
         }
+#endif
     }
 
     unsigned int Termios::InputFlags::assemble() const

@@ -108,22 +108,6 @@ namespace SecureShell::Test
             boost::asio::readable_pipe{executor},
             nullptr);
 
-#ifdef _WIN32
-        const auto nodeShell = MSYS2_BASH;
-        const auto nodeCommandArgs = std::vector<std::string>{
-            "--login",
-            "-i",
-            "-c",
-            "\"cd "s + isolateDirectory.path().generic_string() + " && node ./main.mjs --log-file=./log.txt\"",
-        };
-#else
-        const auto nodeShell = "/bin/bash";
-        const auto nodeCommandArgs = std::vector<std::string>{
-            "-c",
-            "cd "s + isolateDirectory.path().generic_string() + " && node ./main.mjs --log-file=./log.txt",
-        };
-#endif
-
         result->mainModule = std::make_unique<boost::process::v2::process>(
             executor,
             node,
