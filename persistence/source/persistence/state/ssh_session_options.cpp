@@ -10,6 +10,8 @@ namespace Persistence
             port = other.port;
         if (!user.has_value())
             user = other.user;
+        if (passwordUnsafe.has_value())
+            passwordUnsafe = other.passwordUnsafe;
         if (!sshKey.has_value())
             sshKey = other.sshKey;
         if (!environment.has_value())
@@ -27,6 +29,7 @@ namespace Persistence
 
         TO_JSON_OPTIONAL(j, options, port);
         TO_JSON_OPTIONAL(j, options, user);
+        TO_JSON_OPTIONAL(j, options, passwordUnsafe);
         TO_JSON_OPTIONAL(j, options, sshKey);
         TO_JSON_OPTIONAL(j, options, environment);
         TO_JSON_OPTIONAL(j, options, defaultDirectory);
@@ -40,6 +43,7 @@ namespace Persistence
 
         FROM_JSON_OPTIONAL(j, options, port);
         FROM_JSON_OPTIONAL(j, options, user);
+        FROM_JSON_OPTIONAL(j, options, passwordUnsafe);
         FROM_JSON_OPTIONAL(j, options, sshKey);
         FROM_JSON_OPTIONAL(j, options, environment);
         FROM_JSON_OPTIONAL(j, options, defaultDirectory);

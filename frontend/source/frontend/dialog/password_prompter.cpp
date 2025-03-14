@@ -21,8 +21,15 @@ PasswordPrompter::PasswordPrompter()
 {
     Nui::RpcClient::registerFunction(
         "PasswordPrompter::prompt", [this](std::string const& whatFor, std::string const& prompt) {
-            impl_->dialog.open(whatFor, prompt, "Enter Password", true, [](std::optional<std::string> const& password) {
-                Nui::RpcClient::call("PasswordPrompter::promptDone", password.value_or(""));
+            impl_->dialog.open({
+                .whatFor = whatFor,
+                .prompt = prompt,
+                .headerText = "Enter Password",
+                .isPassword = true,
+                .onConfirm =
+                    [](std::optional<std::string> const& password) {
+                        Nui::RpcClient::call("PasswordPrompter::promptDone", password.value_or(""));
+                    },
             });
         });
 }

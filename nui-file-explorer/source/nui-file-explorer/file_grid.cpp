@@ -8,6 +8,8 @@
 #include <nui/frontend/attributes.hpp>
 #include <nui/frontend/api/console.hpp>
 
+using namespace std::string_literals;
+
 namespace NuiFileExplorer
 {
     namespace
@@ -125,7 +127,13 @@ namespace NuiFileExplorer
         Nui::Observed<std::filesystem::path> path{};
         std::function<void(std::filesystem::path const&)> onPathChange{};
         std::function<void()> onRefresh{};
+        std::function<void(std::vector<Item> const&)> onDelete{};
+        std::function<void(Item const&)> onRename{};
+        std::function<void(std::vector<Item> const&)> onDownload{};
+        std::function<void(std::string const&)> onError{};
+        std::function<void(Item const&)> onProperties{};
         Settings settings{};
+        std::vector<Item> contextMenuClickItems{};
 
         void sortItems()
         {
@@ -169,6 +177,23 @@ namespace NuiFileExplorer
     FileGridFlavor FileGrid::flavor() const
     {
         return impl_->flavor.value();
+    }
+
+    void FileGrid::onDelete(std::function<void(std::vector<Item> const&)> const& callback)
+    {
+        impl_->onDelete = callback;
+    }
+    void FileGrid::onRename(std::function<void(Item const&)> const& callback)
+    {
+        impl_->onRename = callback;
+    }
+    void FileGrid::onDownload(std::function<void(std::vector<Item> const&)> const& callback)
+    {
+        impl_->onDownload = callback;
+    }
+    void FileGrid::onError(std::function<void(std::string const&)> const& callback)
+    {
+        impl_->onError = callback;
     }
 
     void FileGrid::iconSize(unsigned int value)
@@ -222,6 +247,17 @@ namespace NuiFileExplorer
         closeMenus();
     }
 
+    std::vector<FileGrid::Item> FileGrid::selectedItems() const
+    {
+        std::vector<Item> result{};
+        for (auto const& item : impl_->items.value())
+        {
+            if (item.selected->value())
+                result.push_back(item.item);
+        }
+        return result;
+    }
+
     void FileGrid::closeMenus()
     {
         impl_->newItemMenu.close();
@@ -253,10 +289,40 @@ namespace NuiFileExplorer
             const auto left = targetOffsetLeft + offsetX;
             const auto top = targetOffsetTop + offsetY;
 
+            if (item)
+            {
+                Nui::Console::log("Context menu item: ", item->path.string());
+                auto selected = selectedItems();
+                if (std::find_if(selected.begin(), selected.end(), [&item](auto const& i) {
+                        return i.path == item->path;
+                    }) == selected.end())
+                {
+                    deselectAll();
+                    impl_->contextMenuClickItems = {item.value()};
+                }
+
+                impl_->contextMenuClickItems = selected;
+            }
+            else
+            {
+                Nui::Console::log("Context menu item: none");
+                impl_->contextMenuClickItems = selectedItems();
+            }
+            // filter ".." from context menu click items:
+            impl_->contextMenuClickItems.erase(
+                std::remove_if(
+                    impl_->contextMenuClickItems.begin(),
+                    impl_->contextMenuClickItems.end(),
+                    [](auto const& item) {
+                        return item.path.filename() == "..";
+                    }),
+                impl_->contextMenuClickItems.end());
+
+            // contextMenuClickItems
+
             menu->val()["style"].set("display", "block");
             menu->val()["style"].set("top", std::to_string(top) + "px");
             menu->val()["style"].set("left", std::to_string(left) + "px");
-            Nui::Console::log(event);
             return;
         }
     }
@@ -267,6 +333,16 @@ namespace NuiFileExplorer
         // Do NOT call onPathChange here. That is intentional.
     }
 
+    std::vector<std::filesystem::path> FileGrid::selectedPaths() const
+    {
+        std::vector<Item> selectedItems = this->selectedItems();
+        std::vector<std::filesystem::path> result(selectedItems.size());
+        std::transform(selectedItems.begin(), selectedItems.end(), result.begin(), [](auto const& item) {
+            return item.path;
+        });
+        return result;
+    }
+
     void FileGrid::onPathChange(std::function<void(std::filesystem::path const&)> const& callback)
     {
         impl_->onPathChange = callback;
@@ -275,6 +351,11 @@ namespace NuiFileExplorer
     void FileGrid::onRefresh(std::function<void()> const& callback)
     {
         impl_->onRefresh = callback;
+    }
+
+    void FileGrid::onProperties(std::function<void(Item const&)> const& callback)
+    {
+        impl_->onProperties = callback;
     }
 
     Nui::ElementRenderer FileGrid::contextMenu()
@@ -290,28 +371,70 @@ namespace NuiFileExplorer
             class_ = "nui-file-grid-context-menu",
         }(
             div{
-                style = Style{
-                    "padding"_style = "0.5em",
-                    "border-bottom"_style = "1px solid var(--sapTextColor)",
+                class_ = "nui-file-grid-context-menu-item",
+                onClick = [this](Nui::val event){
+                    event.call<void>("stopPropagation");
+                    closeMenus();
+                    if (impl_->contextMenuClickItems.empty())
+                        impl_->onError("No items selected"s);
+                    if (impl_->onDownload)
+                        impl_->onDownload(impl_->contextMenuClickItems);
+                    impl_->contextMenuClickItems = {};
                 }
             }(
-                "Item 1"
+                "Download"
             ),
             div{
-                style = Style{
-                    "padding"_style = "0.5em",
-                    "border-bottom"_style = "1px solid var(--sapTextColor)",
+                class_ = "nui-file-grid-context-menu-item",
+                onClick = [this](Nui::val event){
+                    event.call<void>("stopPropagation");
+                    closeMenus();
+                    if (impl_->contextMenuClickItems.empty())
+                        impl_->onError("No items selected"s);
+                    if (impl_->onDelete)
+                        impl_->onDelete(impl_->contextMenuClickItems);
+                    impl_->contextMenuClickItems = {};
                 }
             }(
-                "Item 2"
+                "Delete"
             ),
             div{
-                style = Style{
-                    "padding"_style = "0.5em",
-                    "border-bottom"_style = "1px solid var(--sapTextColor)",
+                class_ = "nui-file-grid-context-menu-item",
+                onClick = [this](Nui::val event){
+                    event.call<void>("stopPropagation");
+                    closeMenus();
+                    const auto& items = impl_->contextMenuClickItems;
+                    if (items.empty())
+                        impl_->onError("No items selected"s);
+                    if (items.size() > 1 && impl_->onError) {
+                        impl_->onError("Cannot rename multiple items at once"s);
+                    } else if (items.size() == 1) {
+                        if (impl_->onRename)
+                            impl_->onRename(items.front());
+                    }
+                    impl_->contextMenuClickItems = {};
                 }
             }(
-                "Item 3"
+                "Rename"
+            ),
+            div{
+                class_ = "nui-file-grid-context-menu-item",
+                onClick = [this](Nui::val event){
+                    event.call<void>("stopPropagation");
+                    closeMenus();
+                    auto const& items = impl_->contextMenuClickItems;
+                    if (items.empty())
+                        impl_->onError("No items selected"s);
+                    if (items.size() > 1 && impl_->onError) {
+                        impl_->onError("Cannot view properties of multiple items at once"s);
+                    } else if (items.size() == 1) {
+                        if (impl_->onProperties)
+                            impl_->onProperties(items.front());
+                    }
+                    impl_->contextMenuClickItems = {};
+                }
+            }(
+                "Properties"
             )
         );
         // clang-format on

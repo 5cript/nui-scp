@@ -117,7 +117,11 @@ Nui::ElementRenderer SessionOptions::operator()()
                         if (!success)
                         {
                             Log::error("Failed to load state holder");
-                            impl_->confirmDialog->open(ConfirmDialog::State::Negative, "Failed to save layout", "Failed to load state holder");
+                            impl_->confirmDialog->open({
+                                .state = ConfirmDialog::State::Negative,
+                                .headerText = "Failed to save layout",
+                                .text = "Failed to load state holder",
+                            });
                             return;
                         }
 
@@ -125,7 +129,11 @@ Nui::ElementRenderer SessionOptions::operator()()
                         if (layout.isUndefined())
                         {
                             Log::error("Failed to get layout");
-                            impl_->confirmDialog->open(ConfirmDialog::State::Negative, "Failed to save layout", "Failed to get layout");
+                            impl_->confirmDialog->open({
+                                .state = ConfirmDialog::State::Negative,
+                                .headerText = "Failed to save layout",
+                                .text = "Failed to get layout",
+                            });
                             return;
                         }
 
@@ -139,14 +147,22 @@ Nui::ElementRenderer SessionOptions::operator()()
 
                             stateHolder.save([this]() {
                                 Log::info("Layout saved");
-                                impl_->confirmDialog->open(ConfirmDialog::State::Positive, "Layout saved", "Layout was saved successfully");
+                                impl_->confirmDialog->open({
+                                    .state = ConfirmDialog::State::Positive,
+                                    .headerText = "Layout saved",
+                                    .text = "Layout was saved successfully",
+                                });
                                 impl_->events->onLayoutsChanged.modifyNow();
                                 loadLayoutNames();
                             });
                         }
                         else {
                             Log::error("No such persisted session config '{}'", impl_->persistenceSessionName);
-                            impl_->confirmDialog->open(ConfirmDialog::State::Negative, "Failed to save layout", "No such persisted session config");
+                            impl_->confirmDialog->open({
+                                .state = ConfirmDialog::State::Negative,
+                                .headerText = "Failed to save layout",
+                                .text = "No such persisted session config",
+                            });
                         }
                     });
                 }
@@ -160,25 +176,37 @@ Nui::ElementRenderer SessionOptions::operator()()
                         if (!success)
                         {
                             Log::error("Failed to load state holder");
-                            impl_->confirmDialog->open(ConfirmDialog::State::Negative, "Failed to delete layout", "Failed to load state holder");
+                            impl_->confirmDialog->open({.state = ConfirmDialog::State::Negative, .headerText = "Failed to delete layout", .text = "Failed to load state holder",});
                             return;
                         }
 
                         auto& layouts = stateHolder.stateCache().sessions.at(impl_->persistenceSessionName).layouts;
                         if (!layouts) {
                             Log::error("No such layout");
-                            impl_->confirmDialog->open(ConfirmDialog::State::Negative, "Failed to delete layout", "No such layout");
+                            impl_->confirmDialog->open({
+                                .state = ConfirmDialog::State::Negative,
+                                .headerText = "Failed to delete layout",
+                                .text = "No such layout",
+                            });
                         }
                         auto result = layouts->erase(impl_->selectedLayout);
                         if (result == 0) {
                             Log::error("Failed to delete layout '{}'", impl_->selectedLayout);
-                            impl_->confirmDialog->open(ConfirmDialog::State::Negative, "Failed to delete layout", fmt::format("Failed to delete layout '{}'", impl_->selectedLayout));
+                            impl_->confirmDialog->open({
+                                .state = ConfirmDialog::State::Negative,
+                                .headerText = "Failed to delete layout",
+                                .text = fmt::format("Failed to delete layout '{}'", impl_->selectedLayout),
+                            });
                             return;
                         }
 
                         stateHolder.save([this]() {
                             Log::info("Layout '{}' deleted", impl_->selectedLayout);
-                            impl_->confirmDialog->open(ConfirmDialog::State::Positive, "Layout deleted", fmt::format("Layout '{}' was deleted successfully", impl_->selectedLayout));
+                            impl_->confirmDialog->open({
+                                .state = ConfirmDialog::State::Positive,
+                                .headerText = "Layout deleted",
+                                .text = fmt::format("Layout '{}' was deleted successfully", impl_->selectedLayout),
+                            });
                             impl_->events->onLayoutsChanged.modifyNow();
                             loadLayoutNames();
                         });

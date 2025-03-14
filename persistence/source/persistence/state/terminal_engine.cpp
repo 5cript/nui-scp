@@ -76,6 +76,7 @@ namespace Persistence
             });
 
         TO_JSON_OPTIONAL(j, engine, startupSession);
+        TO_JSON_OPTIONAL(j, engine, orderBy);
 
         if (engine.layouts)
             j["layouts"] = *engine.layouts;
@@ -111,6 +112,7 @@ namespace Persistence
         }
 
         FROM_JSON_OPTIONAL(j, engine, startupSession);
+        FROM_JSON_OPTIONAL(j, engine, orderBy);
 
         if (j.contains("layouts"))
             engine.layouts = j.at("layouts");

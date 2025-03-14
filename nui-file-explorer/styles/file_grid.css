@@ -19,6 +19,22 @@
     border-radius: var(--nui-file-grid-border-radius);
 }
 
+.nui-file-grid-context-menu-item {
+    padding: 0.5em;
+    border-bottom: 1px solid var(--nui-file-grid-border-color);
+    cursor: pointer;
+    color: var(--nui-file-grid-context-menu-color);
+
+    &:hover {
+        background-color: var(--nui-file-grid-context-menu-item-hover-background);
+        color: var(--nui-file-grid-context-menu-item-hover-color);
+    }
+
+    &:last-child {
+        border-bottom: none;
+    }
+}
+
 .nui-file-grid-item-icons {
     display: flex;
     flex-direction: column;

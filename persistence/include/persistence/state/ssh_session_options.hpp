@@ -16,6 +16,8 @@ namespace Persistence
         std::string host{};
         std::optional<int> port{std::nullopt};
         std::optional<std::string> user{std::nullopt};
+        // TODO: Remove again. This was only for testing!
+        std::optional<std::string> passwordUnsafe{std::nullopt};
         std::optional<std::string> sshKey{std::nullopt};
         std::optional<std::unordered_map<std::string, std::string>> environment{std::nullopt};
         bool openSftpByDefault{true};

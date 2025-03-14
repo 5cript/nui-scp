@@ -20,6 +20,11 @@ class ConfirmDialog
         No = 0b0000'1000,
     };
 
+    friend auto operator|(Button lhs, Button rhs)
+    {
+        return static_cast<Button>(static_cast<unsigned>(lhs) | static_cast<unsigned>(rhs));
+    }
+
     enum class State
     {
         None,
@@ -30,12 +35,25 @@ class ConfirmDialog
     };
 
     Nui::ElementRenderer operator()();
-    void open(
-        State state,
-        std::string const& headerText,
-        std::string const& text,
-        Button buttons = Button::Ok,
-        std::function<void(Button buttonPressed)> const& onClose = [](auto) {});
+
+    struct OpenOptions
+    {
+        State state = State::Information;
+        std::string headerText = "";
+        std::string text = "";
+        Button buttons = Button::Ok;
+        struct ListElement
+        {
+            std::string text;
+            std::optional<std::string> description = std::nullopt;
+            std::optional<std::string> additionalText = std::nullopt;
+            std::optional<State> additionalState = std::nullopt;
+        };
+        std::vector<ListElement> listItems = {};
+        std::function<void(Button buttonPressed)> onClose = [](auto) {};
+    };
+
+    void open(OpenOptions const& options);
 
   private:
     void close(Button button);

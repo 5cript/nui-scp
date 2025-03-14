@@ -32,17 +32,12 @@ InputDialog::InputDialog(std::string id)
     : impl_{std::make_unique<Implementation>(id)}
 {}
 
-void InputDialog::open(
-    std::string const& whatFor,
-    std::string const& prompt,
-    std::string const& headerText,
-    bool isPassword,
-    std::function<void(std::optional<std::string> const&)> const& onConfirm)
+void InputDialog::open(OpenOptions const& options)
 {
-    impl_->onConfirm = onConfirm;
-    impl_->headerText = headerText;
-    impl_->isPassword = isPassword;
-    impl_->whatFor = whatFor;
+    impl_->onConfirm = options.onConfirm;
+    impl_->headerText = options.headerText;
+    impl_->isPassword = options.isPassword;
+    impl_->whatFor = options.whatFor;
     Nui::globalEventContext.executeActiveEventsImmediately();
 
     if (auto input = impl_->input.lock())
@@ -52,7 +47,7 @@ void InputDialog::open(
 
     if (auto diag = impl_->dialog.lock(); diag)
     {
-        diag->val().set("header-text", whatFor + ": " + prompt);
+        diag->val().set("header-text", options.whatFor + ": " + options.prompt);
         diag->val().set("open", true);
     }
 }
