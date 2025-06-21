@@ -11,19 +11,19 @@
 #include <nui/rpc.hpp>
 #include <libssh/libsshpp.hpp>
 #include <libssh/sftp.h>
+#include <boost/asio/any_io_executor.hpp>
 
 #include <memory>
-#include <string>
 #include <map>
 #include <mutex>
 #include <thread>
 
-class SshSessionManager
+class SshSessionManager : public std::enable_shared_from_this<SshSessionManager>
 {
   public:
     constexpr static auto futureTimeout = std::chrono::seconds{10};
 
-    SshSessionManager(Persistence::StateHolder* stateHolder);
+    SshSessionManager(boost::asio::any_io_executor exectutor, Persistence::StateHolder* stateHolder);
     ~SshSessionManager();
     SshSessionManager(SshSessionManager const&) = delete;
     SshSessionManager& operator=(SshSessionManager const&) = delete;
@@ -39,6 +39,9 @@ class SshSessionManager
         std::function<void(std::optional<Ids::SessionId> const&)> onComplete);
 
     friend int askPassDefault(char const* prompt, char* buf, std::size_t length, int echo, int verify, void* userdata);
+
+    void startUpdateDispatching();
+    void stopUpdateDispatching();
 
   private:
     void registerRpcConnect(Nui::Window& wnd, Nui::RpcHub& hub);
@@ -58,8 +61,12 @@ class SshSessionManager
     void registerRpcSftpAddDownloadOperation(Nui::Window&, Nui::RpcHub& hub);
 
   private:
+    void dispatchUpdates();
+
+  private:
     std::mutex passwordProvidersMutex_{};
     std::mutex addSessionMutex_{};
+    boost::asio::any_io_executor executor_;
     Persistence::StateHolder* stateHolder_{};
     std::unordered_map<Ids::SessionId, std::unique_ptr<SecureShell::Session>, Ids::IdHash> sessions_{};
     std::unordered_map<Ids::ChannelId, std::weak_ptr<SecureShell::Channel>, Ids::IdHash> channels_{};
@@ -68,6 +75,7 @@ class SshSessionManager
     std::map<int, PasswordProvider*> passwordProviders_{};
     std::unique_ptr<std::thread> addSessionThread_{};
     std::vector<SecureShell::PasswordCacheEntry> pwCache_{};
+    std::atomic_bool updateDispatchRunning_{false};
 };
 
 int askPassDefault(char const* prompt, char* buf, std::size_t length, int echo, int verify, void* userdata);

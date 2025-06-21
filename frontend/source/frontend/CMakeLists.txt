@@ -20,6 +20,7 @@ target_sources(
         terminal/ssh_engine.cpp
         terminal/user_control_engine.cpp
         terminal/ssh_channel.cpp
+        components/progress_bar.cpp
 )
 
 target_include_directories(${PROJECT_NAME} PRIVATE ${CMAKE_SOURCE_DIR}/frontend/include)

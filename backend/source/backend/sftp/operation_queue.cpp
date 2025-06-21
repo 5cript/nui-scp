@@ -1,18 +1,98 @@
 #include <backend/sftp/operation_queue.hpp>
 
 #include <log/log.hpp>
+#include <utility/overloaded.hpp>
 
-OperationQueue::OperationQueue()
-    : operations_{}
+namespace
+{
+    OperationQueue::CompletedOperation makeCompletedOperation(
+        OperationQueue::CompletionReason reason,
+        Ids::OperationId id,
+        Operation const& operation,
+        std::optional<Operation::Error> error = std::nullopt)
+    {
+        return operation.visit(
+            Utility::overloaded(
+                [reason, id, error](DownloadOperation const& op) {
+                    return OperationQueue::CompletedOperation{
+                        .reason = reason,
+                        .id = id,
+                        .completionTime = std::chrono::system_clock::now(),
+                        .localPath = op.localPath(),
+                        .remotePath = op.remotePath(),
+                        .error = error,
+                    };
+                },
+                [reason, id](std::nullopt_t) {
+                    return OperationQueue::CompletedOperation{
+                        .reason = reason,
+                        .id = id,
+                        .completionTime = std::chrono::system_clock::now(),
+                    };
+                }));
+    }
+}
+
+OperationQueue::OperationQueue(int parallelism)
+    : parallelism_{parallelism}
 {}
-void OperationQueue::start()
-{}
-void OperationQueue::pause()
-{}
+
 void OperationQueue::cancelAll()
-{}
+{
+    std::scoped_lock lock{mutex_};
+    operations_.clear();
+    Log::info("All operations in the queue have been canceled.");
+}
 void OperationQueue::cancel(Ids::OperationId id)
-{}
+{
+    std::scoped_lock lock{mutex_};
+    std::erase_if(operations_, [id](const auto& op) {
+        return op.first == id;
+    });
+}
+
+bool OperationQueue::update()
+{
+    std::scoped_lock lock{mutex_};
+    const auto updateCount = std::min(operations_.size(), static_cast<std::size_t>(parallelism_));
+
+    bool moreWork = false;
+    if (updateCount == 0)
+    {
+        return false;
+    }
+
+    for (std::size_t i = 0; i < updateCount; ++i)
+    {
+        auto& [id, operation] = operations_[i];
+        const auto workResult = operation->work();
+        if (!workResult.has_value())
+        {
+            Log::error("Operation failed: {}", workResult.error().toString());
+            completedOperations_.push_back(
+                makeCompletedOperation(OperationQueue::CompletionReason::Failed, id, *operation, workResult.error()));
+            continue;
+        }
+
+        const auto workStatus = workResult.value();
+        if (workStatus == Operation::WorkStatus::Complete)
+        {
+            Log::info("Operation completed successfully: {}", id.value());
+            completedOperations_.push_back(
+                makeCompletedOperation(OperationQueue::CompletionReason::Completed, id, *operation));
+            operations_.pop_front();
+            // Exit loop and avoid any offset math. Just do another update cycle.
+            return true;
+        }
+        else if (workStatus == Operation::WorkStatus::MoreWork)
+        {
+            moreWork = true;
+            continue;
+        }
+    }
+    return moreWork;
+}
+
 std::expected<void, Operation::Error> OperationQueue::addDownloadOperation(
     Persistence::State const& state,
     std::string const& sshSessionOptionsKey,
@@ -63,6 +143,7 @@ std::expected<void, Operation::Error> OperationQueue::addDownloadOperation(
                 transferOptions.customPermissions ? transferOptions.customPermissions : defaultOptions.permissions,
         });
 
+    std::scoped_lock lock{mutex_};
     operations_.emplace_back(id, std::move(operation));
     return {};
 }

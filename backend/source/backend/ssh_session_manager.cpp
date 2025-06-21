@@ -4,6 +4,7 @@
 #include <boost/uuid/uuid_generators.hpp>
 #include <boost/uuid/uuid.hpp>
 #include <boost/uuid/uuid_io.hpp>
+#include <boost/asio/dispatch.hpp>
 #include <libssh/libssh.h>
 #include <roar/utility/base64.hpp>
 #include <roar/filesystem/special_paths.hpp>
@@ -59,8 +60,9 @@ int askPassDefault(char const* prompt, char* buf, std::size_t length, int, int, 
     return -1;
 }
 
-SshSessionManager::SshSessionManager(Persistence::StateHolder* stateHolder)
-    : stateHolder_(stateHolder)
+SshSessionManager::SshSessionManager(boost::asio::any_io_executor executor, Persistence::StateHolder* stateHolder)
+    : executor_{std::move(executor)}
+    , stateHolder_(stateHolder)
 {}
 
 SshSessionManager::~SshSessionManager()
@@ -512,6 +514,7 @@ void SshSessionManager::registerRpcSftpListDirectory(Nui::Window&, Nui::RpcHub& 
                     return;
                 }
 
+                dispatchUpdates();
                 hub->callRemote(responseId, nlohmann::json{{"entries", *result}});
             }
             catch (std::exception const& e)
@@ -576,6 +579,7 @@ void SshSessionManager::registerRpcSftpCreateDirectory(Nui::Window&, Nui::RpcHub
                     return;
                 }
 
+                dispatchUpdates();
                 hub->callRemote(responseId, nlohmann::json{{"success", true}});
             }
             catch (std::exception const& e)
@@ -640,6 +644,7 @@ void SshSessionManager::registerRpcSftpCreateFile(Nui::Window&, Nui::RpcHub& hub
                     return;
                 }
 
+                dispatchUpdates();
                 hub->callRemote(responseId, nlohmann::json{{"success", true}});
             }
             catch (std::exception const& exc)
@@ -701,8 +706,40 @@ void SshSessionManager::registerRpcSftpAddDownloadOperation(Nui::Window&, Nui::R
                 return;
             }
 
+            dispatchUpdates();
             hub->callRemote(responseId, nlohmann::json{{"success", true}});
         });
+}
+
+void SshSessionManager::startUpdateDispatching()
+{
+    updateDispatchRunning_ = true;
+    dispatchUpdates();
+}
+void SshSessionManager::stopUpdateDispatching()
+{
+    updateDispatchRunning_ = false;
+}
+
+void SshSessionManager::dispatchUpdates()
+{
+    if (!updateDispatchRunning_)
+        return;
+
+    boost::asio::dispatch(executor_, [weak = weak_from_this()]() {
+        auto self = weak.lock();
+        if (!self)
+            return;
+
+        if (!self->updateDispatchRunning_)
+        {
+            Log::info("Update dispatching stopped");
+            return;
+        }
+
+        if (self->operationQueue_.update())
+            self->dispatchUpdates();
+    });
 }
 
 void SshSessionManager::registerRpc(Nui::Window& wnd, Nui::RpcHub& hub)

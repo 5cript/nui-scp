@@ -15,7 +15,6 @@ class DownloadOperation : public Operation
     {
         std::function<void(std::int64_t min, std::int64_t max, std::int64_t current)> progressCallback =
             [](auto, auto, auto) {};
-        std::function<void(bool success)> onCompletionCallback = [](auto) {};
         std::filesystem::path remotePath{};
         std::filesystem::path localPath{};
         std::string tempFileSuffix{".filepart"};
@@ -28,6 +27,13 @@ class DownloadOperation : public Operation
         std::chrono::seconds futureTimeout{5};
     };
 
+    SecureShell::ProcessingStrand* strand() const override
+    {
+        if (auto stream = fileStream_.lock(); stream)
+            return stream->strand();
+        return nullptr;
+    }
+
     DownloadOperation(std::weak_ptr<SecureShell::IFileStream> fileStream, DownloadOperationOptions options);
     ~DownloadOperation() override;
     DownloadOperation(DownloadOperation const&) = delete;
@@ -35,50 +41,49 @@ class DownloadOperation : public Operation
     DownloadOperation& operator=(DownloadOperation const&) = delete;
     DownloadOperation& operator=(DownloadOperation&&) = delete;
 
-    std::expected<void, Error> prepare() override;
-    std::expected<void, Error> start() override;
-    std::expected<void, Error> cancel() override;
-    std::expected<void, Error> pause() override;
-    std::expected<void, Error> finalize() override;
+    std::expected<WorkStatus, Error> work() override;
+
+    OperationType type() const override
+    {
+        return OperationType::Download;
+    }
+
+    std::filesystem::path remotePath() const
+    {
+        return remotePath_;
+    }
+
+    std::filesystem::path localPath() const
+    {
+        return localPath_;
+    }
+
+    std::expected<void, DownloadOperation::Error> cancel(bool adoptCancelState) override;
+
+    std::expected<void, Error> prepare();
+    std::expected<void, Error> finalize();
 
   private:
+    /// Returns true if there is more data to read, false if the operation is complete.
+    std::expected<bool, Error> readOnce();
+
     std::expected<void, Error> openOrAdoptFile(SecureShell::IFileStream& stream);
-
-    template <typename FunctionT>
-    bool perform(FunctionT&& func)
-    {
-        auto stream = fileStream_.lock();
-        if (!stream)
-            return false;
-
-        auto* strand = stream->strand();
-        if (!strand)
-            return false;
-
-        return strand->pushTask(std::forward<FunctionT>(func));
-    }
 
     void cleanup();
 
   private:
-    std::recursive_mutex mutex_;
     std::weak_ptr<SecureShell::IFileStream> fileStream_;
     std::filesystem::path remotePath_;
     std::filesystem::path localPath_;
     std::string tempFileSuffix_;
     std::function<void(std::int64_t min, std::int64_t max, std::int64_t current)> progressCallback_;
-    std::function<void(bool success)> onCompletionCallback_;
     bool mayOverwrite_;
     bool reserveSpace_;
     bool tryContinue_;
     bool inheritPermissions_;
     bool doCleanup_;
-    bool preparationDone_;
-    bool isReading_;
-    std::atomic_bool interuptRead_;
     std::optional<std::filesystem::perms> permissions_;
     std::ofstream localFile_;
     std::uint64_t fileSize_;
-    std::future<std::expected<std::size_t, SecureShell::SftpError>> readFuture_;
     std::chrono::seconds futureTimeout_;
 };

@@ -53,16 +53,16 @@ struct Session::Implementation
     InputDialog* inputDialog;
     ConfirmDialog* confirmDialog;
 
-    // Operation Queue for File Explorer
-    OperationQueue operationQueue;
-    std::shared_ptr<Nui::Dom::Element> operationQueueElement;
-
     // File Explorer Things:
     NuiFileExplorer::FileGrid fileGrid;
     std::shared_ptr<Nui::Dom::Element> fileExplorer;
     std::filesystem::path currentPath;
     std::unique_ptr<FileEngine> fileEngine;
     std::filesystem::path preNavigatePath;
+
+    // Operation Queue for File Explorer
+    OperationQueue operationQueue;
+    std::shared_ptr<Nui::Dom::Element> operationQueueElement;
 
     // Layout Engine Related
     std::weak_ptr<Nui::Dom::BasicElement> layoutHost;
@@ -103,8 +103,6 @@ struct Session::Implementation
         , options{this->engine.terminalOptions.value()}
         , inputDialog{inputDialog}
         , confirmDialog{confirmDialog}
-        , operationQueue{this->stateHolder, this->events, this->initialName, this->id, this->confirmDialog}
-        , operationQueueElement{}
         , fileGrid{{
               .pathBarOnTop = uiOptions.fileGridPathBarOnTop,
           }}
@@ -112,6 +110,8 @@ struct Session::Implementation
         , currentPath{}
         , fileEngine{}
         , preNavigatePath{}
+        , operationQueue{this->stateHolder, this->events, this->initialName, this->id, this->confirmDialog, this->fileEngine.get()}
+        , operationQueueElement{}
         , layoutHost{}
         , layoutName{std::move(layoutName)}
         , terminal{}

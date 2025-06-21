@@ -2,11 +2,15 @@
 
 #include <ssh/sftp_error.hpp>
 #include <utility/describe.hpp>
+#include <backend/sftp/operation_type.hpp>
+#include <ssh/async/processing_strand.hpp>
+#include <log/log.hpp>
 
 #include <ids/ids.hpp>
 
 #include <optional>
 #include <expected>
+#include <mutex>
 
 BOOST_DEFINE_ENUM_CLASS(
     OperationErrorType,
@@ -22,7 +26,11 @@ BOOST_DEFINE_ENUM_CLASS(
     FutureTimeout,
     OperationNotPrepared,
     CannotFinalizeDuringRead,
-    InvalidOptionsKey);
+    InvalidOptionsKey,
+    TargetFileNotGood,
+    CannotWorkCompletedOperation,
+    CannotWorkFailedOperation,
+    UnknownWorkState);
 
 class Operation
 {
@@ -32,10 +40,19 @@ class Operation
     {}
     Operation(Operation const&) = delete;
     Operation& operator=(Operation const&) = delete;
-    Operation(Operation&&) = default;
-    Operation& operator=(Operation&&) = default;
+    Operation(Operation&&) = delete;
+    Operation& operator=(Operation&&) = delete;
+
+    virtual ~Operation() = default;
 
     using ErrorType = OperationErrorType;
+
+    virtual OperationType type() const = 0;
+
+    template <typename FunctionT>
+    auto visit(FunctionT&& func) const;
+
+    virtual SecureShell::ProcessingStrand* strand() const = 0;
 
     struct Error
     {
@@ -51,36 +68,82 @@ class Operation
         }
     };
 
+    template <typename FunctionT>
+    bool perform(FunctionT&& func)
+    {
+        std::scoped_lock lock{mutex_};
+
+        if (auto* theStrand = strand(); theStrand)
+            return theStrand->pushTask(std::forward<FunctionT>(func));
+        else
+        {
+            Log::error("Operation: Cannot perform task on strand, no processing strand available.");
+            return false;
+        }
+    }
+
     Ids::OperationId id() const
     {
         return id_;
     }
 
-    virtual ~Operation() = default;
+    enum class OperationState
+    {
+        NotStarted,
+        Preparing,
+        Prepared,
+        Running,
+        Finalizing,
+        Completed,
+        Canceled,
+        Failed,
+    };
 
-    virtual std::expected<void, Error> prepare() = 0;
+    OperationState state() const
+    {
+        std::scoped_lock lock{mutex_};
+        return state_;
+    }
+
+    enum class WorkStatus
+    {
+        MoreWork,
+        Complete
+    };
 
     /**
-     * @brief Starts the operation, can also be used to resume cancelled operations.
+     * @brief Performs work for the operation depending on the operation type.
+     *
+     * @return std::expected<bool, Error>, true if it wants to be retriggered without delay.
+     */
+    virtual std::expected<WorkStatus, Error> work() = 0;
+
+    /**
+     * @brief Cancels the operation.
      *
      * @return std::expected<void, Error>
      */
-    virtual std::expected<void, Error> start() = 0;
+    virtual std::expected<void, Error> cancel(bool adoptCancelState) = 0;
 
-    /**
-     * @brief Cancels the operation and possibly does some cleanup.
-     */
-    virtual std::expected<void, Error> cancel() = 0;
+    template <typename T = void>
+    std::expected<T, Error> enterErrorState(Error error)
+    {
+        std::scoped_lock lock{mutex_};
+        state_ = OperationState::Failed;
+        error_ = std::move(error);
+        const auto cancelResult = cancel(false);
+        if (!cancelResult.has_value())
+        {
+            Log::error("Operation: Failed to cancel operation: {}", cancelResult.error().toString());
+            // If cancel fails, we still want to call the completion callback.
+        }
+        return std::unexpected(error_.value());
+    }
 
-    /**
-     * @brief Pauses the operation.
-     */
-    virtual std::expected<void, Error> pause() = 0;
-
-    /**
-     * @brief Finalizes the operation. This should be called after the operation is done (progress == max).
-     */
-    virtual std::expected<void, Error> finalize() = 0;
+  protected:
+    mutable std::recursive_mutex mutex_{};
+    OperationState state_{OperationState::NotStarted};
+    std::optional<Error> error_{std::nullopt};
 
   private:
     Ids::OperationId id_;

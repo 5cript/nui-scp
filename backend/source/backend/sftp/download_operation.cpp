@@ -1,41 +1,25 @@
 #include <backend/sftp/download_operation.hpp>
 
 #include <log/log.hpp>
+#include <tuple>
 
 DownloadOperation::DownloadOperation(
     std::weak_ptr<SecureShell::IFileStream> fileStream,
     DownloadOperationOptions options)
     : Operation{}
-    , mutex_{}
     , fileStream_{std::move(fileStream)}
     , remotePath_{std::move(options.remotePath)}
     , localPath_{std::move(options.localPath)}
     , tempFileSuffix_{std::move(options.tempFileSuffix)}
     , progressCallback_{std::move(options.progressCallback)}
-    , onCompletionCallback_{[this, cb = std::move(options.onCompletionCallback), once = false](bool success) mutable {
-        if (!cb)
-            throw std::invalid_argument("onCompletionCallback must be set.");
-        if (once)
-            return;
-        once = true;
-
-        std::scoped_lock lock{mutex_};
-        isReading_ = false;
-        progressCallback_(0, fileSize_, fileSize_);
-        cb(success);
-    }}
     , mayOverwrite_{options.mayOverwrite}
     , reserveSpace_{options.reserveSpace}
     , tryContinue_{options.tryContinue}
     , inheritPermissions_{options.inheritPermissions}
     , doCleanup_{options.doCleanup}
-    , preparationDone_{false}
-    , isReading_{false}
-    , interuptRead_{false}
     , permissions_{options.permissions}
     , localFile_{}
     , fileSize_{0}
-    , readFuture_{}
     , futureTimeout_{options.futureTimeout}
 {
     if (tempFileSuffix_.empty())
@@ -46,13 +30,163 @@ DownloadOperation::DownloadOperation(
 
 DownloadOperation::~DownloadOperation()
 {
-    cleanup();
+    std::ignore = cancel(true);
 
     if (auto stream = fileStream_.lock(); stream)
     {
         // wait for all tasks of the operation to finish
         stream->strand()->pushPromiseTask([]() {}).get();
     }
+}
+
+std::expected<DownloadOperation::WorkStatus, DownloadOperation::Error> DownloadOperation::work()
+{
+    using enum OperationState;
+
+    switch (state_)
+    {
+        case (NotStarted):
+        {
+            state_ = Preparing;
+            [[fallthrough]];
+        }
+        case (Preparing):
+        {
+            const auto prepareResult = prepare();
+            if (!prepareResult.has_value())
+            {
+                Log::error("DownloadOperation: Failed to prepare operation: {}", prepareResult.error().toString());
+                return enterErrorState<WorkStatus>(prepareResult.error());
+            }
+            state_ = Prepared;
+            [[fallthrough]];
+        }
+        case (Prepared):
+        {
+            state_ = Running;
+            [[fallthrough]];
+        }
+        case (Running):
+        {
+            const auto result = readOnce();
+            if (!result.has_value())
+            {
+                Log::error("DownloadOperation: Failed to read file: {}", result.error().toString());
+                return enterErrorState<WorkStatus>(result.error());
+            }
+            if (result.value())
+            {
+                return WorkStatus::MoreWork;
+            }
+            // No More to read?
+            else
+            {
+                Log::info("DownloadOperation: Data reading completed.");
+                state_ = Finalizing;
+                [[fallthrough]];
+            }
+        }
+        case (Finalizing):
+        {
+            const auto finalizeResult = finalize();
+            if (!finalizeResult.has_value())
+            {
+                Log::error("DownloadOperation: Failed to finalize operation: {}", finalizeResult.error().toString());
+                return enterErrorState<WorkStatus>(finalizeResult.error());
+            }
+            state_ = Completed;
+            Log::info("DownloadOperation: Operation completed successfully.");
+            return WorkStatus::Complete;
+        }
+        case (Completed):
+        {
+            Log::warn("DownloadOperation: Operation already completed.");
+            // Dont enter error state here, it would overwrite the success state.
+            return std::unexpected(Error{.type = ErrorType::CannotWorkCompletedOperation});
+        }
+        case (Failed):
+        {
+            Log::warn("DownloadOperation: Operation already failed.");
+            // Do not enter error state here, it would overwrite the error state.
+            return std::unexpected(Error{.type = ErrorType::CannotWorkFailedOperation});
+        }
+        default:
+        {
+        }
+    }
+    Log::error("DownloadOperation: Unknown operation state: {}", static_cast<int>(state_));
+    return enterErrorState<WorkStatus>({.type = ErrorType::UnknownWorkState});
+}
+
+std::expected<bool, DownloadOperation::Error> DownloadOperation::readOnce()
+{
+    std::scoped_lock lock{mutex_};
+
+    if (state_ < OperationState::Prepared)
+    {
+        Log::error("DownloadOperation: Operation not prepared.");
+        return enterErrorState<bool>({.type = ErrorType::OperationNotPrepared});
+    }
+
+    if (!localFile_.is_open())
+    {
+        Log::error("DownloadOperation: File is not open.");
+        return enterErrorState<bool>({.type = ErrorType::OpenFailure});
+    }
+
+    if (fileSize_ == 0)
+    {
+        Log::info("DownloadOperation: Remote file is empty, nothing to do.");
+        return false;
+    }
+
+    auto stream = fileStream_.lock();
+    if (!stream)
+    {
+        Log::error("DownloadOperation: File stream expired.");
+        return enterErrorState<bool>({.type = ErrorType::FileStreamExpired});
+    }
+
+    bool doContinue = false;
+    const auto futureStatus =
+        stream
+            ->read([this, &doContinue](std::string_view data) {
+                if (data.size() == 0)
+                {
+                    Log::info("DownloadOperation: Remote file read complete or error.");
+                    return doContinue = false;
+                }
+
+                std::uint64_t tellp = 0;
+                std::uint64_t fileSize = 0;
+                bool good = true;
+                {
+                    std::scoped_lock lock{mutex_};
+                    localFile_.write(data.data(), data.size());
+                    tellp = static_cast<uint64_t>(localFile_.tellp());
+                    fileSize = fileSize_;
+                    good = localFile_.good();
+                    progressCallback_(0, fileSize, tellp);
+                }
+                if (!good)
+                {
+                    Log::error("DownloadOperation read cycle stopped: localFile_.good() == false");
+                    std::ignore = this->enterErrorState({
+                        .type = OperationErrorType::TargetFileNotGood,
+                    });
+                    return doContinue = false;
+                }
+                return doContinue = good && tellp < fileSize;
+            })
+            .wait_for(futureTimeout_);
+
+    if (futureStatus != std::future_status::ready)
+    {
+        Log::error("DownloadOperation: Future timed out while reading.");
+        return enterErrorState<bool>({.type = ErrorType::FutureTimeout});
+    }
+
+    return doContinue;
 }
 
 std::expected<void, DownloadOperation::Error> DownloadOperation::openOrAdoptFile(SecureShell::IFileStream& stream)
@@ -67,7 +201,7 @@ std::expected<void, DownloadOperation::Error> DownloadOperation::openOrAdoptFile
         if (!localFile_.is_open())
         {
             Log::error("DownloadOperation: Failed to open file for appending: {}", tempPath);
-            return std::unexpected(Error{.type = ErrorType::OpenFailure});
+            return enterErrorState({.type = ErrorType::OpenFailure});
         }
 
         // File complete but not renamed? just rename it in the finalize() step
@@ -91,7 +225,7 @@ std::expected<void, DownloadOperation::Error> DownloadOperation::openOrAdoptFile
             // Seek stream to position:
             auto seekResult = stream.seek(localFile_.tellp()).get();
             if (!seekResult.has_value())
-                return std::unexpected(Error{.type = ErrorType::FileStatFailed});
+                return enterErrorState({.type = ErrorType::FileStatFailed});
         }
     }
     else
@@ -103,7 +237,7 @@ std::expected<void, DownloadOperation::Error> DownloadOperation::openOrAdoptFile
     if (!localFile_.is_open())
     {
         Log::error("DownloadOperation: Failed to open file: {}", tempPath);
-        return std::unexpected(Error{.type = ErrorType::OpenFailure});
+        return enterErrorState({.type = ErrorType::OpenFailure});
     }
 
     return {};
@@ -116,7 +250,7 @@ std::expected<void, Operation::Error> DownloadOperation::prepare()
     if (localPath_.empty())
     {
         Log::error("DownloadOperation: Invalid local path.");
-        return std::unexpected(Error{.type = ErrorType::InvalidPath});
+        return enterErrorState({.type = ErrorType::InvalidPath});
     }
 
     // Initial check. Check again later before rename
@@ -126,7 +260,7 @@ std::expected<void, Operation::Error> DownloadOperation::prepare()
         {
             Log::error(
                 "DownloadOperation: File '{}' already exists and may not be overwritten.", localPath_.generic_string());
-            return std::unexpected(Error{.type = ErrorType::FileExists});
+            return enterErrorState({.type = ErrorType::FileExists});
         }
     }
 
@@ -134,14 +268,14 @@ std::expected<void, Operation::Error> DownloadOperation::prepare()
     if (!stream)
     {
         Log::error("DownloadOperation: File stream expired.");
-        return std::unexpected(Error{.type = ErrorType::FileStreamExpired});
+        return enterErrorState({.type = ErrorType::FileStreamExpired});
     }
 
     const auto fileInfo = stream->stat().get();
     if (!fileInfo.has_value())
     {
         Log::error("DownloadOperation: Failed to stat file.");
-        return std::unexpected(Error{.type = ErrorType::FileStatFailed, .sftpError = fileInfo.error()});
+        return enterErrorState({.type = ErrorType::FileStatFailed, .sftpError = fileInfo.error()});
     }
 
     fileSize_ = fileInfo->size;
@@ -150,7 +284,7 @@ std::expected<void, Operation::Error> DownloadOperation::prepare()
     if (!openResult.has_value())
     {
         Log::error("DownloadOperation: Failed to open file.");
-        return std::unexpected(std::move(openResult).error());
+        return enterErrorState(std::move(openResult).error());
     }
 
     if (reserveSpace_ && fileSize_ != 0)
@@ -161,7 +295,10 @@ std::expected<void, Operation::Error> DownloadOperation::prepare()
         localFile_.seekp(fileSize_ - 1);
         localFile_.put('\0');
         if (localFile_.fail())
-            return std::unexpected(Error{.type = ErrorType::OpenFailure});
+        {
+            Log::error("DownloadOperation: Failed to open file.");
+            return enterErrorState({.type = ErrorType::OpenFailure});
+        }
         localFile_.seekp(pos);
     }
 
@@ -170,116 +307,25 @@ std::expected<void, Operation::Error> DownloadOperation::prepare()
         remotePath_.generic_string(),
         localPath_.generic_string());
 
-    preparationDone_ = true;
     return {};
 }
-std::expected<void, Operation::Error> DownloadOperation::start()
+
+std::expected<void, DownloadOperation::Error> DownloadOperation::cancel(bool adoptCancelState)
 {
     std::scoped_lock lock{mutex_};
-    interuptRead_ = false;
 
-    if (!preparationDone_)
-    {
-        Log::error("DownloadOperation: Operation not prepared.");
-        return std::unexpected(Error{.type = ErrorType::OperationNotPrepared});
-    }
+    Log::info(
+        "DownloadOperation: Download of '{}' to '{}' canceled.",
+        remotePath_.generic_string(),
+        localPath_.generic_string());
 
-    if (!localFile_.is_open())
-    {
-        Log::error("DownloadOperation: File is not open.");
-        return std::unexpected(Error{.type = ErrorType::OpenFailure});
-    }
-
-    if (fileSize_ == 0)
-    {
-        Log::info("DownloadOperation: Remote file is empty, nothing to do.");
-        return {};
-    }
-
-    auto stream = fileStream_.lock();
-    if (!stream)
-    {
-        Log::error("DownloadOperation: File stream expired.");
-        return std::unexpected(Error{.type = ErrorType::FileStreamExpired});
-    }
-
-    isReading_ = true;
-    readFuture_ = stream->read([this](std::string_view data) {
-        if (data.size() == 0)
-        {
-            {
-                std::lock_guard lock{mutex_};
-                isReading_ = false;
-            }
-            Log::info("DownloadOperation: Remote file read complete or error.");
-            // Defer completion by pushing it onto the strand.
-            perform([this]() {
-                std::scoped_lock lock{mutex_};
-                onCompletionCallback_(true);
-            });
-            return true;
-        }
-
-        std::uint64_t fileSize = 0;
-        std::uint64_t tellp = 0;
-        bool doContinue = true;
-        bool good = true;
-        {
-            std::scoped_lock lock{mutex_};
-            localFile_.write(data.data(), data.size());
-            fileSize = fileSize_;
-            tellp = static_cast<uint64_t>(localFile_.tellp());
-            good = localFile_.good();
-            doContinue = good && !interuptRead_;
-            isReading_ = doContinue;
-        }
-        progressCallback_(0, fileSize, tellp);
-        if (!doContinue)
-        {
-            if (!good)
-            {
-                Log::error("DownloadOperation read cycle stopped: localFile_.good() == false");
-                perform([this]() {
-                    std::scoped_lock lock{mutex_};
-                    onCompletionCallback_(false);
-                });
-            }
-        }
-        return doContinue;
-    });
-
-    return {};
-}
-std::expected<void, DownloadOperation::Error> DownloadOperation::cancel()
-{
-    {
-        std::scoped_lock lock{mutex_};
-
-        if (isReading_)
-        {
-            const auto res = pause();
-            if (!res.has_value())
-            {
-                Log::error("DownloadOperation: Failed to pause download.");
-                return res;
-            }
-        }
-
-        Log::info(
-            "DownloadOperation: Download of '{}' to '{}' canceled.",
-            remotePath_.generic_string(),
-            localPath_.generic_string());
-    }
-
-    perform([this]() {
-        std::scoped_lock lock{mutex_};
-        onCompletionCallback_(false);
-    });
+    if (adoptCancelState)
+        state_ = OperationState::Canceled;
 
     cleanup();
-
     return {};
 }
+
 void DownloadOperation::cleanup()
 {
     std::scoped_lock lock{mutex_};
@@ -291,38 +337,15 @@ void DownloadOperation::cleanup()
     if (auto stream = fileStream_.lock(); stream)
         stream->close(false);
 }
-std::expected<void, DownloadOperation::Error> DownloadOperation::pause()
-{
-    {
-        std::scoped_lock lock{mutex_};
-        interuptRead_ = true;
-    }
 
-    if (readFuture_.wait_for(futureTimeout_) != std::future_status::ready)
-    {
-        Log::error("DownloadOperation: Failed to pause download.");
-        return std::unexpected(Error{.type = ErrorType::FutureTimeout});
-    }
-    {
-        std::scoped_lock lock{mutex_};
-        isReading_ = false;
-    }
-    return {};
-}
 std::expected<void, DownloadOperation::Error> DownloadOperation::finalize()
 {
     std::scoped_lock lock{mutex_};
 
-    if (isReading_)
+    if (state_ == OperationState::Running)
     {
         Log::error("DownloadOperation: Cannot finalize while reading.");
         return std::unexpected(Error{.type = ErrorType::CannotFinalizeDuringRead});
-    }
-
-    if (readFuture_.wait_for(futureTimeout_) != std::future_status::ready)
-    {
-        Log::error("DownloadOperation: Failed to wait for download completion.");
-        return std::unexpected(Error{.type = ErrorType::FutureTimeout});
     }
 
     localFile_.close();

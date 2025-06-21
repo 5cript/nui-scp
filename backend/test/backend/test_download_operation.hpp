@@ -8,11 +8,9 @@
 
 #include <gtest/gtest.h>
 
-#include <thread>
+#include <queue>
 #include <string>
 #include <memory>
-#include <tuple>
-#include <vector>
 
 using namespace std::chrono_literals;
 using namespace std::string_literals;
@@ -60,10 +58,11 @@ namespace Test
                     [size = size.value()]()
                         -> std::future<std::expected<SecureShell::FileInformation, SecureShell::SftpError>> {
                         std::promise<std::expected<SecureShell::FileInformation, SecureShell::SftpError>> promise;
-                        promise.set_value(SecureShell::FileInformation{{
-                            .size = size,
-                            .permissions = std::filesystem::perms::owner_all,
-                        }});
+                        promise.set_value(
+                            SecureShell::FileInformation{{
+                                .size = size,
+                                .permissions = std::filesystem::perms::owner_all,
+                            }});
                         return promise.get_future();
                     });
         }
@@ -76,41 +75,45 @@ namespace Test
                         -> std::future<std::expected<std::size_t, SecureShell::SftpError>> {
                         onRead_ = std::move(cb);
                         readPromise_ = {};
+                        if (!readCycleQueue_.empty())
+                        {
+                            readCycleQueue_.front()();
+                            readCycleQueue_.pop();
+                        }
                         return readPromise_.get_future();
                     });
         }
 
-        void fakeReadCycle(std::optional<std::size_t> chunkSizeOpt)
+        void enqueueFakeReadCycle(std::optional<std::size_t> chunkSizeOpt = std::nullopt)
         {
-            auto chunkSize = fakeFileContent_.size();
-            if (chunkSizeOpt)
-                chunkSize = chunkSizeOpt.value();
+            readCycleQueue_.push([this, chunkSizeOpt]() {
+                auto chunkSize = fakeFileContent_.size();
+                if (chunkSizeOpt)
+                    chunkSize = chunkSizeOpt.value();
 
-            if (readOffset_ + chunkSize > fakeFileContent_.size())
-                chunkSize = fakeFileContent_.size() - readOffset_;
+                if (readOffset_ + chunkSize > fakeFileContent_.size())
+                    chunkSize = fakeFileContent_.size() - readOffset_;
 
-            // EOF:
-            if (chunkSize == 0)
-            {
-                readPromise_.set_value(readOffset_);
-                onReadResult_ = onRead_({});
-                return;
-            }
-
-            if (onRead_)
-            {
-                onReadResult_ = onRead_(std::string_view{fakeFileContent_}.substr(readOffset_, chunkSize));
-                readOffset_ += chunkSize;
-                if (!onReadResult_)
+                // EOF:
+                if (chunkSize == 0)
                 {
+                    readPromise_.set_value(readOffset_);
+                    onReadResult_ = onRead_({});
+                    return;
+                }
+
+                if (onRead_)
+                {
+                    onReadResult_ = onRead_(std::string_view{fakeFileContent_}.substr(readOffset_, chunkSize));
+                    readOffset_ += chunkSize;
                     readPromise_.set_value(readOffset_);
                     return;
                 }
-            }
-            else
-            {
-                throw std::runtime_error("No read callback set.");
-            }
+                else
+                {
+                    throw std::runtime_error("No read callback set.");
+                }
+            });
         }
 
         std::string readFile(std::filesystem::path const& path)
@@ -127,6 +130,7 @@ namespace Test
         std::promise<std::expected<std::size_t, SecureShell::SftpError>> readPromise_{};
         std::function<bool(std::string_view data)> onRead_{};
         std::size_t readOffset_{0};
+        std::queue<std::function<void()>> readCycleQueue_{};
         bool onReadResult_{true};
     };
 
@@ -190,9 +194,11 @@ namespace Test
 
         EXPECT_CALL(*fileStream, stat()).WillOnce([]() -> std::future<std::expected<FileInformation, SftpError>> {
             std::promise<std::expected<FileInformation, SftpError>> promise;
-            promise.set_value(std::unexpected(SftpError{
-                .message = "Stat failed",
-            }));
+            promise.set_value(
+                std::unexpected(
+                    SftpError{
+                        .message = "Stat failed",
+                    }));
             return promise.get_future();
         });
 
@@ -217,9 +223,10 @@ namespace Test
         EXPECT_CALL(*fileStream, stat())
             .WillOnce([]() -> std::future<std::expected<FileInformation, SecureShell::SftpError>> {
                 std::promise<std::expected<FileInformation, SecureShell::SftpError>> promise;
-                promise.set_value(FileInformation{{
-                    .size = 0,
-                }});
+                promise.set_value(
+                    FileInformation{{
+                        .size = 0,
+                    }});
                 return promise.get_future();
             });
 
@@ -241,9 +248,10 @@ namespace Test
         EXPECT_CALL(*fileStream, stat())
             .WillOnce([]() -> std::future<std::expected<FileInformation, SecureShell::SftpError>> {
                 std::promise<std::expected<FileInformation, SecureShell::SftpError>> promise;
-                promise.set_value(FileInformation{{
-                    .size = 42,
-                }});
+                promise.set_value(
+                    FileInformation{{
+                        .size = 42,
+                    }});
                 return promise.get_future();
             });
 
@@ -265,9 +273,10 @@ namespace Test
         EXPECT_CALL(*fileStream, stat())
             .WillOnce([]() -> std::future<std::expected<FileInformation, SecureShell::SftpError>> {
                 std::promise<std::expected<FileInformation, SecureShell::SftpError>> promise;
-                promise.set_value(FileInformation{{
-                    .size = 42,
-                }});
+                promise.set_value(
+                    FileInformation{{
+                        .size = 42,
+                    }});
                 return promise.get_future();
             });
 
@@ -296,9 +305,10 @@ namespace Test
             EXPECT_CALL(*fileStream, stat())
                 .WillOnce([]() -> std::future<std::expected<FileInformation, SecureShell::SftpError>> {
                     std::promise<std::expected<FileInformation, SecureShell::SftpError>> promise;
-                    promise.set_value(FileInformation{{
-                        .size = 42,
-                    }});
+                    promise.set_value(
+                        FileInformation{{
+                            .size = 42,
+                        }});
                     return promise.get_future();
                 });
 
@@ -327,9 +337,10 @@ namespace Test
             EXPECT_CALL(*fileStream, stat())
                 .WillOnce([]() -> std::future<std::expected<FileInformation, SecureShell::SftpError>> {
                     std::promise<std::expected<FileInformation, SecureShell::SftpError>> promise;
-                    promise.set_value(FileInformation{{
-                        .size = 42,
-                    }});
+                    promise.set_value(
+                        FileInformation{{
+                            .size = 42,
+                        }});
                     return promise.get_future();
                 });
 
@@ -361,7 +372,7 @@ namespace Test
         EXPECT_TRUE(result.has_value());
         EXPECT_TRUE(std::filesystem::exists(options.localPath.generic_string() + ".filepart"));
 
-        EXPECT_TRUE(operation.cancel().has_value());
+        EXPECT_TRUE(operation.cancel(true).has_value());
 
         EXPECT_TRUE(std::filesystem::exists(options.localPath.generic_string() + ".filepart"));
     }
@@ -380,9 +391,10 @@ namespace Test
         EXPECT_CALL(*fileStream, stat())
             .WillOnce([]() -> std::future<std::expected<FileInformation, SecureShell::SftpError>> {
                 std::promise<std::expected<FileInformation, SecureShell::SftpError>> promise;
-                promise.set_value(FileInformation{{
-                    .size = 42,
-                }});
+                promise.set_value(
+                    FileInformation{{
+                        .size = 42,
+                    }});
                 return promise.get_future();
             });
 
@@ -392,42 +404,12 @@ namespace Test
         EXPECT_TRUE(result.has_value());
         EXPECT_TRUE(std::filesystem::exists(options.localPath.generic_string() + ".filepart"));
 
-        EXPECT_TRUE(operation.cancel().has_value());
+        EXPECT_TRUE(operation.cancel(true).has_value());
 
         EXPECT_FALSE(std::filesystem::exists(options.localPath.generic_string() + ".filepart"));
     }
 
-    TEST_F(DownloadOperationTests, CancelCallsTheCompletionHandler)
-    {
-        using namespace SecureShell;
-
-        std::promise<bool> completionPromise;
-
-        auto options = DownloadOperation::DownloadOperationOptions{
-            .onCompletionCallback =
-                [&completionPromise](bool success) {
-                    completionPromise.set_value(success);
-                },
-            .localPath = isolateDirectory_.path() / "file.txt",
-            .doCleanup = true,
-        };
-
-        const auto fileStream = makeFileStreamMock();
-        giveMockDefaultStat(fileStream);
-
-        DownloadOperation operation{fileStream, options};
-
-        auto result = operation.prepare();
-        EXPECT_TRUE(result.has_value());
-        EXPECT_TRUE(operation.cancel().has_value());
-
-        auto future = completionPromise.get_future();
-        ASSERT_EQ(future.wait_for(1s), std::future_status::ready);
-        // Cancel is a failure
-        EXPECT_FALSE(future.get());
-    }
-
-    TEST_F(DownloadOperationTests, StartWithEmptyRemoteFileSucceeds)
+    TEST_F(DownloadOperationTests, WorkWithEmptyRemoteFileSucceeds)
     {
         using namespace SecureShell;
 
@@ -439,29 +421,11 @@ namespace Test
         };
         DownloadOperation operation{fileStream, options};
 
-        auto result = operation.prepare();
-        EXPECT_TRUE(result.has_value());
-
-        result = operation.start();
+        const auto result = operation.work();
         EXPECT_TRUE(result.has_value());
     }
 
-    TEST_F(DownloadOperationTests, StartWithoutPrepareFails)
-    {
-        using namespace SecureShell;
-
-        auto fileStream = makeFileStreamMock();
-        auto options = DownloadOperation::DownloadOperationOptions{
-            .localPath = isolateDirectory_.path() / "file.txt",
-        };
-        DownloadOperation operation{fileStream, options};
-
-        auto result = operation.start();
-        EXPECT_FALSE(result.has_value());
-        EXPECT_EQ(result.error().type, DownloadOperation::ErrorType::OperationNotPrepared);
-    }
-
-    TEST_F(DownloadOperationTests, StartFailsWithExpiredFileStream)
+    TEST_F(DownloadOperationTests, WorkFailsWithExpiredFileStream)
     {
         using namespace SecureShell;
 
@@ -478,12 +442,12 @@ namespace Test
 
         fileStream.reset();
 
-        result = operation.start();
-        EXPECT_FALSE(result.has_value());
-        EXPECT_EQ(result.error().type, DownloadOperation::ErrorType::FileStreamExpired);
+        const auto workResult = operation.work();
+        EXPECT_FALSE(workResult.has_value());
+        EXPECT_EQ(workResult.error().type, DownloadOperation::ErrorType::FileStreamExpired);
     }
 
-    TEST_F(DownloadOperationTests, StartCallsReadOnFileStream)
+    TEST_F(DownloadOperationTests, WorkCallsReadOnFileStream)
     {
         using namespace SecureShell;
 
@@ -496,10 +460,9 @@ namespace Test
         };
         DownloadOperation operation{fileStream, options};
 
-        auto result = operation.prepare();
-        EXPECT_TRUE(result.has_value());
+        enqueueFakeReadCycle();
 
-        result = operation.start();
+        const auto result = operation.work();
         EXPECT_TRUE(result.has_value());
     }
 
@@ -521,7 +484,7 @@ namespace Test
         auto result = operation.prepare();
         EXPECT_TRUE(result.has_value());
 
-        EXPECT_TRUE(operation.cancel().has_value());
+        EXPECT_TRUE(operation.cancel(true).has_value());
 
         EXPECT_EQ(
             std::filesystem::file_size(options.localPath.generic_string() + ".filepart"), fakeFileContent_.size());
@@ -541,206 +504,15 @@ namespace Test
         };
         DownloadOperation operation{fileStream, options};
 
-        auto result = operation.prepare();
+        enqueueFakeReadCycle(5);
+
+        const auto result = operation.work();
         EXPECT_TRUE(result.has_value());
 
-        result = operation.start();
-        EXPECT_TRUE(result.has_value());
-
-        fakeReadCycle(5);
-        fakeReadCycle(0); // EOF Cycle
-
-        EXPECT_TRUE(operation.cancel().has_value());
+        EXPECT_TRUE(operation.cancel(false).has_value());
 
         EXPECT_EQ(std::filesystem::file_size(options.localPath.generic_string() + ".filepart"), 5);
         EXPECT_EQ(readFile(options.localPath.generic_string() + ".filepart"), fakeFileContent_.substr(0, 5));
-    }
-
-    TEST_F(DownloadOperationTests, ReadWritesFileThroughMultipleCycles)
-    {
-        using namespace SecureShell;
-
-        auto fileStream = makeFileStreamMock();
-        giveMockDefaultStat(fileStream, fakeFileContent_.size());
-        giveMockExpectedRead(fileStream);
-
-        auto options = DownloadOperation::DownloadOperationOptions{
-            .localPath = isolateDirectory_.path() / "file.txt",
-            .doCleanup = false,
-        };
-        DownloadOperation operation{fileStream, options};
-
-        auto result = operation.prepare();
-        EXPECT_TRUE(result.has_value());
-
-        result = operation.start();
-        EXPECT_TRUE(result.has_value());
-
-        for (std::size_t i = 0; i < fakeFileContent_.size(); ++i)
-            fakeReadCycle(1);
-        fakeReadCycle(0); // EOF Cycle
-
-        EXPECT_TRUE(operation.cancel().has_value());
-
-        EXPECT_EQ(
-            std::filesystem::file_size(options.localPath.generic_string() + ".filepart"), fakeFileContent_.size());
-        EXPECT_EQ(readFile(options.localPath.generic_string() + ".filepart"), fakeFileContent_);
-    }
-
-    TEST_F(DownloadOperationTests, ReadWritesFileThroughSingleCycle)
-    {
-        using namespace SecureShell;
-
-        auto fileStream = makeFileStreamMock();
-        giveMockDefaultStat(fileStream, fakeFileContent_.size());
-        giveMockExpectedRead(fileStream);
-
-        auto options = DownloadOperation::DownloadOperationOptions{
-            .localPath = isolateDirectory_.path() / "file.txt",
-            .doCleanup = false,
-        };
-        DownloadOperation operation{fileStream, options};
-
-        auto result = operation.prepare();
-        EXPECT_TRUE(result.has_value());
-
-        result = operation.start();
-        EXPECT_TRUE(result.has_value());
-
-        fakeReadCycle(fakeFileContent_.size());
-        fakeReadCycle(0); // EOF Cycle
-
-        EXPECT_TRUE(operation.cancel().has_value());
-
-        EXPECT_EQ(
-            std::filesystem::file_size(options.localPath.generic_string() + ".filepart"), fakeFileContent_.size());
-        EXPECT_EQ(readFile(options.localPath.generic_string() + ".filepart"), fakeFileContent_);
-    }
-
-    TEST_F(DownloadOperationTests, CanPauseRead)
-    {
-        using namespace SecureShell;
-
-        auto fileStream = makeFileStreamMock();
-        giveMockDefaultStat(fileStream, fakeFileContent_.size());
-        giveMockExpectedRead(fileStream);
-
-        auto options = DownloadOperation::DownloadOperationOptions{
-            .localPath = isolateDirectory_.path() / "file.txt",
-            .doCleanup = false,
-        };
-        DownloadOperation operation{fileStream, options};
-
-        auto result = operation.prepare();
-        EXPECT_TRUE(result.has_value());
-
-        result = operation.start();
-        EXPECT_TRUE(result.has_value());
-
-        fakeReadCycle(5);
-
-        std::expected<void, DownloadOperation::Error> pauseResult;
-        std::promise<void> threadStarted;
-        std::thread asyncPause{[&operation, &pauseResult, &threadStarted]() {
-            threadStarted.set_value();
-            pauseResult = operation.pause();
-        }};
-        threadStarted.get_future().wait();
-        // dont know actually how to wait for the pause, except for burdening the wait on the user.
-        std::this_thread::sleep_for(200ms);
-
-        // This one still goes through but now signals a stop to the read.
-        fakeReadCycle(5);
-
-        asyncPause.join();
-
-        EXPECT_TRUE(operation.cancel().has_value());
-
-        EXPECT_EQ(onReadResult_, false);
-        EXPECT_EQ(std::filesystem::file_size(options.localPath.generic_string() + ".filepart"), 10);
-        EXPECT_EQ(readFile(options.localPath.generic_string() + ".filepart"), fakeFileContent_.substr(0, 10));
-    }
-
-    TEST_F(DownloadOperationTests, CanContinueReadingAfterPause)
-    {
-        using namespace SecureShell;
-
-        auto fileStream = makeFileStreamMock();
-        giveMockDefaultStat(fileStream, fakeFileContent_.size());
-        giveMockExpectedRead(fileStream);
-
-        auto options = DownloadOperation::DownloadOperationOptions{
-            .localPath = isolateDirectory_.path() / "file.txt",
-            .doCleanup = false,
-        };
-        DownloadOperation operation{fileStream, options};
-
-        auto result = operation.prepare();
-        EXPECT_TRUE(result.has_value());
-
-        result = operation.start();
-        EXPECT_TRUE(result.has_value());
-
-        fakeReadCycle(5);
-
-        std::expected<void, DownloadOperation::Error> pauseResult;
-        std::promise<void> threadStarted;
-        std::thread asyncPause{[&operation, &pauseResult, &threadStarted]() {
-            threadStarted.set_value();
-            pauseResult = operation.pause();
-        }};
-        threadStarted.get_future().wait();
-        // dont know actually how to wait for the pause, except for burdening the wait on the user.
-        std::this_thread::sleep_for(200ms);
-
-        // This one still goes through but now signals a stop to the read.
-        fakeReadCycle(5);
-
-        asyncPause.join();
-
-        EXPECT_EQ(onReadResult_, false);
-
-        result = operation.start();
-        EXPECT_TRUE(result.has_value());
-
-        // This one should go through and continue the read.
-        fakeReadCycle(fakeFileContent_.size() - 10);
-        fakeReadCycle(0); // EOF Cycle
-
-        result = operation.cancel();
-        EXPECT_TRUE(result.has_value());
-
-        EXPECT_EQ(onReadResult_, true);
-        EXPECT_EQ(
-            std::filesystem::file_size(options.localPath.generic_string() + ".filepart"), fakeFileContent_.size());
-        EXPECT_EQ(readFile(options.localPath.generic_string() + ".filepart"), fakeFileContent_);
-    }
-
-    TEST_F(DownloadOperationTests, CannotFinalizeWhileReading)
-    {
-        using namespace SecureShell;
-
-        auto fileStream = makeFileStreamMock();
-        giveMockDefaultStat(fileStream, fakeFileContent_.size());
-        giveMockExpectedRead(fileStream);
-
-        auto options = DownloadOperation::DownloadOperationOptions{
-            .localPath = isolateDirectory_.path() / "file.txt",
-            .doCleanup = false,
-        };
-        DownloadOperation operation{fileStream, options};
-
-        auto result = operation.prepare();
-        EXPECT_TRUE(result.has_value());
-
-        result = operation.start();
-        EXPECT_TRUE(result.has_value());
-
-        fakeReadCycle(5);
-
-        auto fin = operation.finalize();
-        EXPECT_FALSE(fin.has_value());
-        EXPECT_EQ(fin.error().type, DownloadOperation::ErrorType::CannotFinalizeDuringRead);
     }
 
     TEST_F(DownloadOperationTests, FinalizeFailsIfFileExistsButOverwriteIsForbidden)
@@ -757,14 +529,10 @@ namespace Test
         };
         DownloadOperation operation{fileStream, options};
 
-        auto result = operation.prepare();
-        EXPECT_TRUE(result.has_value());
+        enqueueFakeReadCycle();
 
-        result = operation.start();
+        const auto result = operation.work();
         EXPECT_TRUE(result.has_value());
-
-        fakeReadCycle(fakeFileContent_.size());
-        fakeReadCycle(0); // EOF Cycle
 
         {
             std::ofstream file{options.localPath};
@@ -773,36 +541,6 @@ namespace Test
         auto fin = operation.finalize();
         EXPECT_FALSE(fin.has_value());
         EXPECT_EQ(fin.error().type, DownloadOperation::ErrorType::FileExists);
-    }
-
-    TEST_F(DownloadOperationTests, CanFinalizeOperation)
-    {
-        using namespace SecureShell;
-
-        auto fileStream = makeFileStreamMock();
-        giveMockDefaultStat(fileStream, fakeFileContent_.size());
-        giveMockExpectedRead(fileStream);
-
-        auto options = DownloadOperation::DownloadOperationOptions{
-            .localPath = isolateDirectory_.path() / "file.txt",
-            .mayOverwrite = false,
-        };
-        DownloadOperation operation{fileStream, options};
-
-        auto result = operation.prepare();
-        EXPECT_TRUE(result.has_value());
-
-        result = operation.start();
-        EXPECT_TRUE(result.has_value());
-
-        fakeReadCycle(fakeFileContent_.size());
-        fakeReadCycle(0); // EOF Cycle
-
-        auto fin = operation.finalize();
-        EXPECT_TRUE(fin.has_value());
-
-        EXPECT_EQ(readFile(options.localPath), fakeFileContent_);
-        EXPECT_FALSE(std::filesystem::exists(options.localPath.generic_string() + ".filepart"));
     }
 
     TEST_F(DownloadOperationTests, FinalizeSucceedsIfFileExistsButOverwriteIsAllowed)
@@ -819,21 +557,15 @@ namespace Test
         };
         DownloadOperation operation{fileStream, options};
 
-        auto result = operation.prepare();
-        EXPECT_TRUE(result.has_value());
-
-        result = operation.start();
-        EXPECT_TRUE(result.has_value());
-
-        fakeReadCycle(fakeFileContent_.size());
-        fakeReadCycle(0); // EOF Cycle
+        enqueueFakeReadCycle();
+        enqueueFakeReadCycle(0);
 
         {
             std::ofstream file{options.localPath};
         }
 
-        auto fin = operation.finalize();
-        EXPECT_TRUE(fin.has_value());
+        auto result = operation.work();
+        EXPECT_TRUE(result.has_value());
     }
 
     TEST_F(DownloadOperationTests, ProgressCallbackIsCalledDuringRead)
@@ -856,19 +588,23 @@ namespace Test
         };
         DownloadOperation operation{fileStream, options};
 
-        auto result = operation.prepare();
-        EXPECT_TRUE(result.has_value());
-
-        result = operation.start();
-        EXPECT_TRUE(result.has_value());
-
         for (std::size_t i = 0; i < fakeFileContent_.size(); ++i)
-            fakeReadCycle(1);
-        fakeReadCycle(0); // EOF Cycle
+        {
+            enqueueFakeReadCycle(1);
+        }
+        enqueueFakeReadCycle(0);
 
-        EXPECT_TRUE(operation.cancel().has_value());
+        decltype(operation.work()) result;
+        do
+        {
+            result = operation.work();
+            ASSERT_TRUE(result.has_value());
+        } while (result.value() == DownloadOperation::WorkStatus::MoreWork);
 
-        EXPECT_EQ(progressCalls.size(), fakeFileContent_.size());
+        EXPECT_TRUE(operation.cancel(true).has_value());
+
+        ASSERT_EQ(progressCalls.size(), fakeFileContent_.size());
+
         for (std::size_t i = 0; i < fakeFileContent_.size(); ++i)
         {
             EXPECT_EQ(std::get<0>(progressCalls[i]), 0);
@@ -879,40 +615,5 @@ namespace Test
         EXPECT_EQ(std::get<0>(progressCalls.back()), 0);
         EXPECT_EQ(std::get<1>(progressCalls.back()), fakeFileContent_.size());
         EXPECT_EQ(std::get<2>(progressCalls.back()), fakeFileContent_.size());
-    }
-
-    TEST_F(DownloadOperationTests, CompletionCallbackIsCalled)
-    {
-        using namespace SecureShell;
-
-        std::promise<bool> completionPromise;
-
-        auto fileStream = makeFileStreamMock();
-        giveMockDefaultStat(fileStream, fakeFileContent_.size());
-        giveMockExpectedRead(fileStream);
-
-        auto options = DownloadOperation::DownloadOperationOptions{
-            .onCompletionCallback =
-                [&completionPromise](bool success) {
-                    completionPromise.set_value(success);
-                },
-            .localPath = isolateDirectory_.path() / "file.txt",
-            .doCleanup = false,
-        };
-        DownloadOperation operation{fileStream, options};
-
-        auto result = operation.prepare();
-        EXPECT_TRUE(result.has_value());
-
-        result = operation.start();
-        EXPECT_TRUE(result.has_value());
-
-        for (std::size_t i = 0; i < fakeFileContent_.size(); ++i)
-            fakeReadCycle(1);
-        fakeReadCycle(0); // EOF Cycle
-
-        auto future = completionPromise.get_future();
-        ASSERT_EQ(future.wait_for(1s), std::future_status::ready);
-        EXPECT_TRUE(future.get());
     }
 }

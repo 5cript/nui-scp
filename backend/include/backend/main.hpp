@@ -37,7 +37,7 @@ class Main
     Nui::RpcHub hub_;
     ProcessStore processes_;
     PasswordPrompter prompter_;
-    SshSessionManager sshSessionManager_;
+    std::shared_ptr<SshSessionManager> sshSessionManager_;
     std::atomic_bool shuttingDown_;
     boost::asio::steady_timer childSignalTimer_;
 };
