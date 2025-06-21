@@ -605,7 +605,7 @@ namespace NuiFileExplorer
         return div {
             std::move(attributes)
         }(
-            [this]() -> Nui::ElementRenderer{
+            [this]() -> Nui::ElementRenderer {
                 if (impl_->settings.pathBarOnTop)
                     return pathBar();
                 return nil();
@@ -631,7 +631,7 @@ namespace NuiFileExplorer
                     }
                 )
             ),
-            [this]() -> Nui::ElementRenderer{
+            [this]() -> Nui::ElementRenderer {
                 if (!impl_->settings.pathBarOnTop)
                     return pathBar();
                 return nil();
