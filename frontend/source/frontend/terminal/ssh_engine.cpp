@@ -54,11 +54,11 @@ void SshTerminalEngine::open(std::function<void(bool, std::string const&)> onOpe
     obj.set("engine", asVal(impl_->settings.engineOptions));
 
     Nui::RpcClient::callWithBackChannel(
-        "SshSessionManager::connect",
+        "SessionManager::connect",
         [this, onOpen = std::move(onOpen)](Nui::val val) {
             if (!val.hasOwnProperty("id"))
             {
-                Log::error("SshSessionManager::connect callback did not return an id");
+                Log::error("SessionManager::connect callback did not return an id");
                 std::string error = "";
                 if (val.hasOwnProperty("error"))
                     error = val["error"].as<std::string>();
@@ -77,7 +77,7 @@ void SshTerminalEngine::disconnect(std::function<void()> onDisconnect, bool from
         impl_->wasDisposed = true;
         Log::info("Disconnecting session: {}", impl_->sshSessionId.value());
         Nui::RpcClient::callWithBackChannel(
-            "SshSessionManager::disconnect",
+            "SessionManager::disconnect",
             [onDisconnect = std::move(onDisconnect)](Nui::val) {
                 // TODO: handle error
                 onDisconnect();
@@ -115,11 +115,11 @@ void SshTerminalEngine::createChannelImpl(
 
     Nui::val obj = Nui::val::object();
     obj.set("engine", asVal(impl_->settings.engineOptions));
-    obj.set("sessionId", impl_->sshSessionId.value());
     obj.set("fileMode", fileMode);
 
+    Log::info("Creating {} channel for session '{}'", fileMode ? "sftp" : "pty", impl_->sshSessionId.value());
     Nui::RpcClient::callWithBackChannel(
-        "SshSessionManager::Session::createChannel",
+        fmt::format("Session::{}::Channel::create", impl_->sshSessionId.value()),
         [this,
          onCreated = std::move(onCreated),
          handler = std::move(handler),
@@ -134,7 +134,7 @@ void SshTerminalEngine::createChannelImpl(
 
             if (!val.hasOwnProperty("id"))
             {
-                Log::error("SshSessionManager::Session::createChannel callback did not return an id");
+                Log::error("Session::Channel::create callback did not return an id");
                 onCreated(std::nullopt);
                 return;
             }
@@ -157,7 +157,7 @@ void SshTerminalEngine::createChannelImpl(
             if (!fileMode)
             {
                 Nui::RpcClient::callWithBackChannel(
-                    "SshSessionManager::Channel::startReading",
+                    fmt::format("Session::{}::Channel::startReading", impl_->sshSessionId.value()),
                     [this, channelId, onCreated](Nui::val val) {
                         if (val.hasOwnProperty("error"))
                         {
@@ -169,7 +169,6 @@ void SshTerminalEngine::createChannelImpl(
                         Log::info("Started reading: {}", channelId.value());
                         onCreated(channelId);
                     },
-                    impl_->sshSessionId.value(),
                     channelId.value());
             }
             else

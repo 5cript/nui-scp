@@ -5,7 +5,8 @@ add_library(
         process/process.cpp
         process/process_store.cpp
         process/environment.cpp
-        ssh_session_manager.cpp
+        session_manager.cpp
+        session.cpp
         sftp/operation_queue.cpp
         sftp/download_operation.cpp
 )
@@ -44,6 +45,7 @@ target_link_libraries(
     backend
     PUBLIC
         nui-backend
+        mplex
         efsw-static
         Boost::filesystem
         Boost::asio

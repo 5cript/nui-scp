@@ -22,7 +22,7 @@ namespace SecureShell::Test
 
     struct NodeProcessResult
     {
-        boost::asio::deadline_timer timer;
+        boost::asio::steady_timer timer;
         boost::asio::writable_pipe stdinPipe;
         boost::asio::readable_pipe stdoutPipe;
         boost::asio::readable_pipe stderrPipe;

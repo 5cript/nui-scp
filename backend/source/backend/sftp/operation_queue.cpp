@@ -33,8 +33,9 @@ namespace
     }
 }
 
-OperationQueue::OperationQueue(int parallelism)
-    : parallelism_{parallelism}
+OperationQueue::OperationQueue(Persistence::SftpOptions sftpOpts, int parallelism)
+    : sftpOpts_{std::move(sftpOpts)}
+    , parallelism_{parallelism}
 {}
 
 void OperationQueue::cancelAll()
@@ -94,8 +95,6 @@ bool OperationQueue::update()
 }
 
 std::expected<void, Operation::Error> OperationQueue::addDownloadOperation(
-    Persistence::State const& state,
-    std::string const& sshSessionOptionsKey,
     SecureShell::SftpSession& sftp,
     Ids::OperationId id,
     std::filesystem::path const& localPath,
@@ -115,17 +114,7 @@ std::expected<void, Operation::Error> OperationQueue::addDownloadOperation(
         return std::unexpected(Operation::Error{.type = Operation::ErrorType::SftpError, .sftpError = result.error()});
     }
 
-    auto sessionOptsIter = state.sshSessionOptions.find(sshSessionOptionsKey);
-    if (sessionOptsIter == state.sshSessionOptions.end())
-    {
-        Log::error("No ssh session options found with key: {}", sshSessionOptionsKey);
-        return std::unexpected(Operation::Error{.type = Operation::ErrorType::InvalidOptionsKey});
-    }
-
-    auto sessionOpts = sessionOptsIter->second;
-    sessionOpts.sftpOptions.resolveWith(state.sftpOptions);
-    const auto& sftpOpts = sessionOpts.sftpOptions;
-    const auto transferOptions = sftpOpts->downloadOptions.value_or(Persistence::TransferOptions{});
+    const auto transferOptions = sftpOpts_.downloadOptions.value_or(Persistence::TransferOptions{});
     const auto defaultOptions = DownloadOperation::DownloadOperationOptions{};
 
     auto operation = std::make_unique<DownloadOperation>(

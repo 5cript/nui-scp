@@ -22,7 +22,9 @@ class OperationQueue
     ROAR_PIMPL_SPECIAL_FUNCTIONS(OperationQueue);
 
     void enqueueDownload(std::filesystem::path const& remotePath, std::filesystem::path const& localPath);
+    void enqueueDownloadSet(std::vector<std::pair<std::filesystem::path, std::filesystem::path>> const& downloads);
     void enqueueUpload(std::filesystem::path const& localPath, std::filesystem::path const& remotePath);
+    void enqueueUploadSet(std::vector<std::pair<std::filesystem::path, std::filesystem::path>> const& uploads);
     void enqueueRename(std::filesystem::path const& oldPath, std::filesystem::path const& newPath);
     void enqueueDelete(std::filesystem::path const& path);
 

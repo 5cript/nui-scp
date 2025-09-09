@@ -301,8 +301,14 @@ void Session::setupFileGrid()
                      return;
                  }
 
+                 std::vector<std::pair<std::filesystem::path, std::filesystem::path>> downloadItems;
+                 std::transform(items.begin(), items.end(), std::back_inserter(downloadItems), [](auto const& item) {
+                     // TODO: Proper target path handling:
+                     return std::make_pair(item.path, "D:/DownloadTemp" / item.path.filename());
+                 });
+
                  Log::info("Downloading items");
-                 // TODO: ...
+                 impl_->operationQueue.enqueueDownloadSet(downloadItems);
              }});
     });
 
@@ -325,7 +331,7 @@ void Session::setupFileGrid()
             .headerText = "Rename " + item.path.filename().string(),
             .isPassword = false,
             .onConfirm =
-                [this, item](std::optional<std::string> const& name) {
+                [item](std::optional<std::string> const& name) {
                     if (!name)
                         return;
 
@@ -335,7 +341,7 @@ void Session::setupFileGrid()
         });
     });
 
-    impl_->fileGrid.onProperties([this](auto const& item) {
+    impl_->fileGrid.onProperties([](auto const& item) {
         Log::info("Properties requested: {}", item.path.generic_string());
 
         // TODO: ...

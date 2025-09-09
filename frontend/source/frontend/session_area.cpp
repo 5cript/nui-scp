@@ -143,7 +143,7 @@ void SessionArea::addSession(std::string const& name)
         if (!success)
             return;
 
-        auto const& state = holder.stateCache();
+        auto const& state = holder.stateCache().fullyResolve();
 
         auto iter = state.sessions.find(name);
         if (iter == end(state.sessions))
@@ -154,44 +154,27 @@ void SessionArea::addSession(std::string const& name)
 
         auto [engineKey, engine] = *iter;
 
-        if (!engine.terminalOptions.resolveWith(state.terminalOptions))
-            Log::warn("Failed to resolve ref options for engine: {}", name);
-
-        if (!engine.termios.resolveWith(state.termios))
-            Log::warn("Failed to resolve ref termios for engine: {}", name);
-
-        if (std::holds_alternative<Persistence::SshTerminalEngine>(engine.engine))
-        {
-            auto& sshEngine = std::get<Persistence::SshTerminalEngine>(engine.engine);
-            auto& sshSessionOptions = sshEngine.sshSessionOptions;
-
-            if (!sshSessionOptions.resolveWith(state.sshSessionOptions))
-                Log::warn("Failed to resolve ref ssh session options for engine: {}", name);
-
-            if (!sshSessionOptions->sshOptions.resolveWith(state.sshOptions))
-                Log::warn("Failed to resolve ref ssh options for engine: {}", name);
-        }
-
         Log::info("Adding session: {} with layout {}", name, impl_->toolbar->selectedLayout());
-        impl_->sessions.emplace_back(std::make_unique<Session>(
-            impl_->stateHolder,
-            impl_->events,
-            engine,
-            state.uiOptions,
-            name,
-            impl_->toolbar->selectedLayout(),
-            impl_->newItemAskDialog,
-            impl_->confirmDialog,
-            [this](Session const* ptr) {
-                auto const index = std::distance(
-                    begin(impl_->sessions.value()),
-                    std::find_if(
-                        begin(impl_->sessions.value()), end(impl_->sessions.value()), [ptr](auto const& session) {
-                            return session.get() == ptr;
-                        }));
-                removeSession(index);
-            },
-            impl_->sessions.size() == 0));
+        impl_->sessions.emplace_back(
+            std::make_unique<Session>(
+                impl_->stateHolder,
+                impl_->events,
+                engine,
+                state.uiOptions,
+                name,
+                impl_->toolbar->selectedLayout(),
+                impl_->newItemAskDialog,
+                impl_->confirmDialog,
+                [this](Session const* ptr) {
+                    auto const index = std::distance(
+                        begin(impl_->sessions.value()),
+                        std::find_if(
+                            begin(impl_->sessions.value()), end(impl_->sessions.value()), [ptr](auto const& session) {
+                                return session.get() == ptr;
+                            }));
+                    removeSession(index);
+                },
+                impl_->sessions.size() == 0));
 
         if (impl_->selected >= 0 && impl_->selected < static_cast<int>(impl_->sessions.size()))
             impl_->sessions.value()[impl_->selected]->visible(false);

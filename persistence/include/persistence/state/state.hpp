@@ -21,6 +21,8 @@ namespace Persistence
         std::unordered_map<std::string, SshSessionOptions> sshSessionOptions{};
         UiOptions uiOptions{};
         Log::Level logLevel{Log::Level::Info};
+
+        State fullyResolve() const;
     };
 
     void to_json(nlohmann::json& j, State const& state);

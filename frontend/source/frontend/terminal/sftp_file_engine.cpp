@@ -74,8 +74,9 @@ void SftpFileEngine::listDirectory(
 
         Log::info("Listing directory: {}", path.generic_string());
         Nui::RpcClient::callWithBackChannel(
-            "SshSessionManager::sftp::listDirectory",
+            fmt::format("Session::{}::sftp::listDirectory", impl_->engine->sshSessionId().value()),
             [onComplete = std::move(onComplete)](Nui::val val) {
+                Log::info("Received response for listing directory.");
                 Nui::Console::log(val);
 
                 if (val.hasOwnProperty("error") || !val.hasOwnProperty("entries"))
@@ -94,7 +95,6 @@ void SftpFileEngine::listDirectory(
 
                 onComplete(nlohmann::json::parse(Nui::JSON::stringify(val))["entries"]);
             },
-            impl_->engine->sshSessionId().value(),
             channelId.value().value(),
             path.generic_string());
     });
@@ -111,7 +111,7 @@ void SftpFileEngine::createDirectory(std::filesystem::path const& path, std::fun
 
         Log::info("Creating directory: {}", path.generic_string());
         Nui::RpcClient::callWithBackChannel(
-            "SshSessionManager::sftp::createDirectory",
+            fmt::format("Session::{}::sftp::createDirectory", impl_->engine->sshSessionId().value()),
             [onComplete = std::move(onComplete)](Nui::val val) {
                 Nui::Console::log(val);
 
@@ -124,7 +124,6 @@ void SftpFileEngine::createDirectory(std::filesystem::path const& path, std::fun
 
                 onComplete(true);
             },
-            impl_->engine->sshSessionId().value(),
             channelId.value().value(),
             path.generic_string());
     });
@@ -141,7 +140,7 @@ void SftpFileEngine::createFile(std::filesystem::path const& path, std::function
 
         Log::info("Creating file: {}", path.generic_string());
         Nui::RpcClient::callWithBackChannel(
-            "SshSessionManager::sftp::createFile",
+            fmt::format("Session::{}::sftp::createFile", impl_->engine->sshSessionId().value()),
             [onComplete = std::move(onComplete)](Nui::val val) {
                 Nui::Console::log(val);
 
@@ -154,7 +153,6 @@ void SftpFileEngine::createFile(std::filesystem::path const& path, std::function
 
                 onComplete(true);
             },
-            impl_->engine->sshSessionId().value(),
             channelId.value().value(),
             path.generic_string());
     });
