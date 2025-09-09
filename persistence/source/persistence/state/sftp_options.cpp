@@ -60,6 +60,8 @@ namespace Persistence
             j["downloadOptions"] = *options.downloadOptions;
         if (options.uploadOptions)
             j["uploadOptions"] = *options.uploadOptions;
+        if (options.concurrency)
+            j["concurrency"] = *options.concurrency;
     }
     void from_json(nlohmann::json const& j, SftpOptions& options)
     {
@@ -67,6 +69,8 @@ namespace Persistence
             options.downloadOptions = j["downloadOptions"].get<TransferOptions>();
         if (j.contains("uploadOptions"))
             options.uploadOptions = j["uploadOptions"].get<TransferOptions>();
+        if (j.contains("concurrency"))
+            options.concurrency = j["concurrency"].get<int>();
     }
     void SftpOptions::useDefaultsFrom(SftpOptions const& other)
     {
@@ -74,5 +78,7 @@ namespace Persistence
             downloadOptions = other.downloadOptions;
         if (!uploadOptions)
             uploadOptions = other.uploadOptions;
+        if (!concurrency)
+            concurrency = other.concurrency;
     }
 }

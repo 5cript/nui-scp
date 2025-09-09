@@ -27,6 +27,7 @@ namespace Persistence
     {
         std::optional<TransferOptions> downloadOptions{};
         std::optional<TransferOptions> uploadOptions{};
+        std::optional<int> concurrency{std::nullopt}; // How many parallel transfers are allowed?
 
         void useDefaultsFrom(SftpOptions const& other);
     };

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <shared_data/directory_entry.hpp>
+#include <ids/ids.hpp>
 
 #include <filesystem>
 #include <vector>
@@ -22,6 +23,21 @@ class FileEngine
 
     virtual void createDirectory(std::filesystem::path const& path, std::function<void(bool)> onComplete) = 0;
     virtual void createFile(std::filesystem::path const& path, std::function<void(bool)> onComplete) = 0;
+
+    /**hub.registerFunction(
+    "SessionManager::sftp::addDownload",
+    [this, hub = &hub](
+        std::string const& responseId,
+        std::string const& sessionIdString,
+        std::string const& channelIdString,
+        std::string const& newOperationIdString,
+        std::string const& sshSessionOptionsKey,
+        std::string const& localPath,
+        std::string const& remotePath) */
+
+    // TODO:
+    // virtual Ids::OperationId
+    // addDownload(std::filesystem::path const& remotePath, std::filesystem::path const& localPath) = 0;
 
     virtual void dispose() = 0;
 };

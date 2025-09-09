@@ -31,7 +31,7 @@ class OperationQueue
         std::optional<Operation::Error> error{std::nullopt};
     };
 
-    OperationQueue(int parallelism = 1);
+    OperationQueue(Persistence::SftpOptions sftpOpts, int parallelism = 1);
 
     using Error = OperationErrorType;
 
@@ -47,8 +47,6 @@ class OperationQueue
     bool update();
 
     std::expected<void, Operation::Error> addDownloadOperation(
-        Persistence::State const& state,
-        std::string const& sshSessionOptionsKey,
         SecureShell::SftpSession& sftp,
         Ids::OperationId id,
         std::filesystem::path const& localPath,
@@ -56,6 +54,7 @@ class OperationQueue
 
   private:
     std::mutex mutex_{};
+    Persistence::SftpOptions sftpOpts_{};
     std::deque<std::pair<Ids::OperationId, std::unique_ptr<Operation>>> operations_{};
     std::vector<CompletedOperation> completedOperations_{};
     int parallelism_{1};

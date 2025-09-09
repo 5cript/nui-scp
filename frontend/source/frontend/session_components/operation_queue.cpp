@@ -61,10 +61,30 @@ Nui::ElementRenderer OperationQueue::operator()()
 }
 
 void OperationQueue::enqueueDownload(std::filesystem::path const& remotePath, std::filesystem::path const& localPath)
-{}
+{
+    // fileEngine->
+}
 void OperationQueue::enqueueUpload(std::filesystem::path const& localPath, std::filesystem::path const& remotePath)
 {}
 void OperationQueue::enqueueRename(std::filesystem::path const& oldPath, std::filesystem::path const& newPath)
 {}
 void OperationQueue::enqueueDelete(std::filesystem::path const& path)
 {}
+void OperationQueue::enqueueDownloadSet(
+    std::vector<std::pair<std::filesystem::path, std::filesystem::path>> const& downloads)
+{
+    // TODO: Do this as a group operation. For now, just iterate and enqueue each one.
+    for (const auto& [remotePath, localPath] : downloads)
+    {
+        enqueueDownload(remotePath, localPath);
+    }
+}
+void OperationQueue::enqueueUploadSet(
+    std::vector<std::pair<std::filesystem::path, std::filesystem::path>> const& uploads)
+{
+    // TODO: Do this as a group operation. For now, just iterate and enqueue each one.
+    for (const auto& [remotePath, localPath] : uploads)
+    {
+        enqueueDownload(remotePath, localPath);
+    }
+}

@@ -102,7 +102,7 @@ namespace SecureShell::Test
         const auto nodeExecutable = boost::process::v2::filesystem::path{std::string{node}};
 
         auto result = std::make_shared<NodeProcessResult>(
-            boost::asio::deadline_timer{executor, boost::posix_time::seconds{processKillTimer.count()}},
+            boost::asio::steady_timer{executor, processKillTimer},
             boost::asio::writable_pipe{executor},
             boost::asio::readable_pipe{executor},
             boost::asio::readable_pipe{executor},

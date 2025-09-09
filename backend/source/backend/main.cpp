@@ -158,7 +158,7 @@ Main::Main(int const, char const* const* argv)
     , hub_{window_}
     , processes_{window_.getExecutor(), window_, hub_}
     , prompter_{hub_}
-    , sshSessionManager_{std::make_shared<SshSessionManager>(window_.getExecutor(), &stateHolder_)}
+    , sshSessionManager_{std::make_shared<SessionManager>(window_.getExecutor(), stateHolder_, window_, hub_)}
     , shuttingDown_{false}
     , childSignalTimer_{window_.getExecutor()}
 {
@@ -174,7 +174,7 @@ Main::Main(int const, char const* const* argv)
 Main::~Main()
 {
     shuttingDown_ = true;
-    sshSessionManager_->stopUpdateDispatching();
+    // sshSessionManager_->stopUpdateDispatching();
     childSignalTimer_.cancel();
 }
 
@@ -190,7 +190,7 @@ void Main::registerRpc()
     Log::setupBackendRpcHub(&hub_);
     stateHolder_.registerRpc(hub_);
     processes_.registerRpc(window_, hub_);
-    sshSessionManager_->registerRpc(window_, hub_);
+    sshSessionManager_->registerRpc();
 }
 
 void Main::show()
