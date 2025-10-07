@@ -8,6 +8,7 @@
 #include <map>
 #include <future>
 #include <memory>
+#include <vector>
 
 namespace SecureShell
 {
