@@ -6,6 +6,7 @@
 #include <log/log.hpp>
 #include <boost/asio/strand.hpp>
 #include <boost/asio/any_io_executor.hpp>
+#include <boost/asio/steady_timer.hpp>
 #include <traits/functions.hpp>
 #include <mplex/tuple/pop_front.hpp>
 
@@ -13,6 +14,7 @@
 #include <concepts>
 #include <ranges>
 #include <memory>
+#include <chrono>
 
 // TODO: split and document this file!
 namespace RpcHelper
@@ -202,6 +204,7 @@ namespace RpcHelper
             , strand_{std::make_shared<boost::asio::strand<boost::asio::any_io_executor>>(executor_)}
             , wnd_{&wnd}
             , hub_{&hub}
+            , timer_{executor_}
         {}
 
         StrandRpc(
@@ -213,6 +216,7 @@ namespace RpcHelper
             , strand_{std::move(strand)}
             , wnd_{&wnd}
             , hub_{&hub}
+            , timer_{executor_}
         {}
 
         virtual ~StrandRpc() = default;
@@ -283,11 +287,31 @@ namespace RpcHelper
             func();
         }
 
+        void within_strand_do_no_recurse(auto&& func) const
+        {
+            return strand_->execute(std::forward<decltype(func)>(func));
+        }
+
+        void within_strand_do_delayed(auto&& func, std::chrono::steady_clock::duration delay)
+        {
+            timer_.expires_after(delay);
+            timer_.async_wait([func = std::forward<decltype(func)>(func)](auto const& ec) {
+                if (ec)
+                {
+                    Log::info("Timer canceled in within_strand_do_delayed: {}", ec.message());
+                    return;
+                }
+
+                func();
+            });
+        }
+
       protected:
         boost::asio::any_io_executor executor_{};
         std::shared_ptr<boost::asio::strand<boost::asio::any_io_executor>> strand_;
         Nui::Window* wnd_;
         Nui::RpcHub* hub_;
         std::vector<Nui::RpcHub::AutoUnregister> registeredFunctions_{};
+        boost::asio::steady_timer timer_;
     };
 }
