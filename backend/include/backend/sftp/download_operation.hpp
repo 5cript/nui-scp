@@ -43,9 +43,25 @@ class DownloadOperation : public Operation
 
     std::expected<WorkStatus, Error> work() override;
 
-    OperationType type() const override
+    bool isBarrier() const noexcept override
     {
-        return OperationType::Download;
+        return false;
+    }
+
+    /**
+     * @brief How much parallel work does this operation do.
+     *
+     * @param parallel Maximum parallelism allowed.
+     * @return The amount of parallel work that can be done maxed by parallel parameter.
+     */
+    int parallelWorkDoable(int) const noexcept override
+    {
+        return 1;
+    }
+
+    SharedData::OperationType type() const override
+    {
+        return SharedData::OperationType::Download;
     }
 
     std::filesystem::path remotePath() const

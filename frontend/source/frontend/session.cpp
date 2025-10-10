@@ -110,7 +110,7 @@ struct Session::Implementation
         , currentPath{}
         , fileEngine{}
         , preNavigatePath{}
-        , operationQueue{this->stateHolder, this->events, this->initialName, this->id, this->confirmDialog, this->fileEngine.get()}
+        , operationQueue{this->stateHolder, this->events, this->initialName, this->id, this->confirmDialog}
         , operationQueueElement{}
         , layoutHost{}
         , layoutName{std::move(layoutName)}
@@ -308,7 +308,25 @@ void Session::setupFileGrid()
                  });
 
                  Log::info("Downloading items");
-                 impl_->operationQueue.enqueueDownloadSet(downloadItems);
+                 for (const auto& item : downloadItems)
+                 {
+                     Log::info("Downloading '{}' to '{}'", item.first.generic_string(), item.second.generic_string());
+                     impl_->operationQueue.enqueueDownload(
+                         item.first, item.second, [this](std::optional<Ids::OperationId> const& opId) {
+                             if (!opId)
+                             {
+                                 Log::error("Failed to create download operation");
+                                 impl_->confirmDialog->open({
+                                     .state = ConfirmDialog::State::Negative,
+                                     .headerText = "Download Failed",
+                                     .text = "Failed to create download operation",
+                                     .buttons = ConfirmDialog::Button::Ok,
+                                 });
+                                 return;
+                             }
+                             Log::info("Download operation created with id: {}", opId->value());
+                         });
+                 }
              }});
     });
 
@@ -544,6 +562,7 @@ void Session::openSftp()
             Log::info("Opening SFTP by default");
             impl_->fileEngine =
                 std::make_unique<SftpFileEngine>(static_cast<SshTerminalEngine*>(&impl_->terminal.value()->engine()));
+            impl_->operationQueue.setFileEngine(impl_->fileEngine.get());
             navigateTo(opts.defaultDirectory.value_or("/"));
         }
     }

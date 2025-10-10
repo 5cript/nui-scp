@@ -18,6 +18,11 @@ class SftpFileEngine : public FileEngine
 
     std::optional<Ids::ChannelId> release();
 
+    void addDownload(
+        std::filesystem::path const& remotePath,
+        std::filesystem::path const& localPath,
+        std::function<void(std::optional<Ids::OperationId>)> onOperationCreated) override;
+
   private:
     void lazyOpen(std::function<void(std::optional<Ids::ChannelId> const&)> const& onOpen);
 

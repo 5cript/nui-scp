@@ -35,9 +35,10 @@ class FileEngine
         std::string const& localPath,
         std::string const& remotePath) */
 
-    // TODO:
-    // virtual Ids::OperationId
-    // addDownload(std::filesystem::path const& remotePath, std::filesystem::path const& localPath) = 0;
+    virtual void addDownload(
+        std::filesystem::path const& remotePath,
+        std::filesystem::path const& localPath,
+        std::function<void(std::optional<Ids::OperationId>)> onOperationCreated) = 0;
 
     virtual void dispose() = 0;
 };

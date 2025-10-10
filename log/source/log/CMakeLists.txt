@@ -14,6 +14,12 @@ if (EMSCRIPTEN)
             fmt
             nui-frontend
     )
+    set_target_properties(
+        fmt
+        PROPERTIES
+            LINK_FLAGS "-sMEMORY64=1"
+            COMPILE_FLAGS "-sMEMORY64=1"
+    )
 else()
     target_link_libraries(
         log

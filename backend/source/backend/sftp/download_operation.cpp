@@ -120,8 +120,6 @@ std::expected<DownloadOperation::WorkStatus, DownloadOperation::Error> DownloadO
 
 std::expected<bool, DownloadOperation::Error> DownloadOperation::readOnce()
 {
-    std::scoped_lock lock{mutex_};
-
     if (state_ < OperationState::Prepared)
     {
         Log::error("DownloadOperation: Operation not prepared.");
@@ -151,6 +149,9 @@ std::expected<bool, DownloadOperation::Error> DownloadOperation::readOnce()
     const auto futureStatus =
         stream
             ->read([this, &doContinue](std::string_view data) {
+                // No locking, because concurrent access is not possible, the only
+                // other executing thread is blocked right now.
+
                 if (data.size() == 0)
                 {
                     Log::info("DownloadOperation: Remote file read complete or error.");
@@ -161,7 +162,6 @@ std::expected<bool, DownloadOperation::Error> DownloadOperation::readOnce()
                 std::uint64_t fileSize = 0;
                 bool good = true;
                 {
-                    std::scoped_lock lock{mutex_};
                     localFile_.write(data.data(), data.size());
                     tellp = static_cast<uint64_t>(localFile_.tellp());
                     fileSize = fileSize_;
@@ -171,7 +171,7 @@ std::expected<bool, DownloadOperation::Error> DownloadOperation::readOnce()
                 if (!good)
                 {
                     Log::error("DownloadOperation read cycle stopped: localFile_.good() == false");
-                    std::ignore = this->enterErrorState({
+                    std::ignore = enterErrorState({
                         .type = OperationErrorType::TargetFileNotGood,
                     });
                     return doContinue = false;
@@ -191,8 +191,6 @@ std::expected<bool, DownloadOperation::Error> DownloadOperation::readOnce()
 
 std::expected<void, DownloadOperation::Error> DownloadOperation::openOrAdoptFile(SecureShell::IFileStream& stream)
 {
-    std::scoped_lock lock{mutex_};
-
     const auto tempPath = localPath_.generic_string() + tempFileSuffix_;
 
     if (tryContinue_ && std::filesystem::exists(tempPath))
@@ -245,8 +243,6 @@ std::expected<void, DownloadOperation::Error> DownloadOperation::openOrAdoptFile
 
 std::expected<void, Operation::Error> DownloadOperation::prepare()
 {
-    std::scoped_lock lock{mutex_};
-
     if (localPath_.empty())
     {
         Log::error("DownloadOperation: Invalid local path.");
@@ -312,8 +308,6 @@ std::expected<void, Operation::Error> DownloadOperation::prepare()
 
 std::expected<void, DownloadOperation::Error> DownloadOperation::cancel(bool adoptCancelState)
 {
-    std::scoped_lock lock{mutex_};
-
     Log::info(
         "DownloadOperation: Download of '{}' to '{}' canceled.",
         remotePath_.generic_string(),
@@ -328,7 +322,6 @@ std::expected<void, DownloadOperation::Error> DownloadOperation::cancel(bool ado
 
 void DownloadOperation::cleanup()
 {
-    std::scoped_lock lock{mutex_};
     localFile_.close();
 
     if (doCleanup_ && std::filesystem::exists(localPath_.generic_string() + tempFileSuffix_))
@@ -340,8 +333,6 @@ void DownloadOperation::cleanup()
 
 std::expected<void, DownloadOperation::Error> DownloadOperation::finalize()
 {
-    std::scoped_lock lock{mutex_};
-
     if (state_ == OperationState::Running)
     {
         Log::error("DownloadOperation: Cannot finalize while reading.");

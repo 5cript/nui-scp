@@ -2,7 +2,7 @@
 
 #include <ssh/sftp_error.hpp>
 #include <utility/describe.hpp>
-#include <backend/sftp/operation_type.hpp>
+#include <shared_data/file_operations/operation_type.hpp>
 #include <ssh/async/processing_strand.hpp>
 #include <log/log.hpp>
 
@@ -30,7 +30,10 @@ BOOST_DEFINE_ENUM_CLASS(
     TargetFileNotGood,
     CannotWorkCompletedOperation,
     CannotWorkFailedOperation,
-    UnknownWorkState);
+    CannotWorkCanceledOperation,
+    UnknownWorkState,
+    InvalidOperationState,
+    OperationNotPossibleOnFileType);
 
 class Operation
 {
@@ -47,7 +50,7 @@ class Operation
 
     using ErrorType = OperationErrorType;
 
-    virtual OperationType type() const = 0;
+    virtual SharedData::OperationType type() const = 0;
 
     template <typename FunctionT>
     auto visit(FunctionT&& func) const;
@@ -71,8 +74,6 @@ class Operation
     template <typename FunctionT>
     bool perform(FunctionT&& func)
     {
-        std::scoped_lock lock{mutex_};
-
         if (auto* theStrand = strand(); theStrand)
             return theStrand->pushTask(std::forward<FunctionT>(func));
         else
@@ -101,9 +102,24 @@ class Operation
 
     OperationState state() const
     {
-        std::scoped_lock lock{mutex_};
         return state_;
     }
+
+    /**
+     * @brief Can parallel actions go beyond this operation?
+     *
+     * @return true Cannot progress beyond this operation.
+     * @return false Can progress beyond this operation.
+     */
+    virtual bool isBarrier() const noexcept = 0;
+
+    /**
+     * @brief How much parallel work does this operation do.
+     *
+     * @param parallel Maximum parallelism allowed.
+     * @return The amount of parallel work that can be done maxed by parallel parameter.
+     */
+    virtual int parallelWorkDoable(int parallel) const noexcept = 0;
 
     enum class WorkStatus
     {
@@ -128,7 +144,6 @@ class Operation
     template <typename T = void>
     std::expected<T, Error> enterErrorState(Error error)
     {
-        std::scoped_lock lock{mutex_};
         state_ = OperationState::Failed;
         error_ = std::move(error);
         const auto cancelResult = cancel(false);
@@ -141,7 +156,12 @@ class Operation
     }
 
   protected:
-    mutable std::recursive_mutex mutex_{};
+    void enterState(OperationState newState)
+    {
+        state_ = newState;
+    }
+
+  protected:
     OperationState state_{OperationState::NotStarted};
     std::optional<Error> error_{std::nullopt};
 

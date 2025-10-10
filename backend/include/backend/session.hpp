@@ -9,6 +9,7 @@
 
 #include <unordered_map>
 #include <memory>
+#include <atomic>
 #include <optional>
 
 /**
@@ -17,7 +18,9 @@
  *
  * These sessions are managed by SessionManager. Each session has an id, as well as ssh channels, sftp channels and
  */
-class Session : public RpcHelper::StrandRpc
+class Session
+    : public RpcHelper::StrandRpc
+    , public std::enable_shared_from_this<Session>
 {
   public:
     constexpr static auto futureTimeout = std::chrono::seconds{10};
@@ -33,11 +36,12 @@ class Session : public RpcHelper::StrandRpc
 
     Session(const Session&) = delete;
     Session& operator=(const Session&) = delete;
-    Session(Session&&) = default;
-    Session& operator=(Session&&) = default;
+    Session(Session&&) = delete;
+    Session& operator=(Session&&) = delete;
     ~Session() = default;
 
     void start();
+    void stop();
 
   private:
     /**
@@ -132,7 +136,7 @@ class Session : public RpcHelper::StrandRpc
             {
                 if (auto channel = iter->second.lock(); channel)
                 {
-                    func(std::move(reply), channel);
+                    func(std::move(reply), std::move(channel));
                 }
                 else
                 {
@@ -160,7 +164,7 @@ class Session : public RpcHelper::StrandRpc
             {
                 if (auto channel = iter->second.lock(); channel)
                 {
-                    func(std::move(reply), channel);
+                    func(std::move(reply), std::move(channel));
                 }
                 else
                 {
@@ -177,10 +181,14 @@ class Session : public RpcHelper::StrandRpc
         });
     }
 
+    void doOperationQueueWork();
+
   private:
     Ids::SessionId id_;
+    std::atomic_bool running_;
+    std::chrono::milliseconds operationThrottle_{5};
     std::unique_ptr<SecureShell::Session> session_{};
     std::unordered_map<Ids::ChannelId, std::weak_ptr<SecureShell::Channel>, Ids::IdHash> channels_{};
     std::unordered_map<Ids::ChannelId, std::weak_ptr<SecureShell::SftpSession>, Ids::IdHash> sftpChannels_{};
-    std::unique_ptr<OperationQueue> operationQueue_;
+    std::shared_ptr<OperationQueue> operationQueue_;
 };

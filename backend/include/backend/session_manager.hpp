@@ -71,7 +71,7 @@ class SessionManager
 
   private:
     Persistence::StateHolder* stateHolder_{};
-    std::unordered_map<Ids::SessionId, Session, Ids::IdHash> sessions_{};
+    std::unordered_map<Ids::SessionId, std::shared_ptr<Session>, Ids::IdHash> sessions_{};
 
     std::map<int, PasswordProvider*> passwordProviders_{};
     std::unique_ptr<std::thread> addSessionThread_{};

@@ -95,24 +95,23 @@ void SessionManager::addSession(
         if (maybeSshSession)
         {
             const auto sessionId = Ids::SessionId{Ids::generateId()};
-            const auto emplaced = sessions_.emplace(
+            const auto session = std::make_shared<Session>(
                 sessionId,
-                Session{
-                    sessionId,
-                    std::move(maybeSshSession).value(),
-                    executor_,
-                    strand_,
-                    *wnd_,
-                    *hub_,
-                    engine.sshSessionOptions->sftpOptions.value()});
+                std::move(maybeSshSession).value(),
+                executor_,
+                strand_,
+                *wnd_,
+                *hub_,
+                engine.sshSessionOptions->sftpOptions.value());
+            const auto emplaced = sessions_.emplace(sessionId, session);
             if (!emplaced.second)
             {
-                Log::error("Session id collision - This should never happen");
+                Log::error("Session id collision - This should never happen.");
                 return onComplete(std::nullopt);
             }
 
             Log::info("Created session with id '{}', total is now '{}'.", sessionId.value(), sessions_.size());
-            emplaced.first->second.start();
+            session->start();
             onComplete(sessionId);
         }
         else
@@ -188,34 +187,3 @@ void SessionManager::registerRpcSessionDisconnect()
         }
     });
 }
-
-// void SessionManager::startUpdateDispatching()
-// {
-//     updateDispatchRunning_ = true;
-//     dispatchUpdates();
-// }
-// void SessionManager::stopUpdateDispatching()
-// {
-//     updateDispatchRunning_ = false;
-// }
-
-// void SessionManager::dispatchUpdates()
-// {
-//     if (!updateDispatchRunning_)
-//         return;
-
-//     boost::asio::dispatch(executor_, [weak = weak_from_this()]() {
-//         auto self = weak.lock();
-//         if (!self)
-//             return;
-
-//         if (!self->updateDispatchRunning_)
-//         {
-//             Log::info("Update dispatching stopped");
-//             return;
-//         }
-
-//         if (self->operationQueue_.update())
-//             self->dispatchUpdates();
-//     });
-// }

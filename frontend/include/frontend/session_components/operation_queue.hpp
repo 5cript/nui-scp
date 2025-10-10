@@ -15,18 +15,28 @@ class OperationQueue
         Persistence::StateHolder* stateHolder,
         FrontendEvents* events,
         std::string persistenceSessionName,
-        std::string id,
-        ConfirmDialog* confirmDialog,
-        FileEngine* fileEngine);
+        std::string sessionId,
+        ConfirmDialog* confirmDialog);
 
     ROAR_PIMPL_SPECIAL_FUNCTIONS(OperationQueue);
 
-    void enqueueDownload(std::filesystem::path const& remotePath, std::filesystem::path const& localPath);
-    void enqueueDownloadSet(std::vector<std::pair<std::filesystem::path, std::filesystem::path>> const& downloads);
-    void enqueueUpload(std::filesystem::path const& localPath, std::filesystem::path const& remotePath);
-    void enqueueUploadSet(std::vector<std::pair<std::filesystem::path, std::filesystem::path>> const& uploads);
-    void enqueueRename(std::filesystem::path const& oldPath, std::filesystem::path const& newPath);
-    void enqueueDelete(std::filesystem::path const& path);
+    void setFileEngine(FileEngine* fileEngine);
+
+    void enqueueDownload(
+        std::filesystem::path const& remotePath,
+        std::filesystem::path const& localPath,
+        std::function<void(std::optional<Ids::OperationId> const&)> onComplete);
+    void enqueueUpload(
+        std::filesystem::path const& localPath,
+        std::filesystem::path const& remotePath,
+        std::function<void(std::optional<Ids::OperationId> const&)> onComplete);
+    void enqueueRename(
+        std::filesystem::path const& oldPath,
+        std::filesystem::path const& newPath,
+        std::function<void(std::optional<Ids::OperationId> const&)> onComplete);
+    void enqueueDelete(
+        std::filesystem::path const& path,
+        std::function<void(std::optional<Ids::OperationId> const&)> onComplete);
 
     Nui::ElementRenderer operator()();
 

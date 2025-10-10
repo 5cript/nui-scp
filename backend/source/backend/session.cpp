@@ -2,6 +2,8 @@
 
 #include <roar/utility/base64.hpp>
 
+using namespace std::chrono_literals;
+
 Session::Session(
     Ids::SessionId id,
     std::unique_ptr<SecureShell::Session> session,
@@ -11,45 +13,95 @@ Session::Session(
     Nui::RpcHub& hub,
     Persistence::SftpOptions const& sftpOptions)
     : RpcHelper::StrandRpc{executor, std::move(strand), wnd, hub}
-    , id_{id}
+    , id_{std::move(id)}
     , session_{std::move(session)}
-    , operationQueue_{std::make_unique<OperationQueue>(sftpOptions, sftpOptions.concurrency.value_or(1))}
+    , operationQueue_{std::make_shared<
+          OperationQueue>(executor_, strand_, wnd, hub, sftpOptions, id_, sftpOptions.concurrency.value_or(1))}
 {}
 
 void Session::start()
 {
-    within_strand_do([this]() {
-        if (!session_)
+    within_strand_do([weak = weak_from_this()]() {
+        auto self = weak.lock();
+        if (!self)
+            return;
+
+        if (!self->session_)
         {
             Log::error("Session is not valid, cannot start");
             return;
         }
 
-        session_->start();
-        registerRpcCreateChannel();
-        registerRpcStartChannelRead();
-        registerRpcChannelClose();
-        registerRpcChannelWrite();
-        registerRpcChannelPtyResize();
-        registerRpcSftpListDirectory();
-        registerRpcSftpCreateDirectory();
-        registerRpcSftpCreateFile();
-        registerRpcSftpAddDownloadOperation();
+        self->session_->start();
+        self->registerRpcCreateChannel();
+        self->registerRpcStartChannelRead();
+        self->registerRpcChannelClose();
+        self->registerRpcChannelWrite();
+        self->registerRpcChannelPtyResize();
+        self->registerRpcSftpListDirectory();
+        self->registerRpcSftpCreateDirectory();
+        self->registerRpcSftpCreateFile();
+        self->registerRpcSftpAddDownloadOperation();
 
-        Log::info("Session '{}' connected", id_.value());
+        Log::info("Session '{}' connected", self->id_.value());
+
+        self->running_ = true;
+        self->doOperationQueueWork();
+    });
+}
+
+void Session::stop()
+{
+    running_ = false;
+    timer_.cancel();
+}
+
+void Session::doOperationQueueWork()
+{
+    within_strand_do_no_recurse([weak = weak_from_this()]() {
+        auto self = weak.lock();
+        if (!self)
+            return;
+
+        if (!self->running_)
+            return;
+
+        if (self->operationQueue_ && self->operationQueue_->work())
+        {
+            self->doOperationQueueWork();
+            self->operationThrottle_ = 5ms;
+        }
+        else
+        {
+            if (self->operationThrottle_ < 1s)
+                self->operationThrottle_ *= 2;
+            else
+                self->operationThrottle_ = 1s;
+
+            self->within_strand_do_delayed(
+                [weak = self->weak_from_this()]() {
+                    if (auto self = weak.lock(); self)
+                        self->doOperationQueueWork();
+                },
+                self->operationThrottle_);
+        }
     });
 }
 
 void Session::removeChannel(Ids::ChannelId channelId)
 {
-    within_strand_do([this, channelId = std::move(channelId)]() {
-        auto iter = channels_.find(channelId);
-        if (iter != channels_.end())
+    within_strand_do([weak = weak_from_this(), channelId = std::move(channelId)]() {
+        auto self = weak.lock();
+        if (!self)
+            return;
+
+        auto iter = self->channels_.find(channelId);
+        if (iter != self->channels_.end())
         {
             if (auto locked = iter->second.lock(); locked)
                 locked->close();
 
-            channels_.erase(iter);
+            self->channels_.erase(iter);
         }
         else
         {
@@ -60,14 +112,18 @@ void Session::removeChannel(Ids::ChannelId channelId)
 
 void Session::removeSftpChannel(Ids::ChannelId channelId)
 {
-    within_strand_do([this, channelId = std::move(channelId)]() {
-        auto iter = sftpChannels_.find(channelId);
-        if (iter != sftpChannels_.end())
+    within_strand_do([weak = weak_from_this(), channelId = std::move(channelId)]() {
+        auto self = weak.lock();
+        if (!self)
+            return;
+
+        auto iter = self->sftpChannels_.find(channelId);
+        if (iter != self->sftpChannels_.end())
         {
             if (auto locked = iter->second.lock(); locked)
                 locked->close();
 
-            sftpChannels_.erase(iter);
+            self->sftpChannels_.erase(iter);
         }
         else
         {
@@ -79,9 +135,13 @@ void Session::removeSftpChannel(Ids::ChannelId channelId)
 void Session::registerRpcCreateChannel()
 {
     on(fmt::format("Session::{}::Channel::create", id_.value()))
-        .perform([this](RpcHelper::RpcOnce&& reply, nlohmann::json const& parameters) {
+        .perform([weak = weak_from_this()](RpcHelper::RpcOnce&& reply, nlohmann::json const& parameters) {
+            auto self = weak.lock();
+            if (!self)
+                return reply({{"error", "Session no longer exists"}});
+
             RpcHelper::ParameterVerifyView verify{
-                reply, fmt::format("Session::{}::Channel::create", id_.value()), parameters};
+                reply, fmt::format("Session::{}::Channel::create", self->id_.value()), parameters};
 
             if (!verify.hasValueDeep("engine"))
                 return;
@@ -91,12 +151,13 @@ void Session::registerRpcCreateChannel()
 
             if (!fileMode)
             {
-                Log::info("Creating pty channel for session '{}'", id_.value());
+                Log::info("Creating pty channel for session '{}'", self->id_.value());
 
                 const auto sessionOptions =
                     parameters["engine"]["sshSessionOptions"].get<Persistence::SshSessionOptions>();
 
-                const auto weakChannel = session_->createPtyChannel({.environment = sessionOptions.environment}).get();
+                const auto weakChannel =
+                    self->session_->createPtyChannel({.environment = sessionOptions.environment}).get();
                 if (!weakChannel.has_value())
                 {
                     Log::error("Failed to create pty channel: {}", weakChannel.error());
@@ -104,20 +165,20 @@ void Session::registerRpcCreateChannel()
                 }
 
                 const auto channelId = Ids::generateChannelId();
-                channels_.emplace(channelId, std::move(weakChannel).value());
+                self->channels_.emplace(channelId, std::move(weakChannel).value());
 
                 Log::info(
                     "Created pty channel with id '{}', channel total is now '{}'.",
                     channelId.value(),
-                    channels_.size());
+                    self->channels_.size());
 
                 return reply({{"id", channelId.value()}});
             }
             else
             {
-                Log::info("Creating sftp channel for session '{}'", id_.value());
+                Log::info("Creating sftp channel for session '{}'", self->id_.value());
 
-                const auto weakChannel = session_->createSftpSession().get();
+                const auto weakChannel = self->session_->createSftpSession().get();
                 if (!weakChannel.has_value())
                 {
                     Log::error("Failed to create sftp channel: {}", weakChannel.error().toString());
@@ -125,12 +186,12 @@ void Session::registerRpcCreateChannel()
                 }
 
                 const auto channelId = Ids::generateChannelId();
-                sftpChannels_.emplace(channelId, std::move(weakChannel).value());
+                self->sftpChannels_.emplace(channelId, std::move(weakChannel).value());
 
                 Log::info(
                     "Created sftp channel with id '{}', sftp channel total is now '{}'.",
                     channelId.value(),
-                    sftpChannels_.size());
+                    self->sftpChannels_.size());
 
                 return reply({{"id", channelId.value()}});
             }
@@ -140,19 +201,23 @@ void Session::registerRpcCreateChannel()
 void Session::registerRpcStartChannelRead()
 {
     on(fmt::format("Session::{}::Channel::startReading", id_.value()))
-        .perform([this](RpcHelper::RpcOnce&& reply, std::string const& channelIdString) {
+        .perform([weak = weak_from_this()](RpcHelper::RpcOnce&& reply, std::string const& channelIdString) {
+            auto self = weak.lock();
+            if (!self)
+                return reply({{"error", "Session no longer exists"}});
+
             const auto channelId = Ids::makeChannelId(channelIdString);
-            if (channels_.find(channelId) == channels_.end())
+            if (self->channels_.find(channelId) == self->channels_.end())
             {
                 Log::error("No channel found with id: {}", channelId.value());
                 return reply({{"error", "No channel found with id"}});
             }
 
-            auto locked = channels_[channelId].lock();
+            auto locked = self->channels_[channelId].lock();
             if (!locked)
             {
                 Log::error("Failed to lock channel with id: {}", channelId.value());
-                removeChannel(channelId);
+                self->removeChannel(channelId);
                 return reply({{"error", "Failed to lock channel"}});
             }
 
@@ -160,12 +225,12 @@ void Session::registerRpcStartChannelRead()
             // unless within_strand_do is used!
             locked->startReading(
                 // Stdout
-                [sessionId = id_,
+                [sessionId = self->id_,
                  channelId,
                  stdOut =
                      RpcHelper::RpcInCorrectThread{
-                         *wnd_,
-                         *hub_,
+                         *self->wnd_,
+                         *self->hub_,
                          fmt::format("sshTerminalStdout_{}", channelId.value()),
                      }](std::string const& msg) {
                     stdOut(
@@ -176,12 +241,12 @@ void Session::registerRpcStartChannelRead()
                         });
                 },
                 // Stderr
-                [sessionId = id_,
+                [sessionId = self->id_,
                  channelId,
                  stdErr =
                      RpcHelper::RpcInCorrectThread{
-                         *wnd_,
-                         *hub_,
+                         *self->wnd_,
+                         *self->hub_,
                          fmt::format("sshTerminalStderr_{}", channelId.value()),
                      }](std::string const& data) {
                     stdErr(
@@ -193,14 +258,15 @@ void Session::registerRpcStartChannelRead()
                 },
                 // On channel exit:
                 [removeChannel =
-                     [this, channelId]() {
-                         removeChannel(channelId);
+                     [weak = self->weak_from_this(), channelId]() {
+                         if (auto self = weak.lock(); self)
+                             self->removeChannel(channelId);
                      },
-                 sessionId = id_,
+                 sessionId = self->id_,
                  channelId,
                  onExit = RpcHelper::RpcInCorrectThread{
-                     *wnd_,
-                     *hub_,
+                     *self->wnd_,
+                     *self->hub_,
                      fmt::format("sshTerminalOnExit_{}", channelId.value()),
                  }]() {
                     Log::info("Channel for session '{}' lost with id: {}", sessionId.value(), channelId.value());
@@ -215,8 +281,12 @@ void Session::registerRpcStartChannelRead()
 void Session::registerRpcChannelClose()
 {
     on(fmt::format("Session::{}::Channel::close", id_.value()))
-        .perform([this](RpcHelper::RpcOnce&& reply, std::string const& channelIdString) {
-            removeChannel(Ids::makeChannelId(channelIdString));
+        .perform([weak = weak_from_this()](RpcHelper::RpcOnce&& reply, std::string const& channelIdString) {
+            auto self = weak.lock();
+            if (!self)
+                return reply({{"error", "Session no longer exists"}});
+
+            self->removeChannel(Ids::makeChannelId(channelIdString));
             return reply({{"success", true}});
         });
 }
@@ -224,8 +294,13 @@ void Session::registerRpcChannelClose()
 void Session::registerRpcChannelWrite()
 {
     on(fmt::format("Session::{}::Channel::write", id_.value()))
-        .perform([this](RpcHelper::RpcOnce&& reply, std::string const& channelIdString, std::string&& data) {
-            withChannelDo(
+        .perform([weak = weak_from_this()](
+                     RpcHelper::RpcOnce&& reply, std::string const& channelIdString, std::string&& data) {
+            auto self = weak.lock();
+            if (!self)
+                return reply({{"error", "Session no longer exists"}});
+
+            self->withChannelDo(
                 Ids::makeChannelId(channelIdString),
                 [data = std::move(data)](RpcHelper::RpcOnce&& reply, auto&& channel) {
                     channel->write(Roar::base64Decode(data));
@@ -238,10 +313,15 @@ void Session::registerRpcChannelWrite()
 void Session::registerRpcChannelPtyResize()
 {
     on(fmt::format("Session::{}::Channel::ptyResize", id_.value()))
-        .perform([this](RpcHelper::RpcOnce&& reply, std::string const& channelIdString, int cols, int rows) {
-            withChannelDo(
+        .perform([weak = weak_from_this()](
+                     RpcHelper::RpcOnce&& reply, std::string const& channelIdString, int cols, int rows) {
+            auto self = weak.lock();
+            if (!self)
+                return reply({{"error", "Session no longer exists"}});
+
+            self->withChannelDo(
                 Ids::makeChannelId(channelIdString),
-                [cols, rows](RpcHelper::RpcOnce&& reply, auto channel) {
+                [cols, rows](RpcHelper::RpcOnce&& reply, auto&& channel) {
                     channel->resizePty(cols, rows);
                     reply({{"success", true}});
                 },
@@ -252,10 +332,15 @@ void Session::registerRpcChannelPtyResize()
 void Session::registerRpcSftpListDirectory()
 {
     on(fmt::format("Session::{}::sftp::listDirectory", id_.value()))
-        .perform([this](RpcHelper::RpcOnce&& reply, std::string const& channelIdString, std::string const& path) {
-            withSftpChannelDo(
+        .perform([weak = weak_from_this()](
+                     RpcHelper::RpcOnce&& reply, std::string const& channelIdString, std::string const& path) {
+            auto self = weak.lock();
+            if (!self)
+                return reply({{"error", "Session no longer exists"}});
+
+            self->withSftpChannelDo(
                 Ids::makeChannelId(channelIdString),
-                [path](RpcHelper::RpcOnce&& reply, auto channel) {
+                [path](RpcHelper::RpcOnce&& reply, auto&& channel) {
                     auto fut = channel->listDirectory(path);
                     if (fut.wait_for(futureTimeout) != std::future_status::ready)
                         return reply({{"error", "Failed to list directory: timeout"}});
@@ -274,10 +359,15 @@ void Session::registerRpcSftpListDirectory()
 void Session::registerRpcSftpCreateDirectory()
 {
     on(fmt::format("Session::{}::sftp::createDirectory", id_.value()))
-        .perform([this](RpcHelper::RpcOnce&& reply, std::string const& channelIdString, std::string const& path) {
-            withSftpChannelDo(
+        .perform([weak = weak_from_this()](
+                     RpcHelper::RpcOnce&& reply, std::string const& channelIdString, std::string const& path) {
+            auto self = weak.lock();
+            if (!self)
+                return reply({{"error", "Session no longer exists"}});
+
+            self->withSftpChannelDo(
                 Ids::makeChannelId(channelIdString),
-                [path](RpcHelper::RpcOnce&& reply, auto channel) {
+                [path](RpcHelper::RpcOnce&& reply, auto&& channel) {
                     auto fut = channel->createDirectory(path);
                     if (fut.wait_for(futureTimeout) != std::future_status::ready)
                         return reply({{"error", "Failed to create directory: timeout"}});
@@ -296,10 +386,15 @@ void Session::registerRpcSftpCreateDirectory()
 void Session::registerRpcSftpCreateFile()
 {
     on(fmt::format("Session::{}::sftp::createFile", id_.value()))
-        .perform([this](RpcHelper::RpcOnce&& reply, std::string const& channelIdString, std::string const& path) {
-            withSftpChannelDo(
+        .perform([weak = weak_from_this()](
+                     RpcHelper::RpcOnce&& reply, std::string const& channelIdString, std::string const& path) {
+            auto self = weak.lock();
+            if (!self)
+                return reply({{"error", "Session no longer exists"}});
+
+            self->withSftpChannelDo(
                 Ids::makeChannelId(channelIdString),
-                [path](RpcHelper::RpcOnce&& reply, auto channel) {
+                [path](RpcHelper::RpcOnce&& reply, auto&& channel) {
                     auto fut = channel->createFile(path);
                     if (fut.wait_for(futureTimeout) != std::future_status::ready)
                         return reply({{"error", "Failed to create file: timeout"}});
@@ -318,63 +413,45 @@ void Session::registerRpcSftpCreateFile()
 void Session::registerRpcSftpAddDownloadOperation()
 {
     on(fmt::format("Session::{}::sftp::addDownload", id_.value()))
-        .perform([this](
+        .perform([weak = weak_from_this()](
                      RpcHelper::RpcOnce&& reply,
                      std::string const& channelIdString,
                      std::string const& newOperationIdString,
-                     std::string const& localPath,
-                     std::string const& remotePath) {
-            withSftpChannelDo(
+                     std::string const& remotePath,
+                     std::string const& localPath) {
+            auto self = weak.lock();
+            if (!self)
+                return reply({{"error", "Session no longer exists"}});
+
+            self->withSftpChannelDo(
                 Ids::makeChannelId(channelIdString),
-                [newOperationIdString, localPath, remotePath](RpcHelper::RpcOnce&& reply, auto channel) {
-                    // TODO:
+                [weak = self->weak_from_this(), newOperationIdString, localPath, remotePath](
+                    RpcHelper::RpcOnce&& reply, auto&& channel) {
+                    auto self = weak.lock();
+                    if (!self)
+                        return reply({{"error", "Session no longer exists"}});
 
-                    // const auto result = operationQueues_->addDownloadOperation(
-                    //     Ids::makeOperationId(newOperationIdString), localPath, remotePath);
+                    const auto result = self->operationQueue_->addDownloadOperation(
+                        *channel, Ids::makeOperationId(newOperationIdString), localPath, remotePath);
 
-                    // if (!result.has_value())
-                    //     return reply({{"error", result.error().toString()}});
+                    if (!result.has_value())
+                    {
+                        Log::error(
+                            "Failed to add download operation for file '{}' to '{}': {}",
+                            remotePath,
+                            localPath,
+                            result.error().toString());
+                        return reply({{"error", result.error().toString()}});
+                    }
 
                     Log::info(
                         "Added download operation with id '{}' for file '{}' to '{}'",
                         newOperationIdString,
                         remotePath,
                         localPath);
+
                     reply({{"success", true}});
                 },
                 std::move(reply));
         });
-
-    // hub.registerFunction(
-    //     "SessionManager::sftp::addDownload",
-    //     [this, hub = &hub](
-    //         std::string const& responseId,
-    //         std::string const& sessionIdString,
-    //         std::string const& channelIdString,
-    //         std::string const& newOperationIdString,
-    //         std::string const& localPath,
-    //         std::string const& remotePath) {
-    //         auto const& state = stateHolder_->stateCache();
-
-    //         auto sftp = channel->second.lock();
-    //         if (!sftp)
-    //         {
-    //             Log::error("Failed to lock sftp channel with id: {}", channelId.value());
-    //             hub->callRemote(responseId, nlohmann::json{{"error", "Failed to lock sftp channel"}});
-    //             return;
-    //         }
-
-    //         const auto result = operationQueue_.addDownloadOperation(
-    //             *sftp, Ids::makeOperationId(newOperationIdString), localPath, remotePath);
-
-    //         if (!result.has_value())
-    //         {
-    //             Log::error("Failed to add download operation: {}", result.error().toString());
-    //             hub->callRemote(responseId, nlohmann::json{{"error", result.error().toString()}});
-    //             return;
-    //         }
-
-    //         dispatchUpdates();
-    //         hub->callRemote(responseId, nlohmann::json{{"success", true}});
-    //     });
 }
