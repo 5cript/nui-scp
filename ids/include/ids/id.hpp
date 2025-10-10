@@ -1,6 +1,7 @@
 #pragma once
 
 #include <string>
+#include <nlohmann/json.hpp>
 
 #ifdef __EMSCRIPTEN__
 #    include <nui/frontend/val.hpp>
@@ -82,6 +83,20 @@ namespace Ids
 #endif
 }
 
+#ifdef __EMSCRIPTEN__
+#    define VAL_CONVERTER(name) \
+        inline void to_val(Nui::val& v, name const& id) \
+        { \
+            v = Nui::val::u8string(id.value().c_str()); \
+        } \
+        inline void from_val(Nui::val const& v, name& id) \
+        { \
+            id = make##name(v.template as<std::string>()); \
+        }
+#else
+#    define VAL_CONVERTER(name)
+#endif
+
 #define DEFINE_ID_TYPE(name) \
     namespace Ids \
     { \
@@ -114,4 +129,13 @@ namespace Ids
         { \
             return name{str}; \
         } \
+        inline void to_json(nlohmann::json& j, name const& id) \
+        { \
+            j = id.value(); \
+        } \
+        inline void from_json(nlohmann::json const& j, name& id) \
+        { \
+            id = make##name(j.get<std::string>()); \
+        } \
+        VAL_CONVERTER(name) \
     }
