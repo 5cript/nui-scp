@@ -1,0 +1,38 @@
+@startuml
+participant "UI Thread"
+participant "Session Strand"
+participant "SSH Thread"
+
+"UI Thread" -> "Session Strand" : start download on directory
+activate "Session Strand"
+"Session Strand" -> "SSH Thread" : stat remote path
+activate "Session Strand" #orange
+"Session Strand" -> "Session Strand" : blocking wait
+"SSH Thread" -> "Session Strand" : stat result
+deactivate "Session Strand"
+"Session Strand" -> "Session Strand" : process stat result (here: directory)
+"Session Strand" -> "Session Strand" : create scan operation
+group Scan Operation
+    loop work loop on strand
+        "Session Strand" -> "SSH Thread": list directory (current)
+        activate "Session Strand" #orange
+        "Session Strand" -> "Session Strand": blocking wait
+        "SSH Thread" -> "Session Strand": list directory result
+        deactivate "Session Strand"
+        "Session Strand" -> "Session Strand": process list result
+        "Session Strand" -> "UI Thread": progress update
+    end
+end
+group Bulk Download Operation
+    loop work loop
+        "Session Strand" -> "SSH Thread": download some bytes
+        activate "Session Strand" #orange
+        "Session Strand" -> "Session Strand": blocking wait
+        "SSH Thread" -> "Session Strand": download result
+        deactivate "Session Strand"
+        "Session Strand" -> "Session Strand": process download result
+        "Session Strand" -> "UI Thread": progress update
+    end
+end
+deactivate "Session Strand"
+@enduml
