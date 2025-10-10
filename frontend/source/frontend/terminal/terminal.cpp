@@ -189,7 +189,7 @@ struct GenericTerminalChannel
         };
     }
 
-    ~GenericTerminalChannel() = default;
+    virtual ~GenericTerminalChannel() = default;
 };
 
 struct TerminalChannel::Implementation : public GenericTerminalChannel
