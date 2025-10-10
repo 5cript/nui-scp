@@ -62,6 +62,7 @@ namespace Persistence
             j["uploadOptions"] = *options.uploadOptions;
         if (options.concurrency)
             j["concurrency"] = *options.concurrency;
+        j["operationTimeout"] = options.operationTimeout.count();
     }
     void from_json(nlohmann::json const& j, SftpOptions& options)
     {
@@ -71,6 +72,11 @@ namespace Persistence
             options.uploadOptions = j["uploadOptions"].get<TransferOptions>();
         if (j.contains("concurrency"))
             options.concurrency = j["concurrency"].get<int>();
+
+        if (j.contains("operationTimeout"))
+            options.operationTimeout = std::chrono::seconds{j["operationTimeout"].get<int>()};
+        else
+            options.operationTimeout = SftpOptions{}.operationTimeout;
     }
     void SftpOptions::useDefaultsFrom(SftpOptions const& other)
     {
