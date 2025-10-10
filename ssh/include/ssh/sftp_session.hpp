@@ -164,6 +164,11 @@ namespace SecureShell
 
         std::future<std::expected<sftp_limits_struct, Error>> limits();
 
+        ProcessingStrand* strand() const
+        {
+            return strand_.get();
+        }
+
       private:
         void fileStreamRemoveItself(FileStream* stream, bool isBackElement);
         void removeAllFileStreams();
