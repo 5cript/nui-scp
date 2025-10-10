@@ -37,6 +37,43 @@ namespace SharedData
         std::uint64_t mtime = 0;
         std::uint32_t mtimeNsec = 0;
         std::string acl = "";
+
+        bool isDirectory() const
+        {
+            return type == 2;
+        }
+        bool isRegularFile() const
+        {
+            return type == 1;
+        }
+        bool isSymlink() const
+        {
+            return type == 3;
+        }
+        bool isSpecial() const
+        {
+            return type == 4;
+        }
+        bool isUnknown() const
+        {
+            return type == 5;
+        }
+        bool isSocket() const
+        {
+            return type == 6;
+        }
+        bool isCharDevice() const
+        {
+            return type == 7;
+        }
+        bool isBlockDevice() const
+        {
+            return type == 8;
+        }
+        bool isFifo() const
+        {
+            return type == 9;
+        }
     };
 
     void to_json(nlohmann::json& j, DirectoryEntry const& entry);
