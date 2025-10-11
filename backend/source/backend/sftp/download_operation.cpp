@@ -166,13 +166,13 @@ std::expected<bool, DownloadOperation::Error> DownloadOperation::readOnce()
                     tellp = static_cast<uint64_t>(localFile_.tellp());
                     fileSize = fileSize_;
                     good = localFile_.good();
-                    progressCallback_(0, fileSize, tellp);
+                    progressCallback_(0ull, fileSize, tellp);
                 }
                 if (!good)
                 {
                     Log::error("DownloadOperation read cycle stopped: localFile_.good() == false");
                     std::ignore = enterErrorState({
-                        .type = OperationErrorType::TargetFileNotGood,
+                        .type = SharedData::OperationErrorType::TargetFileNotGood,
                     });
                     return doContinue = false;
                 }

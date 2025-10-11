@@ -21,7 +21,7 @@
     align-items: center;
 }
 
-.progress-bar:nth-child(1) {
+.progress-bar > div:nth-child(1) {
     height: 100%;
     width: 0%;
     transition: width 0.3s linear, background-color 0.3s linear;
@@ -30,7 +30,7 @@
     left: 0;
 }
 
-.progress-bar:nth-child(2) {
+.progress-bar > div:nth-child(2) {
     position: relative;
     z-index: 1;
     font-size: 16px;
@@ -39,7 +39,7 @@
     text-shadow: 0 0 5px rgba(0, 0, 0, 0.5);
 }
 
-.progress-bar:nth-child(3) {
+.progress-bar > div:nth-child(3) {
     position: absolute;
     top: 0;
     left: 0;
@@ -49,12 +49,12 @@
     animation: progress-shine 2s infinite;
 }
 
-.progress-bar:nth-child(3).hidden {
+.progress-bar > div:nth-child(3).hidden {
     display: none;
 }
 
 @media (prefers-reduced-motion: reduce) {
-    .progress-bar:nth-child(3) {
+    .progress-bar > div:nth-child(3) {
         animation: none;
     }
 }
@@ -117,12 +117,13 @@ namespace
 
 struct ProgressBar::Implementation : public ProgressBar::Settings
 {
-    std::weak_ptr<Nui::Dom::BasicElement> progressBarElement;
+    Nui::Observed<long long> progress{0};
+    Nui::Observed<std::string> text{"0%"};
+    Nui::Observed<std::string> backgroundColor{"#a0a0a0"};
     OrderOfMagnitude magnitude;
 
     Implementation(Settings settings)
         : Settings{std::move(settings)}
-        , progressBarElement{}
         , magnitude{determineOrderOfMagnitude(settings.max)}
     {}
 };
@@ -133,7 +134,7 @@ ProgressBar::ProgressBar(Settings settings)
 
 ROAR_PIMPL_SPECIAL_FUNCTIONS_IMPL(ProgressBar);
 
-Nui::ElementRenderer ProgressBar::operator()()
+Nui::ElementRenderer ProgressBar::operator()() const
 {
     using namespace Nui::Elements;
     using namespace Nui::Attributes;
@@ -142,32 +143,32 @@ Nui::ElementRenderer ProgressBar::operator()()
 
     // clang-format off
     return div{
-        id = impl_->id,
         class_ = "progress-bar",
-        reference = impl_->progressBarElement,
+        style = Style {
+            "height"_style = impl_->height,
+        },
     }(
-        div{}(),
-        div{}("0%"),
+        // bar fill
+        div{
+            style = Style{
+                "width"_style = observe(impl_->progress).generate([this]() {
+                    return format("{}%", percentageBetween(impl_->progress.value(), impl_->min, impl_->max));
+                }),
+                "height"_style = impl_->height,
+                "background-color"_style = impl_->backgroundColor
+            },
+        }(),
+        // text
+        div{}(impl_->text),
+        // shine animation
         div{}()
     );
     // clang-format on
 }
 
-void ProgressBar::setProgress(long long current)
+void ProgressBar::updateText()
 {
-    const auto percent = percentageBetween(current, impl_->min, impl_->max);
-
-    auto element = impl_->progressBarElement.lock();
-    if (!element) // not mounted
-        return;
-
-    Nui::val progressBar = element->val();
-    Nui::val barFill = progressBar.call<Nui::val>("children")[0];
-    Nui::val percentageText = progressBar.call<Nui::val>("children")[1];
-
-    barFill["style"].set("width", fmt::format("{}%", static_cast<int>(percent)));
-
-    const auto text = [this, percent]() {
+    impl_->text = [this, percent = percentageBetween(impl_->progress.value(), impl_->min, impl_->max)]() {
         if (impl_->showMinMax)
         {
             if (impl_->byteMode)
@@ -191,19 +192,26 @@ void ProgressBar::setProgress(long long current)
 
                 return fmt::format(
                     "{} - {} ({})",
-                    formatSize(impl_->min, impl_->magnitude),
+                    formatSize(impl_->progress.value(), impl_->magnitude),
                     formatSize(impl_->max, impl_->magnitude),
                     percent);
             }
             else
-                return fmt::format("{} / {} ({})", impl_->min, impl_->max, percent);
+                return fmt::format("{} / {} ({})", impl_->progress.value(), impl_->max, percent);
         }
         else
             return fmt::format("{}%", percent);
     }();
+}
 
-    percentageText.set("textContent", text);
-
+void ProgressBar::setProgress(long long current)
+{
+    const auto percent = percentageBetween(current, impl_->min, impl_->max);
     const auto hue = std::max(5., 120. * std::pow(static_cast<double>(percent) / 100., 1.8));
-    barFill["style"].set("backgroundColor", fmt::format("hsl({}, 100%, 50%)", static_cast<int>(hue)));
+
+    impl_->progress = current;
+    impl_->backgroundColor = fmt::format("hsl({}, 100%, 50%)", static_cast<int>(hue));
+    updateText();
+
+    Nui::globalEventContext.executeActiveEventsImmediately();
 }

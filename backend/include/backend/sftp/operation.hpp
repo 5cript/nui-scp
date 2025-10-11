@@ -3,6 +3,9 @@
 #include <ssh/sftp_error.hpp>
 #include <utility/describe.hpp>
 #include <shared_data/file_operations/operation_type.hpp>
+#include <shared_data/file_operations/operation_error_type.hpp>
+#include <shared_data/file_operations/operation_error.hpp>
+#include <shared_data/file_operations/operation_state.hpp>
 #include <ssh/async/processing_strand.hpp>
 #include <log/log.hpp>
 
@@ -10,30 +13,6 @@
 
 #include <optional>
 #include <expected>
-#include <mutex>
-
-BOOST_DEFINE_ENUM_CLASS(
-    OperationErrorType,
-    FileExists,
-    FileNotFound,
-    OpenFailure,
-    FileStreamExpired,
-    FileStatFailed,
-    SftpError,
-    InvalidPath,
-    RenameFailure,
-    CannotSetFilePermissions,
-    FutureTimeout,
-    OperationNotPrepared,
-    CannotFinalizeDuringRead,
-    InvalidOptionsKey,
-    TargetFileNotGood,
-    CannotWorkCompletedOperation,
-    CannotWorkFailedOperation,
-    CannotWorkCanceledOperation,
-    UnknownWorkState,
-    InvalidOperationState,
-    OperationNotPossibleOnFileType);
 
 class Operation
 {
@@ -48,7 +27,8 @@ class Operation
 
     virtual ~Operation() = default;
 
-    using ErrorType = OperationErrorType;
+    using ErrorType = SharedData::OperationErrorType;
+    using Error = SharedData::OperationError;
 
     virtual SharedData::OperationType type() const = 0;
 
@@ -56,20 +36,6 @@ class Operation
     auto visit(FunctionT&& func) const;
 
     virtual SecureShell::ProcessingStrand* strand() const = 0;
-
-    struct Error
-    {
-        ErrorType type;
-        std::optional<SecureShell::SftpError> sftpError = std::nullopt;
-
-        std::string toString() const
-        {
-            const auto enumString = boost::describe::enum_to_string(type, "INVALID_ENUM_VALUE");
-            if (sftpError.has_value())
-                return fmt::format("{}: {}", enumString, sftpError->toString());
-            return enumString;
-        }
-    };
 
     template <typename FunctionT>
     bool perform(FunctionT&& func)
@@ -88,17 +54,7 @@ class Operation
         return id_;
     }
 
-    enum class OperationState
-    {
-        NotStarted,
-        Preparing,
-        Prepared,
-        Running,
-        Finalizing,
-        Completed,
-        Canceled,
-        Failed,
-    };
+    using OperationState = SharedData::OperationState;
 
     OperationState state() const
     {

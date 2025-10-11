@@ -13,7 +13,7 @@ class DownloadOperation : public Operation
   public:
     struct DownloadOperationOptions
     {
-        std::function<void(std::int64_t min, std::int64_t max, std::int64_t current)> progressCallback =
+        std::function<void(std::uint64_t min, std::uint64_t max, std::uint64_t current)> progressCallback =
             [](auto, auto, auto) {};
         std::filesystem::path remotePath{};
         std::filesystem::path localPath{};
@@ -92,7 +92,7 @@ class DownloadOperation : public Operation
     std::filesystem::path remotePath_;
     std::filesystem::path localPath_;
     std::string tempFileSuffix_;
-    std::function<void(std::int64_t min, std::int64_t max, std::int64_t current)> progressCallback_;
+    std::function<void(std::uint64_t min, std::uint64_t max, std::uint64_t current)> progressCallback_;
     bool mayOverwrite_;
     bool reserveSpace_;
     bool tryContinue_;

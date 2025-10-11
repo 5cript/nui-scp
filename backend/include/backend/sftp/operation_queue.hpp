@@ -6,8 +6,8 @@
 #include <nui/rpc.hpp>
 #include <ids/ids.hpp>
 #include <backend/rpc_helper.hpp>
+#include <shared_data/file_operations/operation_completed.hpp>
 
-#include <vector>
 #include <deque>
 #include <filesystem>
 #include <memory>
@@ -18,23 +18,11 @@ class OperationQueue
     , public std::enable_shared_from_this<OperationQueue>
 {
   public:
-    enum class CompletionReason
-    {
-        Completed,
-        Canceled,
-        Failed
-    };
+    using Error = SharedData::OperationErrorType;
+    using OperationCompleted = SharedData::OperationCompleted;
+    using CompletionReason = SharedData::OperationCompletionReason;
 
-    struct CompletedOperation
-    {
-        CompletionReason reason;
-        Ids::OperationId id;
-        std::chrono::system_clock::time_point completionTime;
-        std::optional<std::filesystem::path> localPath{std::nullopt};
-        std::optional<std::filesystem::path> remotePath{std::nullopt};
-        std::optional<Operation::Error> error{std::nullopt};
-    };
-
+  public:
     OperationQueue(
         boost::asio::any_io_executor executor,
         std::shared_ptr<boost::asio::strand<boost::asio::any_io_executor>> strand,
@@ -43,8 +31,6 @@ class OperationQueue
         Persistence::SftpOptions sftpOpts,
         Ids::SessionId sessionId,
         int parallelism = 1);
-
-    using Error = OperationErrorType;
 
     void cancelAll();
     void cancel(Ids::OperationId id);
@@ -64,21 +50,11 @@ class OperationQueue
         std::filesystem::path const& remotePath);
 
   private:
-    template <typename T>
-    void call(std::string event, Ids::OperationId id, T&& data)
-    {
-        hub_->callRemote(
-            fmt::format("OperationQueue::{}::{}", sessionId_.value(), event),
-            nlohmann::json{
-                {"operationId", id.value()},
-                {"payload", std::forward<T>(data)},
-            });
-    }
+    void completeOperation(OperationCompleted&& operationCompleted);
 
   private:
     Persistence::SftpOptions sftpOpts_{};
     Ids::SessionId sessionId_{};
     std::deque<std::pair<Ids::OperationId, std::unique_ptr<Operation>>> operations_{};
-    std::vector<CompletedOperation> completedOperations_{};
     int parallelism_{1};
 };

@@ -16,7 +16,7 @@ struct SessionOptions::Implementation
     Persistence::StateHolder* stateHolder;
     FrontendEvents* events;
     std::string persistenceSessionName;
-    std::string id;
+    std::string sessionLayoutId;
     ConfirmDialog* confirmDialog;
 
     std::string selectedLayout;
@@ -26,12 +26,12 @@ struct SessionOptions::Implementation
         Persistence::StateHolder* stateHolder,
         FrontendEvents* events,
         std::string persistenceSessionName,
-        std::string id,
+        std::string sessionLayoutId,
         ConfirmDialog* confirmDialog)
         : stateHolder{stateHolder}
         , events{events}
         , persistenceSessionName{std::move(persistenceSessionName)}
-        , id{std::move(id)}
+        , sessionLayoutId{std::move(sessionLayoutId)}
         , confirmDialog{confirmDialog}
         , selectedLayout{}
     {}
@@ -64,13 +64,13 @@ SessionOptions::SessionOptions(
     Persistence::StateHolder* stateHolder,
     FrontendEvents* events,
     std::string persistenceSessionName,
-    std::string id,
+    std::string sessionLayoutId,
     ConfirmDialog* confirmDialog)
     : impl_{std::make_unique<Implementation>(
           stateHolder,
           events,
           std::move(persistenceSessionName),
-          std::move(id),
+          std::move(sessionLayoutId),
           confirmDialog)}
 {
     loadLayoutNames();
@@ -125,7 +125,7 @@ Nui::ElementRenderer SessionOptions::operator()()
                             return;
                         }
 
-                        auto layout = Nui::val::global("contentPanelManager").call<Nui::val>("getPanelLayout", impl_->id);
+                        auto layout = Nui::val::global("contentPanelManager").call<Nui::val>("getPanelLayout", impl_->sessionLayoutId);
                         if (layout.isUndefined())
                         {
                             Log::error("Failed to get layout");

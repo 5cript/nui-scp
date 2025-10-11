@@ -15,12 +15,11 @@ class OperationQueue
         Persistence::StateHolder* stateHolder,
         FrontendEvents* events,
         std::string persistenceSessionName,
-        std::string sessionId,
         ConfirmDialog* confirmDialog);
 
     ROAR_PIMPL_SPECIAL_FUNCTIONS(OperationQueue);
 
-    void setFileEngine(FileEngine* fileEngine);
+    void activate(FileEngine* fileEngine, Ids::SessionId sessionId);
 
     void enqueueDownload(
         std::filesystem::path const& remotePath,

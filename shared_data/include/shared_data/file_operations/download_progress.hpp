@@ -1,0 +1,24 @@
+#pragma once
+
+#include <ids/ids.hpp>
+#include <shared_data/shared_data.hpp>
+#include <utility/describe.hpp>
+
+#include <nlohmann/json.hpp>
+
+#include <cstdint>
+
+namespace SharedData
+{
+    struct DownloadProgress
+    {
+        Ids::OperationId operationId;
+        std::uint64_t min;
+        std::uint64_t max;
+        std::uint64_t current;
+    };
+    BOOST_DESCRIBE_STRUCT(DownloadProgress, (), (operationId, min, max, current))
+
+    void to_json(nlohmann::json& j, DownloadProgress const& downloadProgress);
+    void from_json(nlohmann::json const& j, DownloadProgress& downloadProgress);
+}

@@ -1,0 +1,185 @@
+.operation-queue {
+    max-width: 920px;
+    margin: 36px auto;
+    padding: 20px
+}
+
+header.opq-controls {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+    margin-bottom: 16px
+}
+
+.opq-play-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    border-radius: 10px;
+    border: 1px solid var(--border);
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.02), transparent);
+    cursor: pointer
+}
+
+.opq-play-toggle .opq-icon {
+    width: 18px;
+    height: 18px;
+    display: inline-grid;
+    place-items: center
+}
+
+.opq-play-toggle .opq-label {
+    font-weight: 600
+}
+
+.opq-summary {
+    margin-left: auto;
+    color: var(--muted);
+    font-size: 14px
+}
+
+.opq-list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px
+}
+
+.opq-card {
+    border: 1px solid var(--border);
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.01), transparent);
+    border-radius: 12px;
+    overflow: hidden;
+    transition: box-shadow .18s ease
+}
+
+.opq-card:hover {
+    box-shadow: 0 8px 30px rgba(0, 0, 0, 0.45)
+}
+
+.opq-header {
+    display: flex;
+    gap: 12px;
+    padding: 12px 14px;
+    align-items: center
+}
+
+.opq-type {
+    width: 36px;
+    height: 36px;
+    border-radius: 8px;
+    display: grid;
+    place-items: center;
+    font-weight: 700;
+    border: 1px solid rgba(255, 255, 255, 0.03)
+}
+
+.opq-title {
+    flex: 1
+}
+
+.opq-actions {
+    display: flex;
+    gap: 8px;
+    align-items: center
+}
+
+.opq-btn {
+    padding: 6px 10px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--muted);
+    cursor: pointer;
+    font-size: 13px
+}
+
+.opq-btn[aria-pressed="true"] {
+    background: rgba(255, 255, 255, 0.02);
+    color: var(--accent)
+}
+
+.opq-cancel-btn {
+    color: #ffb3b3
+}
+
+/* dynamic content area */
+.opq-body {
+    padding: 10px 14px;
+    border-top: 1px dashed rgba(255, 255, 255, 0.03);
+    overflow: hidden;
+    transition: max-height .35s cubic-bezier(.2, .9, .2, 1), opacity .25s ease;
+    padding-bottom: 12px
+}
+
+.opq-body.opq-collapsed {
+    max-height: 0;
+    padding-top: 0;
+    padding-bottom: 0;
+    opacity: 0
+}
+
+/* states */
+.opq-completed .opq-header {
+    background: linear-gradient(90deg, rgba(126, 231, 135, 0.06), transparent)
+}
+
+.opq-completed .opq-type {
+    background: rgba(126, 231, 135, 0.07);
+    border-color: rgba(126, 231, 135, 0.12);
+    color: var(--lime)
+}
+
+.opq-failed .opq-header {
+    background: linear-gradient(90deg, rgba(255, 107, 107, 0.06), transparent)
+}
+
+.opq-failed .opq-type {
+    background: rgba(255, 107, 107, 0.06);
+    border-color: rgba(255, 107, 107, 0.12);
+    color: var(--red)
+}
+
+.opq-canceled .opq-header {
+    background: linear-gradient(90deg, rgba(153, 153, 153, 0.04), transparent)
+}
+
+.opq-canceled .opq-type {
+    background: rgba(153, 153, 153, 0.04);
+    border-color: rgba(153, 153, 153, 0.12);
+    color: var(--gray)
+}
+
+/* pending state (default) */
+.opq-pending .opq-header {
+    background: transparent
+}
+
+/* collapse animation for header when finishing: shrink padding and reduce height subtly */
+.opq-card.opq-folded .opq-header {
+    padding-top: 8px;
+    padding-bottom: 8px
+}
+
+/* small helper */
+.opq-muted {
+    color: var(--muted);
+    font-size: 13px
+}
+
+/* tiny icons as simple shapes */
+.opq-icon-play,
+.opq-icon-pause,
+.opq-icon-download,
+.opq-icon-upload,
+.opq-icon-scan {
+    width: 16px;
+    height: 16px
+}
+
+.opq-pill {
+    padding: 4px 8px;
+    border-radius: 999px;
+    border: 1px solid rgba(255, 255, 255, 0.03);
+    font-size: 12px
+}

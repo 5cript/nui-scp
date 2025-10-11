@@ -40,7 +40,7 @@ struct Session::Implementation
     // Session Ui Tab related:
     std::string initialName;
     std::shared_ptr<Nui::Observed<std::string>> tabTitle;
-    std::string id;
+    std::string sessionLayoutId;
     std::function<void(Session const*)> closeSelf;
     Nui::Observed<bool> isVisible;
     Persistence::UiOptions uiOptions;
@@ -95,7 +95,7 @@ struct Session::Implementation
         , events{events}
         , initialName{std::move(initialName)}
         , tabTitle{std::make_shared<Nui::Observed<std::string>>(this->initialName)}
-        , id{Nui::val::global("generateId")().as<std::string>()}
+        , sessionLayoutId{Nui::val::global("generateId")().as<std::string>()}
         , closeSelf{std::move(closeSelf)}
         , isVisible{visible}
         , uiOptions{uiOptions}
@@ -110,14 +110,14 @@ struct Session::Implementation
         , currentPath{}
         , fileEngine{}
         , preNavigatePath{}
-        , operationQueue{this->stateHolder, this->events, this->initialName, this->id, this->confirmDialog}
+        , operationQueue{this->stateHolder, this->events, this->initialName, this->confirmDialog}
         , operationQueueElement{}
         , layoutHost{}
         , layoutName{std::move(layoutName)}
         , terminal{}
         , channelElements{}
         , sessionOptionsElement{}
-        , sessionOptions{stateHolder, events, this->initialName, this->id, confirmDialog}
+        , sessionOptions{stateHolder, events, this->initialName, this->sessionLayoutId, confirmDialog}
     {}
 };
 
@@ -560,9 +560,9 @@ void Session::openSftp()
         if (opts.openSftpByDefault)
         {
             Log::info("Opening SFTP by default");
-            impl_->fileEngine =
-                std::make_unique<SftpFileEngine>(static_cast<SshTerminalEngine*>(&impl_->terminal.value()->engine()));
-            impl_->operationQueue.setFileEngine(impl_->fileEngine.get());
+            auto* engine = static_cast<SshTerminalEngine*>(&impl_->terminal.value()->engine());
+            impl_->fileEngine = std::make_unique<SftpFileEngine>(engine);
+            impl_->operationQueue.activate(impl_->fileEngine.get(), engine->sshSessionId());
             navigateTo(opts.defaultDirectory.value_or("/"));
         }
     }
@@ -706,7 +706,7 @@ void Session::managerShutdown(std::function<void()> onShutdown)
     else
     {
         Log::info("Session shutdown is already complete");
-        Nui::val::global("contentPanelManager").call<void>("removePanel", impl_->id);
+        Nui::val::global("contentPanelManager").call<void>("removePanel", impl_->sessionLayoutId);
         onShutdown();
     }
 }
@@ -716,7 +716,7 @@ void Session::closeSelf()
     if (impl_->onShutdownComplete)
     {
         Log::info("Session shutdown complete");
-        Nui::val::global("contentPanelManager").call<void>("removePanel", impl_->id);
+        Nui::val::global("contentPanelManager").call<void>("removePanel", impl_->sessionLayoutId);
 
         impl_->onShutdownComplete();
         return;
@@ -773,8 +773,7 @@ void Session::onChannelClosedByUser(Ids::ChannelId const& channelId)
         const auto val = elem->val();
         if (val.template call<bool>("hasAttribute", "data-channelid"s))
         {
-            const auto id = val.template call<std::string>("getAttribute", "data-channelid"s);
-            return id == channelId.value();
+            return val.template call<std::string>("getAttribute", "data-channelid"s) == channelId.value();
         }
         else
         {
@@ -826,7 +825,7 @@ void Session::initializeLayout()
         .call<void>(
             "addPanel",
             element,
-            impl_->id,
+            impl_->sessionLayoutId,
             layout.value_or(""),
             Nui::bind([this]() -> Nui::val {
                 Nui::Console::log("Channel factory content panel manager");
