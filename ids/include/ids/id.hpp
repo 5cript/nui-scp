@@ -39,10 +39,7 @@ namespace Ids
             return id_;
         }
 
-        friend bool operator==(Id const& lhs, Id const& rhs)
-        {
-            return lhs.id_ == rhs.id_;
-        }
+        friend std::strong_ordering operator<=>(Id const& lhs, Id const& rhs) = default;
 
         bool isValid() const
         {
