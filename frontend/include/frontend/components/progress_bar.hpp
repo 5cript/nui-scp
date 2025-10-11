@@ -8,7 +8,6 @@ class ProgressBar
   public:
     struct Settings
     {
-        std::string id;
         std::string height{"30px"};
         long long min{0};
         long long max{100};
@@ -19,13 +18,16 @@ class ProgressBar
 
     ROAR_PIMPL_SPECIAL_FUNCTIONS(ProgressBar);
 
-    Nui::ElementRenderer operator()();
+    Nui::ElementRenderer operator()() const;
 
     /**
      * Set the progress of the progress bar.
      * Cannot be set if the progress bar is not mounted.
      */
     void setProgress(long long current);
+
+  private:
+    void updateText();
 
   private:
     struct Implementation;
