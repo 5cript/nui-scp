@@ -24,10 +24,12 @@ namespace SecureShell
 
         using ResultType = std::invoke_result_t<std::decay_t<FunctionT>>;
         std::promise<ResultType> promise{};
-        promise.set_value(std::unexpected(SftpError{
-            .message = "Owner is null",
-            .wrapperError = WrapperErrors::OwnerNull,
-        }));
+        promise.set_value(
+            std::unexpected(
+                SftpError{
+                    .message = "Owner is null",
+                    .wrapperError = WrapperErrors::OwnerNull,
+                }));
         return promise.get_future();
     }
 
@@ -132,7 +134,7 @@ namespace SecureShell
             };
         }
     }
-    std::future<std::expected<std::size_t, SftpError>> FileStream::read(std::byte* buffer, std::size_t bufferSize)
+    std::future<std::expected<std::size_t, SftpError>> FileStream::readSome(std::byte* buffer, std::size_t bufferSize)
     {
         return performPromise([this, buffer, bufferSize]() -> std::expected<std::size_t, SftpError> {
             VERIFY_FILE_STREAM();
@@ -144,7 +146,21 @@ namespace SecureShell
     }
 
     std::future<std::expected<std::size_t, SftpError>>
-    FileStream::read(std::function<bool(std::string_view data)> onReadFunc)
+    FileStream::readSome(std::function<bool(std::string_view data)> onRead)
+    {
+        return performPromise([this, onRead = std::move(onRead)]() -> std::expected<std::size_t, SftpError> {
+            VERIFY_FILE_STREAM();
+            std::array<char, 4096> buffer{};
+            const auto result = sftp_read(file_.get(), buffer.data(), buffer.size());
+            if (result < 0)
+                return std::unexpected(lastError());
+            onRead({buffer.data(), static_cast<std::size_t>(result)});
+            return static_cast<std::size_t>(result);
+        });
+    }
+
+    std::future<std::expected<std::size_t, SftpError>>
+    FileStream::readAll(std::function<bool(std::string_view data)> onReadFunc)
     {
         struct ReadState : public std::enable_shared_from_this<ReadState>
         {
@@ -194,10 +210,12 @@ namespace SecureShell
                 stream.perform([state = shared_from_this()]() {
                     if (!state->stream.file_)
                     {
-                        state->promise.set_value(std::unexpected(SftpError{
-                            .message = "File is null",
-                            .wrapperError = WrapperErrors::FileNull,
-                        }));
+                        state->promise.set_value(
+                            std::unexpected(
+                                SftpError{
+                                    .message = "File is null",
+                                    .wrapperError = WrapperErrors::FileNull,
+                                }));
                         return;
                     }
                     state->onRead(sftp_read(state->stream.file_.get(), state->buffer.data(), state->buffer.size()));
@@ -235,10 +253,12 @@ namespace SecureShell
 
             if (written == 0 && !toWrite.empty())
             {
-                return onWriteComplete(std::unexpected(SftpError{
-                    .message = "Failed to write any data",
-                    .wrapperError = WrapperErrors::ShortWrite,
-                }));
+                return onWriteComplete(
+                    std::unexpected(
+                        SftpError{
+                            .message = "Failed to write any data",
+                            .wrapperError = WrapperErrors::ShortWrite,
+                        }));
             }
 
             writePart(toWrite.substr(written), std::move(onWriteComplete));

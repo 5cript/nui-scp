@@ -18,7 +18,4 @@ namespace SharedData
         std::uint64_t current;
     };
     BOOST_DESCRIBE_STRUCT(DownloadProgress, (), (operationId, min, max, current))
-
-    void to_json(nlohmann::json& j, DownloadProgress const& downloadProgress);
-    void from_json(nlohmann::json const& j, DownloadProgress& downloadProgress);
 }

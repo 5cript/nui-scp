@@ -215,3 +215,8 @@ void ProgressBar::setProgress(long long current)
 
     Nui::globalEventContext.executeActiveEventsImmediately();
 }
+
+long long ProgressBar::max() const
+{
+    return impl_->max;
+}

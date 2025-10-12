@@ -69,7 +69,20 @@ namespace Test
 
         void giveMockExpectedRead(std::shared_ptr<::testing::NiceMock<SecureShell::Test::FileStreamMock>> const& mock)
         {
-            EXPECT_CALL(*mock, read(testing::_))
+            EXPECT_CALL(*mock, readAll(testing::_))
+                .WillRepeatedly(
+                    [this](std::function<bool(std::string_view data)> cb)
+                        -> std::future<std::expected<std::size_t, SecureShell::SftpError>> {
+                        onRead_ = std::move(cb);
+                        readPromise_ = {};
+                        if (!readCycleQueue_.empty())
+                        {
+                            readCycleQueue_.front()();
+                            readCycleQueue_.pop();
+                        }
+                        return readPromise_.get_future();
+                    });
+            EXPECT_CALL(*mock, readSome(testing::_))
                 .WillRepeatedly(
                     [this](std::function<bool(std::string_view data)> cb)
                         -> std::future<std::expected<std::size_t, SecureShell::SftpError>> {

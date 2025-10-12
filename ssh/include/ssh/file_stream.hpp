@@ -62,16 +62,25 @@ namespace SecureShell
          * @param bufferSize
          * @return std::future<std::expected<std::size_t, SftpError>>
          */
-        std::future<std::expected<std::size_t, SftpError>> read(std::byte* buffer, std::size_t bufferSize) override;
+        std::future<std::expected<std::size_t, SftpError>> readSome(std::byte* buffer, std::size_t bufferSize) override;
 
         /**
          * @brief Reads all bytes from the file.
          *
-         * @param onRead Let this function return false to stop reading.
+         * @param onRead Function called when data is read.
          * @return std::future<std::expected<std::size_t, SftpError>> The number of bytes read or an error.
          */
         std::future<std::expected<std::size_t, SftpError>>
-        read(std::function<bool(std::string_view data)> onRead) override;
+        readAll(std::function<bool(std::string_view data)> onRead) override;
+
+        /**
+         * @brief Reads some bytes from the file.
+         *
+         * @param onRead Function to call with read data. Return false to stop reading.
+         * @return std::future<std::expected<std::size_t, SftpError>>
+         */
+        std::future<std::expected<std::size_t, SftpError>>
+        readSome(std::function<bool(std::string_view data)> onRead) override;
 
         /**
          * @brief Writes some bytes to the file.

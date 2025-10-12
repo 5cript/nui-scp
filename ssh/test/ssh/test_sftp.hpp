@@ -268,7 +268,7 @@ namespace SecureShell::Test
         ASSERT_TRUE(file);
 
         std::byte byte;
-        auto readFut = file->read(&byte, 1);
+        auto readFut = file->readSome(&byte, 1);
         ASSERT_EQ(readFut.wait_for(1s), std::future_status::ready);
         auto readResult = readFut.get();
         ASSERT_TRUE(readResult.has_value());
@@ -292,7 +292,7 @@ namespace SecureShell::Test
         ASSERT_TRUE(file);
 
         std::vector<std::byte> buffer(1024);
-        auto readFut = file->read(buffer.data(), buffer.size());
+        auto readFut = file->readSome(buffer.data(), buffer.size());
 
         ASSERT_EQ(readFut.wait_for(1s), std::future_status::ready);
         auto readResult = readFut.get();
@@ -318,7 +318,7 @@ namespace SecureShell::Test
         ASSERT_TRUE(file);
 
         std::string data;
-        auto readFut = file->read([&data](std::string_view chunk) {
+        auto readFut = file->readAll([&data](std::string_view chunk) {
             data.append(chunk);
             return true;
         });
@@ -346,7 +346,7 @@ namespace SecureShell::Test
         ASSERT_TRUE(file);
 
         std::string data;
-        auto readFut = file->read([&data](std::string_view chunk) {
+        auto readFut = file->readAll([&data](std::string_view chunk) {
             data.append(chunk);
             return true;
         });
@@ -375,7 +375,7 @@ namespace SecureShell::Test
 
         ASSERT_EQ(file->seek(2).wait_for(1s), std::future_status::ready);
         std::vector<std::byte> buffer(1024);
-        auto readFut2 = file->read(buffer.data(), buffer.size());
+        auto readFut2 = file->readSome(buffer.data(), buffer.size());
 
         ASSERT_EQ(readFut2.wait_for(1s), std::future_status::ready);
         auto readResult2 = readFut2.get();
@@ -403,7 +403,7 @@ namespace SecureShell::Test
         std::vector<std::byte> buffer(1024);
         ASSERT_EQ(file->seek(2).wait_for(1s), std::future_status::ready);
         ASSERT_EQ(file->rewind().wait_for(1s), std::future_status::ready);
-        auto readFut2 = file->read(buffer.data(), buffer.size());
+        auto readFut2 = file->readSome(buffer.data(), buffer.size());
 
         ASSERT_EQ(readFut2.wait_for(1s), std::future_status::ready);
         auto readResult2 = readFut2.get();

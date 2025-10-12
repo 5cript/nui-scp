@@ -59,7 +59,8 @@ namespace SecureShell
          * @param bufferSize
          * @return std::future<std::expected<std::size_t, SftpError>>
          */
-        virtual std::future<std::expected<std::size_t, SftpError>> read(std::byte* buffer, std::size_t bufferSize) = 0;
+        virtual std::future<std::expected<std::size_t, SftpError>>
+        readSome(std::byte* buffer, std::size_t bufferSize) = 0;
 
         /**
          * @brief Reads all bytes from the file.
@@ -68,7 +69,16 @@ namespace SecureShell
          * @return std::future<std::expected<std::size_t, SftpError>> The number of bytes read or an error.
          */
         virtual std::future<std::expected<std::size_t, SftpError>>
-        read(std::function<bool(std::string_view data)> onRead) = 0;
+        readAll(std::function<bool(std::string_view data)> onRead) = 0;
+
+        /**
+         * @brief Reads some bytes from the file.
+         *
+         * @param onRead
+         * @return std::future<std::expected<std::size_t, SftpError>>
+         */
+        virtual std::future<std::expected<std::size_t, SftpError>>
+        readSome(std::function<bool(std::string_view data)> onRead) = 0;
 
         /**
          * @brief Writes some bytes to the file.

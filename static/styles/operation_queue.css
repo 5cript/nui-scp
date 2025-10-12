@@ -19,7 +19,8 @@ header.opq-controls {
     border-radius: 10px;
     border: 1px solid var(--opq-border);
     background: linear-gradient(180deg, rgba(255, 255, 255, 0.02), transparent);
-    cursor: pointer
+    cursor: pointer;
+    user-select: none;
 }
 
 .opq-play-toggle .opq-icon {
@@ -175,11 +176,4 @@ header.opq-controls {
 .opq-icon-scan {
     width: 16px;
     height: 16px
-}
-
-.opq-pill {
-    padding: 4px 8px;
-    border-radius: 999px;
-    border: 1px solid rgba(255, 255, 255, 0.03);
-    font-size: 12px
 }

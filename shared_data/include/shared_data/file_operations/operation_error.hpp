@@ -9,41 +9,30 @@ namespace SecureShell
     BOOST_DESCRIBE_ENUM(WrapperErrors, None, OwnerNull, SharedPtrDestroyed, ShortWrite, FileNull)
     BOOST_DESCRIBE_STRUCT(SftpError, (), (message, sshError, sftpError, wrapperError))
 
-    void to_json(nlohmann::json& j, WrapperErrors const& wrapperErrors);
-    void from_json(nlohmann::json const& j, WrapperErrors& wrapperErrors);
-
-    void to_json(nlohmann::json& j, SftpError const& sftpError);
-    void from_json(nlohmann::json const& j, SftpError& sftpError);
-
+    inline void from_json(nlohmann::json const& json, WrapperErrors& error)
+    {
+        SharedData::from_json(json, error);
+    }
+    inline void to_json(nlohmann::json& json, WrapperErrors const& error)
+    {
+        SharedData::to_json(json, error);
+    }
+    inline void from_json(nlohmann::json const& json, SftpError& error)
+    {
+        SharedData::from_json(json, error);
+    }
+    inline void to_json(nlohmann::json& json, SftpError const& error)
+    {
+        SharedData::to_json(json, error);
+    }
 #ifdef __EMSCRIPTEN__
-    inline void to_val(Nui::val& v, WrapperErrors const& wrapperErrors)
+    inline void from_val(Nui::val const& val, WrapperErrors& error)
     {
-        v = Nui::val::u8string(Utility::enumToString<WrapperErrors>(wrapperErrors).c_str());
+        SharedData::from_val(val, error);
     }
-    inline void from_val(Nui::val const& v, WrapperErrors& wrapperErrors)
+    inline void to_val(Nui::val& val, WrapperErrors const& error)
     {
-        wrapperErrors = Utility::enumFromString<WrapperErrors>(v.template as<std::string>());
-    }
-    inline void to_val(Nui::val& v, SftpError const& sftpError)
-    {
-        v = Nui::val::object();
-        v.set("message", Nui::val::u8string(sftpError.message.c_str()));
-        v.set("sshError", sftpError.sshError);
-        v.set("sftpError", sftpError.sftpError);
-        v.set("wrapperError", Nui::val::u8string(Utility::enumToString<WrapperErrors>(sftpError.wrapperError).c_str()));
-    }
-    inline void from_val(Nui::val const& v, SftpError& sftpError)
-    {
-        if (!v.hasOwnProperty("message") || !v.hasOwnProperty("sshError") || !v.hasOwnProperty("sftpError") ||
-            !v.hasOwnProperty("wrapperError"))
-        {
-            throw std::runtime_error("Invalid SftpError object");
-        }
-
-        sftpError.message = v["message"].template as<std::string>();
-        sftpError.sshError = v["sshError"].template as<int>();
-        sftpError.sftpError = v["sftpError"].template as<int>();
-        sftpError.wrapperError = Utility::enumFromString<WrapperErrors>(v["wrapperError"].template as<std::string>());
+        SharedData::to_val(val, error);
     }
 #endif
 }
@@ -63,39 +52,5 @@ namespace SharedData
             return enumString;
         }
     };
-
-    void to_json(nlohmann::json& j, OperationError const& operationError);
-    void from_json(nlohmann::json const& j, OperationError& operationError);
-
-#ifdef __EMSCRIPTEN__
-    inline void to_val(Nui::val& v, OperationError const& operationError)
-    {
-        v = Nui::val::object();
-        v.set("type", Nui::val::u8string(Utility::enumToString<OperationErrorType>(operationError.type).c_str()));
-        if (operationError.sftpError.has_value())
-        {
-            Nui::val sftpErrorVal;
-            to_val(sftpErrorVal, operationError.sftpError.value());
-            v.set("sftpError", sftpErrorVal);
-        }
-        else
-        {
-            v.set("sftpError", Nui::val::undefined());
-        }
-    }
-    inline void from_val(Nui::val const& v, OperationError& operationError)
-    {
-        operationError.type = Utility::enumFromString<OperationErrorType>(v["type"].template as<std::string>());
-        if (v.hasOwnProperty("sftpError") && !v["sftpError"].isUndefined())
-        {
-            SecureShell::SftpError sftpError;
-            from_val(v["sftpError"], sftpError);
-            operationError.sftpError = sftpError;
-        }
-        else
-        {
-            operationError.sftpError = std::nullopt;
-        }
-    }
-#endif
+    BOOST_DESCRIBE_STRUCT(OperationError, (), (type, sftpError))
 }

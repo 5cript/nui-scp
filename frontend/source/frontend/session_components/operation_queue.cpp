@@ -8,6 +8,8 @@
 #include <shared_data/file_operations/operation_error.hpp>
 #include <shared_data/file_operations/operation_state.hpp>
 #include <shared_data/file_operations/operation_completed.hpp>
+#include <shared_data/is_paused.hpp>
+#include <shared_data/error_or_success.hpp>
 #include <utility/convert_naming_convention.hpp>
 #include <utility/visit_overloaded.hpp>
 
@@ -20,7 +22,6 @@
 
 #include <variant>
 #include <map>
-#include <cstdint>
 #include <chrono>
 
 namespace
@@ -140,9 +141,13 @@ namespace
     class OperationCard
     {
       public:
-        explicit OperationCard(SharedData::OperationType type, Ids::OperationId operationId)
+        explicit OperationCard(
+            SharedData::OperationType type,
+            Ids::OperationId operationId,
+            std::function<void(OperationCard const& operation)> doRemoveSelf)
             : type_{type}
             , operationId_{std::move(operationId)}
+            , doRemoveSelf_{std::move(doRemoveSelf)}
         {}
 
         std::string formattedState() const
@@ -206,7 +211,6 @@ namespace
                         div{}(static_cast<Derived const*>(this)->title()),
                         div {
                             class_ = "opq-muted"
-                        // TODO: Build this string correctly
                         }(
                             Nui::observe(state_),
                             [this]() -> std::string {
@@ -216,13 +220,38 @@ namespace
                     ),
                     button {
                         class_ = "opq-btn opq-cancel-btn",
+                        onClick = [this](){
+                            cancel();
+                        }
                     }(
-                        "Cancel"
+                        observe(state_).generate([this]() -> std::string {
+                            if (isCompletedState())
+                                return "Remove";
+                            else
+                                return "Cancel";
+                        })
                     )
                 ),
                 static_cast<Derived const*>(this)->body()
             );
             // clang-format on
+        }
+
+        bool isCompletedState() const
+        {
+            const auto state = state_.value();
+            return state == SharedData::OperationState::Completed || state == SharedData::OperationState::Failed ||
+                state == SharedData::OperationState::Canceled;
+        }
+
+        void cancel() const
+        {
+            doRemoveSelf_(*this);
+        }
+
+        Ids::OperationId operationId() const
+        {
+            return operationId_;
         }
 
         Nui::ElementRenderer elapsedTime() const
@@ -236,26 +265,29 @@ namespace
                 "Elapsed: 0s");
         }
 
+        virtual bool warrantsCancelConfirm() const = 0;
+
       protected:
         std::chrono::steady_clock::time_point startTime_{std::chrono::steady_clock::now()};
         Nui::Observed<SharedData::OperationState> state_{SharedData::OperationState::NotStarted};
         SharedData::OperationType type_;
         Ids::OperationId operationId_;
+        std::function<void(OperationCard const& operation)> doRemoveSelf_;
     };
 
     class DisplayedDownloadOperation : public OperationCard<DisplayedDownloadOperation>
     {
       public:
         DisplayedDownloadOperation(
-            long long min,
             long long max,
             Ids::OperationId operationId,
             std::filesystem::path localPath,
-            std::filesystem::path remotePath)
-            : OperationCard{SharedData::OperationType::Download, std::move(operationId)}
+            std::filesystem::path remotePath,
+            std::function<void(OperationCard const& operation)> doRemoveSelf)
+            : OperationCard{SharedData::OperationType::Download, std::move(operationId), std::move(doRemoveSelf)}
             , progressBar_{{
                   .height = std::string{progressHeight},
-                  .min = min,
+                  .min = 0,
                   .max = max,
                   .showMinMax = true,
                   .byteMode = true,
@@ -297,6 +329,11 @@ namespace
         std::string title() const
         {
             return fmt::format("Download '{}' to '{}'", remotePath_.generic_string(), localPath_.generic_string());
+        }
+
+        bool warrantsCancelConfirm() const override
+        {
+            return !isCompletedState() && progressBar_.max() > 10'000'000; // 10 MB
         }
 
       private:
@@ -350,6 +387,7 @@ struct OperationQueue::Implementation
     FileEngine* fileEngine;
 
     std::vector<Nui::RpcClient::AutoUnregister> onUpdate;
+    Nui::Observed<bool> paused{true};
     ObservedRandomAccessMap<Ids::OperationId, DisplayedOperation, std::map> operations;
 
     Implementation(
@@ -379,6 +417,53 @@ OperationQueue::OperationQueue(
 {}
 ROAR_PIMPL_SPECIAL_FUNCTIONS_IMPL(OperationQueue);
 
+template <typename OperationCard>
+void OperationQueue::cancelOperation(OperationCard const& operation)
+{
+    if (operation.isCompletedState())
+    {
+        impl_->operations.erase(operation.operationId());
+        Nui::globalEventContext.executeActiveEventsImmediately();
+    }
+    else
+    {
+        auto doCancel = [this, operationId = operation.operationId()]() {
+            Nui::RpcClient::callWithBackChannel(
+                fmt::format("OperationQueue::{}::cancel", impl_->sessionId.value()),
+                [this, operationId](SharedData::ErrorOrSuccess<> const& result) {
+                    if (result)
+                    {
+                        auto* operation = impl_->operations.at(operationId);
+                        if (operation)
+                            operation->state(SharedData::OperationState::Canceled);
+                        Nui::globalEventContext.executeActiveEventsImmediately();
+                    }
+                    else
+                    {
+                        Log::error("Failed to cancel operation id {}: {}", operationId.value(), result.error.value());
+                    }
+                },
+                operationId);
+        };
+
+        if (operation.warrantsCancelConfirm())
+        {
+            impl_->confirmDialog->open(
+                {.headerText = "Cancel Operation",
+                 .text = fmt::format("Are you sure you want to cancel the operation?"),
+                 .buttons = ConfirmDialog::Button::Yes | ConfirmDialog::Button::No,
+                 .onClose = [doCancel](ConfirmDialog::Button buttonPressed) {
+                     if (buttonPressed == ConfirmDialog::Button::Yes)
+                         doCancel();
+                 }});
+        }
+        else
+        {
+            doCancel();
+        }
+    }
+}
+
 void OperationQueue::activate(FileEngine* fileEngine, Ids::SessionId sessionId)
 {
     impl_->fileEngine = fileEngine;
@@ -401,14 +486,16 @@ void OperationQueue::activate(FileEngine* fileEngine, Ids::SessionId sessionId)
                     DisplayedOperation{
                         .operationId = added.operationId,
                         .type = added.type,
-                        .details = [&added]() -> decltype(DisplayedOperation::details) {
+                        .details = [&added, this]() -> decltype(DisplayedOperation::details) {
                             if (added.type == SharedData::OperationType::Download)
                                 return DisplayedDownloadOperation{
-                                    0,
                                     added.totalBytes ? static_cast<long long>(*added.totalBytes) : 0,
                                     added.operationId,
                                     *added.localPath,
-                                    *added.remotePath};
+                                    *added.remotePath,
+                                    [this](OperationCard<DisplayedDownloadOperation> const& operation) {
+                                        cancelOperation(operation);
+                                    }};
                             return std::monostate{};
                         }()});
                 Nui::globalEventContext.executeActiveEventsImmediately();
@@ -450,8 +537,18 @@ void OperationQueue::activate(FileEngine* fileEngine, Ids::SessionId sessionId)
 
     impl_->onUpdate.push_back(
         Nui::RpcClient::autoRegisterFunction(
-            fmt::format("OperationQueue::{}::onOperationCompleted", impl_->sessionId.value()),
-            [this](SharedData::OperationCompleted const& completed) {
+            fmt::format("OperationQueue::{}::onOperationCompleted", impl_->sessionId.value()), [this](Nui::val val) {
+                SharedData::OperationCompleted completed{};
+                try
+                {
+                    Nui::convertFromVal(val, completed);
+                }
+                catch (std::exception const& e)
+                {
+                    Log::error("Failed to convert OperationCompleted: {}", e.what());
+                    return;
+                }
+
                 Log::info("Received operation completed for operation id: {}", completed.operationId.value());
                 auto* operation = impl_->operations.at(completed.operationId);
                 if (!operation)
@@ -477,9 +574,29 @@ void OperationQueue::activate(FileEngine* fileEngine, Ids::SessionId sessionId)
                         operation->state(SharedData::OperationState::Failed);
                         break;
                     }
+                    default:
+                        Log::warn(
+                            "Received operation completed for operation id: {} with unknown reason: {}",
+                            completed.operationId.value(),
+                            static_cast<int>(completed.reason));
                 }
                 Nui::globalEventContext.executeActiveEventsImmediately();
             }));
+
+    Nui::RpcClient::callWithBackChannel(
+        fmt::format("OperationQueue::{}::isPaused", impl_->sessionId.value()),
+        [this](SharedData::ErrorOrSuccess<SharedData::IsPaused> const& result) {
+            if (result)
+            {
+                Log::info("Initial pause state of operation queue is: {}", result.paused ? "paused" : "running");
+                impl_->paused = result.paused;
+                Nui::globalEventContext.executeActiveEventsImmediately();
+            }
+            else
+            {
+                Log::error("Failed to get initial paused state: {}", result.error.value());
+            }
+        });
 }
 
 Nui::ElementRenderer OperationQueue::operator()()
@@ -501,7 +618,7 @@ Nui::ElementRenderer OperationQueue::operator()()
                     return details();
                 }
             },
-            element.details));
+            element->details));
     };
 
     auto makeSummaryText = [this]() -> std::string {
@@ -518,35 +635,43 @@ Nui::ElementRenderer OperationQueue::operator()()
         }(
             div{
                 class_ = "opq-play-toggle",
-                // TODO: remove id
-                id = "playToggle",
                 role = "button",
                 tabIndex = "0",
-                "aria-pressed"_prop = "false"
+                onClick = [this](){
+                    Nui::RpcClient::callWithBackChannel(fmt::format("OperationQueue::{}::pauseUnpause", impl_->sessionId.value()), [this, requestToPauseUnpauseWas = !impl_->paused.value()](SharedData::ErrorOrSuccess<> const& result){
+                        if (result) {
+                            Log::info("{} operation queue successfully", requestToPauseUnpauseWas ? "Paused" : "Unpaused");
+                            impl_->paused = !impl_->paused.value();
+                            Nui::globalEventContext.executeActiveEventsImmediately();
+                        }
+                        else
+                            Log::error("Failed to {} operation queue: {}", requestToPauseUnpauseWas ? "pause" : "unpause", result.error.value());
+                    }, !impl_->paused.value());
+                }
             }(
                 div{
-                    class_ = "icon",
-                    // TODO: remove id
-                    id = "playIcon",
-                    "aria-hidden"_prop = "true"
+                    class_ = "opq-icon",
                 }(
-                    // svg replaced by js
+                    observe(impl_->paused).generate([this](){
+                        if (impl_->paused.value())
+                            return Svgs::play();
+                        else
+                            return Svgs::pause();
+                    })
                 ),
                 div{
-                    class_ = "label",
-                    id = "playLabel"
-                }("Processing")
+                    class_ = "opq-label",
+                }(
+                    observe(impl_->paused).generate([this]() -> std::string {
+                        if (!impl_->paused.value())
+                            return "Pause";
+                        else
+                            return "Continue";
+                    })
+                )
             ),
             div{
-                class_ = "opq-pill",
-                id = "queueState",
-            }(
-                span{}("Queue: "),
-                strong{id = "queueCount"}("0")
-            ),
-            div{
-                class_ = "opq-summary",
-                id = "summaryText"
+                class_ = "opq-summary"
             }(
                 observe(impl_->operations.observedValues()).generate(makeSummaryText)
             )
@@ -554,8 +679,7 @@ Nui::ElementRenderer OperationQueue::operator()()
         // Main content
         div{}(
             div{
-                class_ = "opq-list",
-                id = "operationList"
+                class_ = "opq-list"
             }(
                 impl_->operations.observedValues().map(operationsMapper)
             )
@@ -580,8 +704,8 @@ void OperationQueue::enqueueDownload(
     impl_->fileEngine->addDownload(remotePath, localPath, std::move(onComplete));
 }
 void OperationQueue::enqueueUpload(
-    std::filesystem::path const& localPath,
-    std::filesystem::path const& remotePath,
+    std::filesystem::path const&,
+    std::filesystem::path const&,
     std::function<void(std::optional<Ids::OperationId> const&)> onComplete)
 {
     if (!impl_->fileEngine)
@@ -593,8 +717,8 @@ void OperationQueue::enqueueUpload(
     // TODO: Implement
 }
 void OperationQueue::enqueueRename(
-    std::filesystem::path const& oldPath,
-    std::filesystem::path const& newPath,
+    std::filesystem::path const&,
+    std::filesystem::path const&,
     std::function<void(std::optional<Ids::OperationId> const&)> onComplete)
 {
     if (!impl_->fileEngine)
@@ -606,7 +730,7 @@ void OperationQueue::enqueueRename(
     // TODO: Implement
 }
 void OperationQueue::enqueueDelete(
-    std::filesystem::path const& path,
+    std::filesystem::path const&,
     std::function<void(std::optional<Ids::OperationId> const&)> onComplete)
 {
     if (!impl_->fileEngine)

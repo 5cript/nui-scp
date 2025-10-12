@@ -40,6 +40,10 @@ class OperationQueue
     Nui::ElementRenderer operator()();
 
   private:
+    template <typename OperationCard>
+    void cancelOperation(OperationCard const& operation);
+
+  private:
     struct Implementation;
     std::unique_ptr<Implementation> impl_;
 };

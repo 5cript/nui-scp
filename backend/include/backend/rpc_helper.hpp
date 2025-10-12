@@ -148,7 +148,9 @@ namespace RpcHelper
                     {
                         "error",
                         fmt::format(
-                            "Missing parameter to function '{}': {}", functionName_, keyChain | std::views::join),
+                            "Missing parameter to function '{}': {}",
+                            functionName_,
+                            keyChain | std::views::join | std::ranges::to<std::string>()),
                     },
                 });
                 return false;
@@ -297,11 +299,9 @@ namespace RpcHelper
             timer_.expires_after(delay);
             timer_.async_wait([func = std::forward<decltype(func)>(func)](auto const& ec) {
                 if (ec)
-                {
                     Log::info("Timer canceled in within_strand_do_delayed: {}", ec.message());
-                    return;
-                }
 
+                // Run func anyway, if its because of a shutdown, it will stop early.
                 func();
             });
         }

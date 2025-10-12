@@ -12,6 +12,7 @@
 #include <filesystem>
 #include <memory>
 #include <utility>
+#include <atomic>
 
 class OperationQueue
     : public RpcHelper::StrandRpc
@@ -49,6 +50,11 @@ class OperationQueue
         std::filesystem::path const& localPath,
         std::filesystem::path const& remotePath);
 
+    void registerRpc();
+
+    bool paused() const;
+    void paused(bool pause);
+
   private:
     void completeOperation(OperationCompleted&& operationCompleted);
 
@@ -56,5 +62,6 @@ class OperationQueue
     Persistence::SftpOptions sftpOpts_{};
     Ids::SessionId sessionId_{};
     std::deque<std::pair<Ids::OperationId, std::unique_ptr<Operation>>> operations_{};
+    std::atomic_bool paused_{true};
     int parallelism_{1};
 };

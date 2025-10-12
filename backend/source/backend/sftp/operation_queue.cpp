@@ -2,6 +2,8 @@
 #include <shared_data/file_operations/download_progress.hpp>
 #include <shared_data/file_operations/operation_added.hpp>
 #include <shared_data/file_operations/operation_completed.hpp>
+#include <shared_data/error_or_success.hpp>
+#include <shared_data/is_paused.hpp>
 
 #include <log/log.hpp>
 #include <utility/overloaded.hpp>
@@ -85,8 +87,11 @@ void OperationQueue::cancel(Ids::OperationId id)
         if (!self)
             return;
 
-        std::erase_if(self->operations_, [id](const auto& op) {
-            return op.first == id;
+        std::erase_if(self->operations_, [id](auto& op) {
+            bool isMatch = op.first == id;
+            if (isMatch)
+                op.second->cancel(true);
+            return isMatch;
         });
     });
 }
@@ -101,6 +106,12 @@ void OperationQueue::completeOperation(SharedData::OperationCompleted&& operatio
         if (operationCompleted.error)
             Log::error("Operation failed: {}", operationCompleted.error->toString());
 
+        Log::info(
+            "Operation completed: id={}, reason={}, localPath='{}', remotePath='{}'",
+            operationCompleted.operationId.value(),
+            static_cast<int>(operationCompleted.reason),
+            operationCompleted.localPath ? operationCompleted.localPath->generic_string() : "<none>",
+            operationCompleted.remotePath ? operationCompleted.remotePath->generic_string() : "<none>");
         self->hub_->callRemote(
             fmt::format("OperationQueue::{}::onOperationCompleted", self->sessionId_.value()),
             SharedData::OperationCompleted{
@@ -117,6 +128,9 @@ void OperationQueue::completeOperation(SharedData::OperationCompleted&& operatio
 bool OperationQueue::work()
 {
     // Assumed in strand
+
+    if (paused_)
+        return false;
 
     const auto updateCount = std::min(operations_.size(), static_cast<std::size_t>(parallelism_));
 
@@ -153,6 +167,21 @@ bool OperationQueue::work()
         }
     }
     return moreWork;
+}
+
+bool OperationQueue::paused() const
+{
+    return paused_;
+}
+void OperationQueue::paused(bool pause)
+{
+    within_strand_do([weak = weak_from_this(), pause]() {
+        auto self = weak.lock();
+        if (!self)
+            return;
+
+        self->paused_ = pause;
+    });
 }
 
 std::expected<void, Operation::Error> OperationQueue::addDownloadOperation(
@@ -204,7 +233,6 @@ std::expected<void, Operation::Error> OperationQueue::addDownloadOperation(
             DownloadOperation::DownloadOperationOptions{
                 .progressCallback =
                     [weak = weak_from_this(), operationId](auto min, auto max, auto current) {
-                        // TODO:
                         auto self = weak.lock();
                         if (!self)
                             return;
@@ -304,4 +332,29 @@ std::expected<void, Operation::Error> OperationQueue::addDownloadOperation(
         Log::error("Remote path is neither a file nor a directory: {}.", result->type);
         return std::unexpected(Operation::Error{.type = Operation::ErrorType::OperationNotPossibleOnFileType});
     }
+}
+
+void OperationQueue::registerRpc()
+{
+    on(fmt::format("OperationQueue::{}::isPaused", sessionId_.value()))
+        .perform([weak = weak_from_this()](RpcHelper::RpcOnce&& reply) {
+            auto self = weak.lock();
+            if (!self)
+                return reply(SharedData::error("OperationQueue no longer exists"));
+
+            return reply(
+                SharedData::ErrorOrSuccess{SharedData::IsPaused{
+                    .paused = self->paused(),
+                }});
+        });
+
+    on(fmt::format("OperationQueue::{}::cancel", sessionId_.value()))
+        .perform([weak = weak_from_this()](RpcHelper::RpcOnce&& reply, Ids::OperationId operationId) {
+            auto self = weak.lock();
+            if (!self)
+                return reply(SharedData::error("OperationQueue no longer exists"));
+
+            self->cancel(std::move(operationId));
+            return reply(SharedData::success());
+        });
 }

@@ -1,6 +1,7 @@
 #include <backend/session.hpp>
 
 #include <roar/utility/base64.hpp>
+#include <shared_data/error_or_success.hpp>
 
 using namespace std::chrono_literals;
 
@@ -42,6 +43,8 @@ void Session::start()
         self->registerRpcSftpCreateDirectory();
         self->registerRpcSftpCreateFile();
         self->registerRpcSftpAddDownloadOperation();
+        self->registerOperationQueuePauseUnpause();
+        self->operationQueue_->registerRpc();
 
         Log::info("Session '{}' connected", self->id_.value());
 
@@ -66,25 +69,46 @@ void Session::doOperationQueueWork()
         if (!self->running_)
             return;
 
-        if (self->operationQueue_ && self->operationQueue_->work())
+        if (self->operationQueue_ && !self->operationQueue_->paused() && self->operationQueue_->work())
         {
-            self->doOperationQueueWork();
-            self->operationThrottle_ = 5ms;
+            ++self->unthrottledLimitCounter_;
+            if (self->unthrottledLimitCounter_ < 10)
+            {
+                self->doOperationQueueWork();
+                self->operationThrottle_ = queueStartThrottle;
+                return;
+            }
+            self->unthrottledLimitCounter_ = 0;
         }
-        else
-        {
-            if (self->operationThrottle_ < 1s)
-                self->operationThrottle_ *= 2;
-            else
-                self->operationThrottle_ = 1s;
 
-            self->within_strand_do_delayed(
-                [weak = self->weak_from_this()]() {
-                    if (auto self = weak.lock(); self)
-                        self->doOperationQueueWork();
-                },
-                self->operationThrottle_);
-        }
+        if (self->operationThrottle_ < queueMaxThrottle)
+            self->operationThrottle_ *= 2;
+        else
+            self->operationThrottle_ = queueMaxThrottle;
+
+        self->queueThrottleTimerIsRunning_ = true;
+        self->within_strand_do_delayed(
+            [weak = self->weak_from_this()]() {
+                if (auto self = weak.lock(); self)
+                {
+                    self->queueThrottleTimerIsRunning_ = false;
+                    self->doOperationQueueWork();
+                }
+            },
+            self->operationThrottle_);
+    });
+}
+
+void Session::resetQueueThrottle()
+{
+    within_strand_do([weak = weak_from_this()]() {
+        auto self = weak.lock();
+        if (!self)
+            return;
+
+        self->operationThrottle_ = queueStartThrottle;
+        if (self->queueThrottleTimerIsRunning_)
+            self->timer_.cancel();
     });
 }
 
@@ -450,8 +474,32 @@ void Session::registerRpcSftpAddDownloadOperation()
                         remotePath,
                         localPath);
 
+                    self->resetQueueThrottle();
                     reply({{"success", true}});
                 },
                 std::move(reply));
+        });
+}
+
+void Session::registerOperationQueuePauseUnpause()
+{
+    on(fmt::format("OperationQueue::{}::pauseUnpause", id_.value()))
+        .perform([weak = weak_from_this()](RpcHelper::RpcOnce&& reply, bool pause) {
+            auto self = weak.lock();
+            if (!self)
+            {
+                Log::error("Session no longer exists, cannot pause/unpause operation queue");
+                return reply(SharedData::error("Session no longer exists"));
+            }
+
+            if (!self->operationQueue_)
+            {
+                Log::error("No operation queue available to pause/unpause");
+                return reply(SharedData::error("No operation queue available"));
+            }
+
+            self->operationQueue_->paused(pause);
+            self->resetQueueThrottle();
+            return reply(SharedData::success());
         });
 }

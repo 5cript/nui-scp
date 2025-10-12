@@ -24,6 +24,8 @@ class Session
 {
   public:
     constexpr static auto futureTimeout = std::chrono::seconds{10};
+    constexpr static auto queueStartThrottle = std::chrono::milliseconds{5};
+    constexpr static auto queueMaxThrottle = std::chrono::seconds{3};
 
     Session(
         Ids::SessionId id,
@@ -118,8 +120,8 @@ class Session
      * }
      */
     void registerRpcSftpCreateFile();
-
     void registerRpcSftpAddDownloadOperation();
+    void registerOperationQueuePauseUnpause();
 
     void removeChannel(Ids::ChannelId channelId);
 
@@ -184,9 +186,15 @@ class Session
     void doOperationQueueWork();
 
   private:
+    void resetQueueThrottle();
+
+  private:
     Ids::SessionId id_;
+    /// Has nothing to do with pause/unpause - this is used for shutdown of the session.
     std::atomic_bool running_;
     std::chrono::milliseconds operationThrottle_{5};
+    bool queueThrottleTimerIsRunning_{false};
+    int unthrottledLimitCounter_{0};
     std::unique_ptr<SecureShell::Session> session_{};
     std::unordered_map<Ids::ChannelId, std::weak_ptr<SecureShell::Channel>, Ids::IdHash> channels_{};
     std::unordered_map<Ids::ChannelId, std::weak_ptr<SecureShell::SftpSession>, Ids::IdHash> sftpChannels_{};

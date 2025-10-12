@@ -26,6 +26,13 @@ class ProgressBar
      */
     void setProgress(long long current);
 
+    /**
+     * @brief Get the maximum value of the progress bar.
+     *
+     * @return long long
+     */
+    long long max() const;
+
   private:
     void updateText();
 

@@ -148,7 +148,7 @@ std::expected<bool, DownloadOperation::Error> DownloadOperation::readOnce()
     bool doContinue = false;
     const auto futureStatus =
         stream
-            ->read([this, &doContinue](std::string_view data) {
+            ->readSome([this, &doContinue](std::string_view data) {
                 // No locking, because concurrent access is not possible, the only
                 // other executing thread is blocked right now.
 

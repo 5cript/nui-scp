@@ -32,18 +32,4 @@ namespace SharedData
         UnknownWorkState,
         InvalidOperationState,
         OperationNotPossibleOnFileType);
-
-    void to_json(nlohmann::json& j, OperationErrorType const& operationErrorType);
-    void from_json(nlohmann::json const& j, OperationErrorType& operationErrorType);
-
-#ifdef __EMSCRIPTEN__
-    inline void to_val(Nui::val& v, OperationErrorType const& operationErrorType)
-    {
-        v = Nui::val::u8string(Utility::enumToString<OperationErrorType>(operationErrorType).c_str());
-    }
-    inline void from_val(Nui::val const& v, OperationErrorType& operationErrorType)
-    {
-        operationErrorType = Utility::enumFromString<OperationErrorType>(v.template as<std::string>());
-    }
-#endif
 }
