@@ -30,7 +30,7 @@ DownloadOperation::DownloadOperation(
 
 DownloadOperation::~DownloadOperation()
 {
-    std::ignore = cancel(true);
+    std::ignore = cancel(false);
 
     if (auto stream = fileStream_.lock(); stream)
     {
@@ -308,13 +308,14 @@ std::expected<void, Operation::Error> DownloadOperation::prepare()
 
 std::expected<void, DownloadOperation::Error> DownloadOperation::cancel(bool adoptCancelState)
 {
-    Log::info(
-        "DownloadOperation: Download of '{}' to '{}' canceled.",
-        remotePath_.generic_string(),
-        localPath_.generic_string());
-
     if (adoptCancelState)
+    {
+        Log::info(
+            "DownloadOperation: Download of '{}' to '{}' canceled.",
+            remotePath_.generic_string(),
+            localPath_.generic_string());
         state_ = OperationState::Canceled;
+    }
 
     cleanup();
     return {};

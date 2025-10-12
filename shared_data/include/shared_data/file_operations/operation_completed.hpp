@@ -45,39 +45,57 @@ namespace SharedData
     inline void to_val(Nui::val& v, OperationCompleted const& operationCompleted)
     {
         v = Nui::val::object();
-        v.set("reason", operationCompleted.reason);
-        v.set("operationId", operationCompleted.operationId);
+
+        v.set("reason", Nui::convertToVal(operationCompleted.reason));
+        v.set("operationId", Nui::convertToVal(operationCompleted.operationId));
+
         v.set(
             "completionTime",
             static_cast<int64_t>(std::chrono::duration_cast<std::chrono::milliseconds>(
                                      operationCompleted.completionTime.time_since_epoch())
                                      .count()));
+
         if (operationCompleted.localPath.has_value())
             v.set("localPath", Nui::val::u8string(operationCompleted.localPath->generic_string().c_str()));
         else
             v.set("localPath", Nui::val::null());
+
         if (operationCompleted.remotePath.has_value())
             v.set("remotePath", Nui::val::u8string(operationCompleted.remotePath->generic_string().c_str()));
         else
             v.set("remotePath", Nui::val::null());
+
         if (operationCompleted.error.has_value())
-            v.set("error", Nui::val(operationCompleted.error.value()));
+        {
+            Nui::val error;
+            to_val(error, *operationCompleted.error);
+            v.set("error", error);
+        }
         else
             v.set("error", Nui::val::null());
     }
     inline void from_val(Nui::val const& v, OperationCompleted& operationCompleted)
     {
-        operationCompleted.reason = v["reason"].template as<OperationCompletionReason>();
-        operationCompleted.operationId = v["operationId"].template as<Ids::OperationId>();
+        if (!v.hasOwnProperty("reason") || !v.hasOwnProperty("operationId") || !v.hasOwnProperty("completionTime"))
+        {
+            throw std::runtime_error("Invalid OperationCompleted object");
+        }
+
+        Nui::val reason;
+        Nui::convertFromVal(v["reason"], operationCompleted.reason);
+        Nui::convertFromVal(v["operationId"], operationCompleted.operationId);
         operationCompleted.completionTime = std::chrono::system_clock::time_point{
-            std::chrono::milliseconds{v["completionTime"].template as<int64_t>()}};
+            std::chrono::milliseconds{v["completionTime"].template as<std::int64_t>()}};
 
         if (v.hasOwnProperty("localPath") && !v["localPath"].isNull())
             operationCompleted.localPath = std::filesystem::path{v["localPath"].template as<std::string>()};
         if (v.hasOwnProperty("remotePath") && !v["remotePath"].isNull())
             operationCompleted.remotePath = std::filesystem::path{v["remotePath"].template as<std::string>()};
         if (v.hasOwnProperty("error") && !v["error"].isNull())
-            operationCompleted.error = v["error"].template as<OperationError>();
+        {
+            operationCompleted.error = OperationError{};
+            Nui::convertFromVal(v["error"], operationCompleted.error.value());
+        }
     }
 #endif
 }

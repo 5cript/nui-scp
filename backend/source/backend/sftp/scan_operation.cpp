@@ -111,9 +111,11 @@ std::expected<ScanOperation::WorkStatus, ScanOperation::Error> ScanOperation::wo
 
 std::expected<void, ScanOperation::Error> ScanOperation::cancel(bool adoptCancelState)
 {
-    Log::info("ScanOperation: Scan of '{}' canceled.", remotePath_.generic_string());
     if (adoptCancelState)
+    {
+        Log::info("ScanOperation: Scan of '{}' canceled.", remotePath_.generic_string());
         enterState(OperationState::Canceled);
+    }
     return {};
 }
 

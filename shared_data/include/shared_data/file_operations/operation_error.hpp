@@ -34,6 +34,12 @@ namespace SecureShell
     }
     inline void from_val(Nui::val const& v, SftpError& sftpError)
     {
+        if (!v.hasOwnProperty("message") || !v.hasOwnProperty("sshError") || !v.hasOwnProperty("sftpError") ||
+            !v.hasOwnProperty("wrapperError"))
+        {
+            throw std::runtime_error("Invalid SftpError object");
+        }
+
         sftpError.message = v["message"].template as<std::string>();
         sftpError.sshError = v["sshError"].template as<int>();
         sftpError.sftpError = v["sftpError"].template as<int>();

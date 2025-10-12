@@ -25,6 +25,8 @@
 
 namespace
 {
+    constexpr std::string_view progressHeight = "15px";
+
     namespace Svgs
     {
         Nui::ElementRenderer play()
@@ -138,8 +140,9 @@ namespace
     class OperationCard
     {
       public:
-        explicit OperationCard(SharedData::OperationType type)
+        explicit OperationCard(SharedData::OperationType type, Ids::OperationId operationId)
             : type_{type}
+            , operationId_{std::move(operationId)}
         {}
 
         std::string formattedState() const
@@ -166,13 +169,23 @@ namespace
 
             // clang-format off
             return section{
-                class_ = "opq-card"
+                class_ = observe(state_).generate([this](){
+                    const auto state = state_.value();
+                    if (state == SharedData::OperationState::Completed)
+                        return "opq-card opq-completed opq-folded";
+                    else if (state == SharedData::OperationState::Failed)
+                        return "opq-card opq-failed opq-folded";
+                    else if (state == SharedData::OperationState::Canceled)
+                        return "opq-card opq-canceled opq-folded";
+                    else
+                        return "opq-card";
+                }),
             }(
                 div {
                     class_ = "opq-header",
                 }(
                     div {
-                        class_ = "type"
+                        class_ = "opq-type"
                     }(
                         [this]() -> Nui::ElementRenderer {
                             if (type_ == SharedData::OperationType::Download)
@@ -190,7 +203,7 @@ namespace
                     div {
                         class_ = "opq-title"
                     }(
-                        div{}(title_),
+                        div{}(static_cast<Derived const*>(this)->title()),
                         div {
                             class_ = "opq-muted"
                         // TODO: Build this string correctly
@@ -228,21 +241,27 @@ namespace
         Nui::Observed<SharedData::OperationState> state_{SharedData::OperationState::NotStarted};
         SharedData::OperationType type_;
         Ids::OperationId operationId_;
-        Nui::Observed<std::string> title_{"Not started"};
     };
 
     class DisplayedDownloadOperation : public OperationCard<DisplayedDownloadOperation>
     {
       public:
-        DisplayedDownloadOperation(long long min, long long max)
-            : OperationCard{SharedData::OperationType::Download}
+        DisplayedDownloadOperation(
+            long long min,
+            long long max,
+            Ids::OperationId operationId,
+            std::filesystem::path localPath,
+            std::filesystem::path remotePath)
+            : OperationCard{SharedData::OperationType::Download, std::move(operationId)}
             , progressBar_{{
-                  .height = "10px",
+                  .height = std::string{progressHeight},
                   .min = min,
                   .max = max,
                   .showMinMax = true,
                   .byteMode = true,
               }}
+            , localPath_{std::move(localPath)}
+            , remotePath_{std::move(remotePath)}
         {}
 
         Nui::ElementRenderer body() const
@@ -254,11 +273,17 @@ namespace
 
             // clang-format off
             return div{
-                class_ = "opq-body",
+                class_ = observe(state_).generate([this](){
+                    const auto state = state_.value();
+                    if (state == SharedData::OperationState::Completed || state == SharedData::OperationState::Failed || state == SharedData::OperationState::Canceled)
+                        return "opq-body opq-collapsed";
+                    else
+                        return "opq-body";
+                }),
             }(
                 div{
                     class_ = "opq-muted"
-                }("Dynamic content area — this would show progress, nested items, details, etc."),
+                }("Dynamic content area - this would show progress, nested items, details, etc."),
                 progressBar_()
             );
             // clang-format on
@@ -269,8 +294,15 @@ namespace
             progressBar_.setProgress(current);
         }
 
+        std::string title() const
+        {
+            return fmt::format("Download '{}' to '{}'", remotePath_.generic_string(), localPath_.generic_string());
+        }
+
       private:
         ProgressBar progressBar_;
+        std::filesystem::path localPath_;
+        std::filesystem::path remotePath_;
     };
 
     struct DisplayedOperation
@@ -282,6 +314,28 @@ namespace
         Ids::OperationId key() const
         {
             return operationId;
+        }
+
+        SharedData::OperationState state() const
+        {
+            return Utility::visitOverloaded(
+                details,
+                [](auto const& op) {
+                    return op.state();
+                },
+                [](std::monostate) {
+                    return SharedData::OperationState::NotStarted;
+                });
+        }
+
+        void state(SharedData::OperationState newState)
+        {
+            return Utility::visitOverloaded(
+                details,
+                [newState](auto& op) {
+                    op.state(newState);
+                },
+                [](std::monostate) {});
         }
     };
 }
@@ -334,6 +388,14 @@ void OperationQueue::activate(FileEngine* fileEngine, Ids::SessionId sessionId)
         Nui::RpcClient::autoRegisterFunction(
             fmt::format("OperationQueue::{}::onOperationAdded", impl_->sessionId.value()),
             [this](SharedData::OperationAdded const& added) {
+                if (!added.localPath || !added.remotePath)
+                {
+                    Log::error(
+                        "Received OperationAdded for operation id: {} without localPath or remotePath",
+                        added.operationId.value());
+                    return;
+                }
+
                 impl_->operations.insert(
                     added.operationId,
                     DisplayedOperation{
@@ -342,7 +404,11 @@ void OperationQueue::activate(FileEngine* fileEngine, Ids::SessionId sessionId)
                         .details = [&added]() -> decltype(DisplayedOperation::details) {
                             if (added.type == SharedData::OperationType::Download)
                                 return DisplayedDownloadOperation{
-                                    0, added.totalBytes ? static_cast<long long>(*added.totalBytes) : 0};
+                                    0,
+                                    added.totalBytes ? static_cast<long long>(*added.totalBytes) : 0,
+                                    added.operationId,
+                                    *added.localPath,
+                                    *added.remotePath};
                             return std::monostate{};
                         }()});
                 Nui::globalEventContext.executeActiveEventsImmediately();
@@ -352,7 +418,7 @@ void OperationQueue::activate(FileEngine* fileEngine, Ids::SessionId sessionId)
         Nui::RpcClient::autoRegisterFunction(
             fmt::format("OperationQueue::{}::onDownloadProgress", impl_->sessionId.value()),
             [this](SharedData::DownloadProgress const& progress) {
-                Log::info(
+                Log::debug(
                     "Received download progress for operation id: {} - {}/{}",
                     progress.operationId.value(),
                     progress.current - progress.min,
@@ -398,41 +464,21 @@ void OperationQueue::activate(FileEngine* fileEngine, Ids::SessionId sessionId)
                 {
                     case (SharedData::OperationCompletionReason::Completed):
                     {
-                        Utility::visitOverloaded(
-                            operation->details,
-                            [](auto& op) {
-                                op.state(SharedData::OperationState::Completed);
-                            },
-                            [](std::monostate) {
-                                // Nothing to do
-                            });
+                        operation->state(SharedData::OperationState::Completed);
                         break;
                     }
                     case (SharedData::OperationCompletionReason::Canceled):
                     {
-                        Utility::visitOverloaded(
-                            operation->details,
-                            [](auto& op) {
-                                op.state(SharedData::OperationState::Canceled);
-                            },
-                            [](std::monostate) {
-                                // Nothing to do
-                            });
+                        operation->state(SharedData::OperationState::Canceled);
                         break;
                     }
                     case (SharedData::OperationCompletionReason::Failed):
                     {
-                        Utility::visitOverloaded(
-                            operation->details,
-                            [](auto& op) {
-                                op.state(SharedData::OperationState::Failed);
-                            },
-                            [](std::monostate) {
-                                // Nothing to do
-                            });
+                        operation->state(SharedData::OperationState::Failed);
                         break;
                     }
                 }
+                Nui::globalEventContext.executeActiveEventsImmediately();
             }));
 }
 
@@ -458,10 +504,14 @@ Nui::ElementRenderer OperationQueue::operator()()
             element.details));
     };
 
+    auto makeSummaryText = [this]() -> std::string {
+        return fmt::format("{} total operations", impl_->operations.observedValues().value().size());
+    };
+
     // clang-format off
     return div{
         class_ = "operation-queue",
-        style = "width: 100%; height: auto; display: block",
+        style = "width: 100%; height: auto; display: block; overflow-y: scroll",
     }(
         header{
             class_ = "opq-controls"
@@ -495,9 +545,11 @@ Nui::ElementRenderer OperationQueue::operator()()
                 strong{id = "queueCount"}("0")
             ),
             div{
-                class_ = "summary",
+                class_ = "opq-summary",
                 id = "summaryText"
-            }("No operations yet")
+            }(
+                observe(impl_->operations.observedValues()).generate(makeSummaryText)
+            )
         ),
         // Main content
         div{}(

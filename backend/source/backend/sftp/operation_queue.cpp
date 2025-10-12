@@ -218,7 +218,7 @@ std::expected<void, Operation::Error> OperationQueue::addDownloadOperation(
                                 .current = current,
                             });
 
-                        Log::info(
+                        Log::debug(
                             "Downloaded {} / {} bytes ({}%)",
                             current - min,
                             max - min,
@@ -242,7 +242,11 @@ std::expected<void, Operation::Error> OperationQueue::addDownloadOperation(
         hub_->callRemote(
             fmt::format("OperationQueue::{}::onOperationAdded", sessionId_.value()),
             SharedData::OperationAdded{
-                .operationId = operationId, .type = SharedData::OperationType::Download, .totalBytes = fileSize});
+                .operationId = operationId,
+                .type = SharedData::OperationType::Download,
+                .totalBytes = fileSize,
+                .localPath = localPath,
+                .remotePath = remotePath});
 
         return {};
     }
