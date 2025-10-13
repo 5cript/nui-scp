@@ -102,4 +102,5 @@ class DownloadOperation : public Operation
     std::ofstream localFile_;
     std::uint64_t fileSize_;
     std::chrono::seconds futureTimeout_;
+    std::array<char, 8192> buffer_;
 };

@@ -112,6 +112,7 @@ void OperationQueue::completeOperation(SharedData::OperationCompleted&& operatio
             static_cast<int>(operationCompleted.reason),
             operationCompleted.localPath ? operationCompleted.localPath->generic_string() : "<none>",
             operationCompleted.remotePath ? operationCompleted.remotePath->generic_string() : "<none>");
+
         self->hub_->callRemote(
             fmt::format("OperationQueue::{}::onOperationCompleted", self->sessionId_.value()),
             SharedData::OperationCompleted{

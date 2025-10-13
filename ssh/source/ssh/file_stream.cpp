@@ -134,27 +134,13 @@ namespace SecureShell
             };
         }
     }
-    std::future<std::expected<std::size_t, SftpError>> FileStream::readSome(std::byte* buffer, std::size_t bufferSize)
+    std::future<std::expected<std::size_t, SftpError>> FileStream::readSome(char* buffer, std::size_t bufferSize)
     {
         return performPromise([this, buffer, bufferSize]() -> std::expected<std::size_t, SftpError> {
             VERIFY_FILE_STREAM();
             const auto result = sftp_read(file_.get(), buffer, bufferSize);
             if (result < 0)
                 return std::unexpected(lastError());
-            return static_cast<std::size_t>(result);
-        });
-    }
-
-    std::future<std::expected<std::size_t, SftpError>>
-    FileStream::readSome(std::function<bool(std::string_view data)> onRead)
-    {
-        return performPromise([this, onRead = std::move(onRead)]() -> std::expected<std::size_t, SftpError> {
-            VERIFY_FILE_STREAM();
-            std::array<char, 4096> buffer{};
-            const auto result = sftp_read(file_.get(), buffer.data(), buffer.size());
-            if (result < 0)
-                return std::unexpected(lastError());
-            onRead({buffer.data(), static_cast<std::size_t>(result)});
             return static_cast<std::size_t>(result);
         });
     }

@@ -82,19 +82,6 @@ namespace Test
                         }
                         return readPromise_.get_future();
                     });
-            EXPECT_CALL(*mock, readSome(testing::_))
-                .WillRepeatedly(
-                    [this](std::function<bool(std::string_view data)> cb)
-                        -> std::future<std::expected<std::size_t, SecureShell::SftpError>> {
-                        onRead_ = std::move(cb);
-                        readPromise_ = {};
-                        if (!readCycleQueue_.empty())
-                        {
-                            readCycleQueue_.front()();
-                            readCycleQueue_.pop();
-                        }
-                        return readPromise_.get_future();
-                    });
         }
 
         void enqueueFakeReadCycle(std::optional<std::size_t> chunkSizeOpt = std::nullopt)

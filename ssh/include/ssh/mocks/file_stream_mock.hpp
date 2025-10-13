@@ -23,16 +23,11 @@ namespace SecureShell::Test
         MOCK_METHOD(
             (std::future<std::expected<std::size_t, SftpError>>),
             readSome,
-            (std::byte * buffer, std::size_t bufferSize),
+            (char* buffer, std::size_t bufferSize),
             (override));
         MOCK_METHOD(
             (std::future<std::expected<std::size_t, SftpError>>),
             readAll,
-            (std::function<bool(std::string_view data)> onRead),
-            (override));
-        MOCK_METHOD(
-            (std::future<std::expected<std::size_t, SftpError>>),
-            readSome,
             (std::function<bool(std::string_view data)> onRead),
             (override));
         MOCK_METHOD((std::future<std::expected<void, SftpError>>), write, (std::string_view data), (override));

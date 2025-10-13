@@ -145,40 +145,9 @@ std::expected<bool, DownloadOperation::Error> DownloadOperation::readOnce()
         return enterErrorState<bool>({.type = ErrorType::FileStreamExpired});
     }
 
-    bool doContinue = false;
-    const auto futureStatus =
-        stream
-            ->readSome([this, &doContinue](std::string_view data) {
-                // No locking, because concurrent access is not possible, the only
-                // other executing thread is blocked right now.
+    auto future = stream->readSome(buffer_.data(), buffer_.size());
 
-                if (data.size() == 0)
-                {
-                    Log::info("DownloadOperation: Remote file read complete or error.");
-                    return doContinue = false;
-                }
-
-                std::uint64_t tellp = 0;
-                std::uint64_t fileSize = 0;
-                bool good = true;
-                {
-                    localFile_.write(data.data(), data.size());
-                    tellp = static_cast<uint64_t>(localFile_.tellp());
-                    fileSize = fileSize_;
-                    good = localFile_.good();
-                    progressCallback_(0ull, fileSize, tellp);
-                }
-                if (!good)
-                {
-                    Log::error("DownloadOperation read cycle stopped: localFile_.good() == false");
-                    std::ignore = enterErrorState({
-                        .type = SharedData::OperationErrorType::TargetFileNotGood,
-                    });
-                    return doContinue = false;
-                }
-                return doContinue = good && tellp < fileSize;
-            })
-            .wait_for(futureTimeout_);
+    const auto futureStatus = future.wait_for(futureTimeout_);
 
     if (futureStatus != std::future_status::ready)
     {
@@ -186,7 +155,41 @@ std::expected<bool, DownloadOperation::Error> DownloadOperation::readOnce()
         return enterErrorState<bool>({.type = ErrorType::FutureTimeout});
     }
 
-    return doContinue;
+    const auto result = future.get();
+
+    if (!result.has_value())
+    {
+        Log::error("DownloadOperation: Failed to read from remote file: {}", result.error().message);
+        return enterErrorState<bool>({.type = ErrorType::SftpError, .sftpError = result.error()});
+    }
+
+    const auto readAmount = result.value();
+
+    if (readAmount == 0)
+    {
+        Log::info("DownloadOperation: Remote file read complete or error.");
+        return false;
+    }
+
+    std::uint64_t tellp = 0;
+    std::uint64_t fileSize = 0;
+    bool good = true;
+    {
+        localFile_.write(buffer_.data(), static_cast<std::streamsize>(readAmount));
+        tellp = static_cast<uint64_t>(localFile_.tellp());
+        fileSize = fileSize_;
+        good = localFile_.good();
+        progressCallback_(0ull, fileSize, tellp);
+    }
+    if (!good)
+    {
+        Log::error("DownloadOperation read cycle stopped: localFile_.good() == false");
+        std::ignore = enterErrorState({
+            .type = SharedData::OperationErrorType::TargetFileNotGood,
+        });
+        return false;
+    }
+    return good && tellp < fileSize;
 }
 
 std::expected<void, DownloadOperation::Error> DownloadOperation::openOrAdoptFile(SecureShell::IFileStream& stream)
