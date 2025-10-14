@@ -16,13 +16,19 @@
 #include <log/log.hpp>
 #include <nui/frontend/attributes.hpp>
 #include <nui/frontend/elements.hpp>
+#include <nui/frontend/api/timer.hpp>
 #include <nui/frontend/svg.hpp>
 #include <nui/rpc.hpp>
 #include <fmt/format.h>
 
+#include <ui5/components/switch.hpp>
+#include <ui5/components/button.hpp>
+
 #include <variant>
 #include <map>
 #include <chrono>
+
+using namespace std::chrono_literals;
 
 namespace
 {
@@ -144,10 +150,12 @@ namespace
         explicit OperationCard(
             SharedData::OperationType type,
             Ids::OperationId operationId,
-            std::function<void(OperationCard const& operation)> doRemoveSelf)
+            std::function<void(OperationCard const& operation)> doRemoveSelf,
+            std::shared_ptr<Nui::Observed<bool>> doDeletionCountdown)
             : type_{type}
             , operationId_{std::move(operationId)}
             , doRemoveSelf_{std::move(doRemoveSelf)}
+            , doDeletionCountdown_{std::move(doDeletionCountdown)}
         {}
 
         std::string formattedState() const
@@ -169,6 +177,8 @@ namespace
         {
             using namespace Nui::Elements;
             using namespace Nui::Attributes;
+            namespace svg = Nui::Elements::Svg;
+            namespace svga = Nui::Attributes::Svg;
             using Nui::Elements::div;
             using Nui::Elements::span;
 
@@ -210,13 +220,51 @@ namespace
                     }(
                         div{}(static_cast<Derived const*>(this)->title()),
                         div {
-                            class_ = "opq-muted"
+                            class_ = "opq-muted",
+                            Nui::Attributes::title = fmt::format("id: {}", operationId_.value())
                         }(
                             Nui::observe(state_),
                             [this]() -> std::string {
-                                return fmt::format("id: {} • status: {}", operationId_.value(), formattedState());
+                                return fmt::format("status: {}", formattedState());
                             }
                         )
+                    ),
+                    div{
+                        class_ = "opq-clock"
+                    }(
+                        observe(completionTime_, doDeletionCountdown_).generate([this]() -> Nui::ElementRenderer {
+                            if (isCompletedState() && *doDeletionCountdown_)
+                            {
+                                constexpr auto radius = 10;
+                                constexpr auto circumference = 2 * 3.14159 * radius;
+                                return svg::svg{
+                                    svga::viewBox = "0 0 24 24",
+                                    svga::fill = "none",
+                                    svga::width = "24",
+                                    svga::height = "24",
+                                }(
+                                    svg::circle{
+                                        svga::r = "10",
+                                        svga::cx = "12",
+                                        svga::cy = "12",
+                                        svga::fill = "none",
+                                        svga::stroke = "white",
+                                        svga::strokeWidth = "2",
+                                        svga::strokeDasharray = std::to_string(circumference),
+                                        svga::strokeLinecap = "round",
+                                        svga::transform = "rotate(-90 12 12)",
+                                    }(
+                                        svg::animate{
+                                            svga::attributeName = "stroke-dashoffset",
+                                            svga::values = fmt::format("{};0", circumference),
+                                            svga::dur = fmt::format("{}s", OperationQueue::autoRemoveTime.count()),
+                                            svga::repeatCount = "1",
+                                        }()
+                                    )
+                                );
+                            }
+                            return Nui::nil();
+                        })
                     ),
                     button {
                         class_ = "opq-btn opq-cancel-btn",
@@ -265,14 +313,32 @@ namespace
                 "Elapsed: 0s");
         }
 
+        std::chrono::steady_clock::time_point completionTime() const
+        {
+            return completionTime_.value();
+        }
+
+        void completionTime(std::chrono::steady_clock::time_point time)
+        {
+            completionTime_ = time;
+            Nui::globalEventContext.executeActiveEventsImmediately();
+        }
+
+        std::chrono::steady_clock::time_point startTime() const
+        {
+            return startTime_;
+        }
+
         virtual bool warrantsCancelConfirm() const = 0;
 
       protected:
         std::chrono::steady_clock::time_point startTime_{std::chrono::steady_clock::now()};
+        Nui::Observed<std::chrono::steady_clock::time_point> completionTime_{};
         Nui::Observed<SharedData::OperationState> state_{SharedData::OperationState::NotStarted};
         SharedData::OperationType type_;
         Ids::OperationId operationId_;
         std::function<void(OperationCard const& operation)> doRemoveSelf_;
+        std::shared_ptr<Nui::Observed<bool>> doDeletionCountdown_;
     };
 
     class DisplayedDownloadOperation : public OperationCard<DisplayedDownloadOperation>
@@ -283,8 +349,9 @@ namespace
             Ids::OperationId operationId,
             std::filesystem::path localPath,
             std::filesystem::path remotePath,
-            std::function<void(OperationCard const& operation)> doRemoveSelf)
-            : OperationCard{SharedData::OperationType::Download, std::move(operationId), std::move(doRemoveSelf)}
+            std::function<void(OperationCard const& operation)> doRemoveSelf,
+            std::shared_ptr<Nui::Observed<bool>> doDeletionCountdown)
+            : OperationCard{SharedData::OperationType::Download, std::move(operationId), std::move(doRemoveSelf), std::move(doDeletionCountdown)}
             , progressBar_{{
                   .height = std::string{progressHeight},
                   .min = 0,
@@ -313,9 +380,6 @@ namespace
                         return "opq-body";
                 }),
             }(
-                div{
-                    class_ = "opq-muted"
-                }("Dynamic content area - this would show progress, nested items, details, etc."),
                 progressBar_()
             );
             // clang-format on
@@ -371,8 +435,34 @@ namespace
                 details,
                 [newState](auto& op) {
                     op.state(newState);
+                    if (op.isCompletedState())
+                        op.completionTime(std::chrono::steady_clock::now());
                 },
                 [](std::monostate) {});
+        }
+
+        bool isCompletedState() const
+        {
+            return Utility::visitOverloaded(
+                details,
+                [](auto const& op) {
+                    return op.isCompletedState();
+                },
+                [](std::monostate) {
+                    return false;
+                });
+        }
+
+        std::chrono::steady_clock::time_point completionTime() const
+        {
+            return Utility::visitOverloaded(
+                details,
+                [](auto const& op) {
+                    return op.completionTime();
+                },
+                [](std::monostate) {
+                    return std::chrono::steady_clock::now();
+                });
         }
     };
 }
@@ -388,7 +478,9 @@ struct OperationQueue::Implementation
 
     std::vector<Nui::RpcClient::AutoUnregister> onUpdate;
     Nui::Observed<bool> paused{true};
+    std::shared_ptr<Nui::Observed<bool>> autoClean{std::make_shared<Nui::Observed<bool>>(false)};
     ObservedRandomAccessMap<Ids::OperationId, DisplayedOperation, std::map> operations;
+    Nui::TimerHandle autoCleanTimer;
 
     Implementation(
         Persistence::StateHolder* stateHolder,
@@ -403,6 +495,7 @@ struct OperationQueue::Implementation
         , fileEngine{nullptr}
         , onUpdate{}
         , operations{}
+        , autoCleanTimer{}
     {}
 };
 
@@ -414,7 +507,36 @@ OperationQueue::OperationQueue(
     : impl_{
           std::make_unique<Implementation>(stateHolder, events, std::move(persistenceSessionName), confirmDialog),
       }
-{}
+{
+    Nui::setInterval(
+        1000,
+        [this]() {
+            if (impl_->autoClean && !impl_->operations.empty())
+            {
+                auto now = std::chrono::steady_clock::now();
+                bool anyRemoved = false;
+                for (auto* front = impl_->operations.front(); front != nullptr; front = impl_->operations.front())
+                {
+                    if (front->isCompletedState())
+                    {
+                        auto duration = now - front->completionTime();
+                        if (duration >= autoRemoveTime)
+                        {
+                            impl_->operations.pop_front();
+                            anyRemoved = true;
+                            continue;
+                        }
+                    }
+                    break;
+                }
+                if (anyRemoved)
+                    Nui::globalEventContext.executeActiveEventsImmediately();
+            }
+        },
+        [this](Nui::TimerHandle&& handle) {
+            impl_->autoCleanTimer = std::move(handle);
+        });
+}
 ROAR_PIMPL_SPECIAL_FUNCTIONS_IMPL(OperationQueue);
 
 template <typename OperationCard>
@@ -495,7 +617,9 @@ void OperationQueue::activate(FileEngine* fileEngine, Ids::SessionId sessionId)
                                     *added.remotePath,
                                     [this](OperationCard<DisplayedDownloadOperation> const& operation) {
                                         cancelOperation(operation);
-                                    }};
+                                    },
+                                    impl_->autoClean,
+                                };
                             return std::monostate{};
                         }()});
                 Nui::globalEventContext.executeActiveEventsImmediately();
@@ -628,7 +752,6 @@ Nui::ElementRenderer OperationQueue::operator()()
     // clang-format off
     return div{
         class_ = "operation-queue",
-        style = "width: 100%; height: auto; display: block; overflow-y: scroll",
     }(
         header{
             class_ = "opq-controls"
@@ -677,12 +800,25 @@ Nui::ElementRenderer OperationQueue::operator()()
             )
         ),
         // Main content
-        div{}(
+        div{
+            class_ = "opq-list"
+        }(
+            impl_->operations.observedValues().map(operationsMapper)
+        ),
+        // Footer
+        div{
+            class_ = "opq-footer"
+        }(
+            ui5::switch_{
+                "checked"_prop = impl_->autoClean,
+                "design"_prop = "Graphical",
+                "change"_event = [this](Nui::val event) {
+                    *impl_->autoClean = event["target"]["checked"].as<bool>();
+                }
+            }(),
             div{
-                class_ = "opq-list"
-            }(
-                impl_->operations.observedValues().map(operationsMapper)
-            )
+                style = "font-size: 14px; color: var(--muted);"
+            }("Auto Remove Completed Operations")
         )
     );
     // clang-format on

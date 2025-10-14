@@ -8,9 +8,13 @@
 #include <nui/frontend/element_renderer.hpp>
 #include <roar/detail/pimpl_special_functions.hpp>
 
+#include <chrono>
+
 class OperationQueue
 {
   public:
+    constexpr static std::chrono::seconds autoRemoveTime{5};
+
     OperationQueue(
         Persistence::StateHolder* stateHolder,
         FrontendEvents* events,

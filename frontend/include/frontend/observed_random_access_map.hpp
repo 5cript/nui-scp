@@ -40,6 +40,13 @@ class ObservedRandomAccessMap
         rebuildIndexMap();
     }
 
+    ValueT* front()
+    {
+        if (observedValues_.value().empty())
+            return nullptr;
+        return observedValues_.value().front().get();
+    }
+
     void erase(KeyT const& key)
     {
         auto it = keyToIndexMap_.find(key);
@@ -75,6 +82,11 @@ class ObservedRandomAccessMap
             throw std::out_of_range("Key not found in ObservedRandomAccessMap");
 
         modifier(*observedValues_[it->second].get());
+    }
+
+    bool empty() const
+    {
+        return observedValues_.value().empty();
     }
 
   private:
