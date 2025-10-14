@@ -3,64 +3,65 @@
 
 #include <fcntl.h>
 
-#include <iostream>
-
 namespace SecureShell
 {
-    SftpSession::SftpSession(Session* owner, sftp_session session)
-        : ownerMutex_{}
-        , owner_{owner}
+    SftpSession::SftpSession(Session* owner, std::unique_ptr<ProcessingStrand> strand, sftp_session session)
+        : owner_{owner}
+        , strand_{std::move(strand)}
         , session_{session}
+        , fileStreams_{}
     {}
     SftpSession::~SftpSession()
     {
         /* close makes no sense, since this lives in a shared_ptr and will only ever end here when it was already
          * removed */
     }
-    void SftpSession::close()
+    bool SftpSession::close(bool isBackElement)
     {
-        std::scoped_lock lock{ownerMutex_};
-        if (owner_)
+        if (strand_->isFinalized())
+            return false;
+
+        return strand_
+            ->pushFinalPromiseTask([this, isBackElement]() {
+                removeAllFileStreams();
+                owner_->sftpSessionRemoveItself(this, isBackElement);
+                return true;
+            })
+            .get();
+    }
+    void SftpSession::fileStreamRemoveItself(FileStream* stream, bool isBackElement)
+    {
+        if (isBackElement && fileStreams_.back().get() == stream)
         {
-            owner_->sftpSessionRemoveItself(this);
-            owner_ = nullptr;
+            fileStreams_.pop_back();
+        }
+        else
+        {
+            fileStreams_.erase(
+                std::remove_if(
+                    fileStreams_.begin(),
+                    fileStreams_.end(),
+                    [stream](auto const& item) {
+                        return item.get() == stream;
+                    }),
+                fileStreams_.end());
         }
     }
-    SftpSession::DirectoryEntry SftpSession::DirectoryEntry::fromSftpAttributes(sftp_attributes attributes)
+    void SftpSession::removeAllFileStreams()
     {
-        return DirectoryEntry{
-            SharedData::DirectoryEntry{
-                .path = attributes->name ? std::string{attributes->name} : std::string{},
-                .longName = attributes->longname ? std::string{attributes->longname} : std::string{},
-                .flags = attributes->flags,
-                .type = attributes->type,
-                .size = attributes->size,
-                .uid = attributes->uid,
-                .gid = attributes->gid,
-                .owner = attributes->owner ? std::string{attributes->owner} : std::string{},
-                .group = attributes->group ? std::string{attributes->group} : std::string{},
-                .permissions = static_cast<std::filesystem::perms>(attributes->permissions),
-                .atime = attributes->atime,
-                .atimeNsec = attributes->atime_nseconds,
-                .createTime = attributes->createtime,
-                .createTimeNsec = attributes->createtime_nseconds,
-                .mtime = attributes->mtime,
-                .mtimeNsec = attributes->mtime_nseconds,
-                .acl = attributes->acl
-                    ? std::string{ssh_string_get_char(attributes->acl), ssh_string_len(attributes->acl)}
-                    : std::string{},
-            },
-        };
+        while (!fileStreams_.empty())
+        {
+            fileStreams_.back()->close(true);
+        }
     }
 
-    std::future<std::expected<std::vector<SftpSession::DirectoryEntry>, SftpSession::Error>>
+    std::future<std::expected<std::vector<FileInformation>, SftpSession::Error>>
     SftpSession::listDirectory(std::filesystem::path const& path)
     {
         return performPromise(
-            [this,
-             path = std::move(path)]() -> std::expected<std::vector<SftpSession::DirectoryEntry>, SftpSession::Error> {
+            [this, path = std::move(path)]() -> std::expected<std::vector<FileInformation>, SftpSession::Error> {
                 int closeResult = 0;
-                std::vector<DirectoryEntry> entries{};
+                std::vector<FileInformation> entries{};
 
                 {
                     std::unique_ptr<sftp_dir_struct, std::function<void(sftp_dir_struct*)>> dir{
@@ -85,7 +86,7 @@ namespace SecureShell
 
                         for (; entry != nullptr; entry.reset(sftp_readdir(session_, dir.get())))
                         {
-                            entries.push_back(DirectoryEntry::fromSftpAttributes(entry.get()));
+                            entries.push_back(FileInformation::fromSftpAttributes(entry.get()));
                         }
                     }
 
@@ -168,16 +169,15 @@ namespace SecureShell
         });
     }
 
-    std::future<std::expected<SftpSession::DirectoryEntry, SftpSession::Error>>
-    SftpSession::stat(std::filesystem::path const& path)
+    std::future<std::expected<FileInformation, SftpSession::Error>> SftpSession::stat(std::filesystem::path const& path)
     {
-        return performPromise([this, path = std::move(path)]() -> std::expected<DirectoryEntry, Error> {
+        return performPromise([this, path = std::move(path)]() -> std::expected<FileInformation, Error> {
             std::unique_ptr<sftp_attributes_struct, decltype(&sftp_attributes_free)> attributes{
                 sftp_stat(session_, path.generic_string().c_str()), sftp_attributes_free};
             if (attributes == nullptr)
                 return std::unexpected(lastError());
 
-            return DirectoryEntry::fromSftpAttributes(attributes.get());
+            return FileInformation::fromSftpAttributes(attributes.get());
         });
     }
 
@@ -197,18 +197,13 @@ namespace SecureShell
     {
         return performPromise(
             [this, source = std::move(source), destination = std::move(destination)]() -> std::expected<void, Error> {
-                std::cout << "X" << std::endl;
                 auto s = source.generic_string();
                 auto d = destination.generic_string();
-
-                std::cout << "Supported: " << sftp_extension_supported(session_, "posix-rename@openssh.com", "1")
-                          << std::endl;
 
                 auto result = sftp_rename(session_, s.c_str(), d.c_str());
                 if (result != SSH_OK)
                 {
                     const auto le = lastError();
-                    std::cout << "Error: " << le.message << " - " << le.sftpError << " - " << le.sshError << std::endl;
                     return std::unexpected(le);
                 }
                 return {};
@@ -256,11 +251,11 @@ namespace SecureShell
         });
     }
 
-    std::future<std::expected<FileStream, SftpSession::Error>>
+    std::future<std::expected<std::weak_ptr<FileStream>, SftpSession::Error>>
     SftpSession::openFile(std::filesystem::path const& path, OpenType openType, std::filesystem::perms permissions)
     {
         return performPromise(
-            [this, path = std::move(path), openType, permissions]() -> std::expected<FileStream, Error> {
+            [this, path = std::move(path), openType, permissions]() -> std::expected<std::weak_ptr<FileStream>, Error> {
                 std::unique_ptr<sftp_file_struct, std::function<void(sftp_file_struct*)>> file{
                     sftp_open(
                         session_,
@@ -281,7 +276,10 @@ namespace SecureShell
                 if (limits == nullptr)
                     return std::unexpected(lastError());
 
-                return FileStream{shared_from_this(), file.release(), *limits};
+                auto stream = std::make_shared<FileStream>(shared_from_this(), file.release(), *limits);
+                fileStreams_.push_back(stream);
+
+                return std::weak_ptr<FileStream>{stream};
             });
     }
 }

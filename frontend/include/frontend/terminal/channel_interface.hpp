@@ -17,5 +17,5 @@ class ChannelInterface
     virtual void resize(int cols, int rows) = 0;
     virtual void dispose(std::function<void()> onExit) = 0;
     virtual Ids::ChannelId channelId() const = 0;
-    ~ChannelInterface() = default;
+    virtual ~ChannelInterface() = default;
 };

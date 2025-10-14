@@ -14,7 +14,7 @@ class SessionOptions
         Persistence::StateHolder* stateHolder,
         FrontendEvents* events,
         std::string persistenceSessionName,
-        std::string id,
+        std::string sessionLayoutId,
         ConfirmDialog* confirmDialog);
     ROAR_PIMPL_SPECIAL_FUNCTIONS(SessionOptions);
 

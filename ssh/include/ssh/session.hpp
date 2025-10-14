@@ -80,13 +80,11 @@ namespace SecureShell
         std::future<std::expected<std::weak_ptr<SftpSession>, SftpError>> createSftpSession();
 
       private:
-        void channelRemoveItself(Channel* channel);
+        void channelRemoveItself(Channel* channel, bool isBackElement);
         void removeAllChannels();
 
-        void sftpSessionRemoveItself(SftpSession* sftpSession);
+        void sftpSessionRemoveItself(SftpSession* sftpSession, bool isBackElement);
         void removeAllSftpSessions();
-
-        void removalTask();
 
         /**
          * @brief Shuts down the session and closes all channels.
@@ -98,7 +96,6 @@ namespace SecureShell
         SecureShell::ProcessingThread processingThread_;
         ssh::Session session_;
         std::vector<std::shared_ptr<Channel>> channels_;
-        std::vector<std::shared_ptr<Channel>> channelsToRemove_;
         std::vector<std::shared_ptr<SftpSession>> sftpSessions_;
     };
 

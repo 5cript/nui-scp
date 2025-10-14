@@ -8,7 +8,6 @@
 #include <persistence/state/state.hpp>
 
 #include <functional>
-#include <memory>
 
 namespace Persistence
 {

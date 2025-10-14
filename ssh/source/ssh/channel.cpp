@@ -3,8 +3,9 @@
 
 namespace SecureShell
 {
-    Channel::Channel(Session* owner, std::unique_ptr<ssh::Channel> channel)
+    Channel::Channel(Session* owner, std::unique_ptr<ProcessingStrand> strand, std::unique_ptr<ssh::Channel> channel)
         : owner_{owner}
+        , strand_{std::move(strand)}
         , channel_{std::move(channel)}
     {}
     Channel::~Channel()
@@ -14,54 +15,68 @@ namespace SecureShell
     }
     Channel::Channel(Channel&& other)
         : owner_{std::exchange(other.owner_, nullptr)}
+        , strand_{std::move(other.strand_)}
+        , channel_{std::move(other.channel_)}
     {}
     Channel& Channel::operator=(Channel&& other)
     {
-        std::scoped_lock lock{ownerMutex_, other.ownerMutex_};
         if (this != &other)
         {
             owner_ = std::exchange(other.owner_, nullptr);
+            strand_ = std::exchange(other.strand_, nullptr);
+            channel_ = std::exchange(other.channel_, nullptr);
         }
         return *this;
     }
-    void Channel::close()
+    bool Channel::close(bool isBackElement)
     {
-        std::scoped_lock lock{ownerMutex_};
-        if (owner_)
-        {
-            if (readTaskId_)
-            {
-                owner_->processingThread_.removePermanentTask(*readTaskId_);
-            }
+        if (strand_->isFinalized())
+            return false;
 
-            owner_->channelRemoveItself(this);
-            owner_ = nullptr;
-        }
+        return strand_
+            ->pushFinalPromiseTask([this, isBackElement]() {
+                if (channel_ && channel_->isOpen())
+                {
+                    channel_->sendEof();
+                    channel_->close();
+                }
+                channel_.reset();
+                owner_->channelRemoveItself(this, isBackElement);
+                return true;
+            })
+            .get();
     }
-    void Channel::write(std::string data)
+    bool Channel::write(std::string data)
     {
-        std::scoped_lock lock{ownerMutex_};
-        owner_->processingThread_.pushTask([this, data = std::move(data)]() {
+        return strand_->pushTask([this, data = std::move(data)]() {
             if (channel_)
                 channel_->write(data.data(), data.size());
         });
     }
     std::future<int> Channel::resizePty(int cols, int rows)
     {
-        std::scoped_lock lock{ownerMutex_};
         auto promise = std::make_shared<std::promise<int>>();
-        owner_->processingThread_.pushTask([this, cols, rows, promise]() {
-            if (channel_)
-                promise->set_value(channel_->changePtySize(cols, rows));
-            else
-                promise->set_value(SSH_ERROR);
-        });
+        if (!strand_->pushTask([this, cols, rows, promise]() {
+                if (channel_)
+                    promise->set_value(channel_->changePtySize(cols, rows));
+                else
+                    promise->set_value(SSH_ERROR);
+            }))
+        {
+            promise->set_value(SSH_ERROR);
+        }
         return promise->get_future();
     }
     void Channel::readTask(std::chrono::milliseconds pollTimeout)
     {
         if (!onStdout_ || !onStderr_ || !onExit_)
             return;
+
+        if (!channel_)
+        {
+            std::this_thread::sleep_for(pollTimeout);
+            return;
+        }
 
         constexpr static int bufferSize = 1024;
         char buffer[bufferSize];
@@ -110,22 +125,17 @@ namespace SecureShell
         std::function<void(std::string const&)> onStderr,
         std::function<void()> onExit)
     {
-        std::scoped_lock lock{ownerMutex_};
-
         onStdout_ = std::move(onStdout);
         onStderr_ = std::move(onStderr);
         onExit_ = std::move(onExit);
 
-        auto [success, id] = owner_->processingThread_.pushPermanentTask([this]() {
+        auto [success, id] = strand_->pushPermanentTask([this]() {
             readTask();
         });
         if (!success)
         {
-            // TODO: ???
-        }
-        else
-        {
-            readTaskId_ = id;
+            // TODO: Do I want to throw here?
+            throw std::runtime_error("Failed to start reading.");
         }
     }
 }

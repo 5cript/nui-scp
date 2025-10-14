@@ -12,12 +12,16 @@ class InputDialog
     ROAR_PIMPL_SPECIAL_FUNCTIONS(InputDialog);
 
     Nui::ElementRenderer operator()();
-    void open(
-        std::string const& whatFor,
-        std::string const& prompt,
-        std::string const& headerText,
-        bool isPassword,
-        std::function<void(std::optional<std::string> const&)> const& onConfirm);
+
+    struct OpenOptions
+    {
+        std::string whatFor{};
+        std::string prompt{};
+        std::string headerText{};
+        bool isPassword{false};
+        std::function<void(std::optional<std::string> const&)> onConfirm;
+    };
+    void open(OpenOptions const& options);
 
   private:
     void closeDialog(std::optional<std::string> const& password);

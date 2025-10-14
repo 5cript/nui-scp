@@ -6,6 +6,7 @@ add_library(
         channel.cpp
         sftp_session.cpp
         file_stream.cpp
+        file_information.cpp
 )
 
 target_include_directories(

@@ -60,6 +60,7 @@ namespace Persistence
     struct TerminalEngine
     {
         std::string type{};
+        std::optional<std::string> orderBy{};
         std::optional<bool> startupSession{};
         Referenceable<TerminalOptions> terminalOptions{};
         Referenceable<Termios> termios{};

@@ -43,14 +43,23 @@ void Toolbar::Implementation::updateSessionsList(std::function<void()> onDone)
 
         auto const& state = holder.stateCache();
 
-        std::vector<std::string> engines;
+        std::vector<std::pair<std::string, std::string /*orderby*/>> enginesUnordered;
         for (auto const& [name, engine] : state.sessions)
+            enginesUnordered.push_back({name, engine.orderBy.value_or(name)});
+
+        std::sort(enginesUnordered.begin(), enginesUnordered.end(), [](auto const& lhs, auto const& rhs) {
+            return lhs.second < rhs.second;
+        });
+
+        std::vector<std::string> engines;
+        for (auto const& [name, _] : enginesUnordered)
             engines.push_back(name);
 
         {
             Log::info("Updating terminal engines list.");
             auto proxy = terminalEngines.modify();
             terminalEngines = std::move(engines);
+
             events->onNewSession.value() = terminalEngines.value().front();
         }
         Nui::globalEventContext.executeActiveEventsImmediately();

@@ -21,9 +21,12 @@ namespace SecureShell::Test
         {
             if (std::filesystem::exists(programDirectory / "temp" / "log.txt"))
             {
+                if (!std::filesystem::exists(programDirectory / "logs"))
+                    std::filesystem::create_directory(programDirectory / "logs");
+
                 std::filesystem::rename(
                     programDirectory / "temp" / "log.txt",
-                    programDirectory / "temp" /
+                    programDirectory / "logs" /
                         ("log_"s + ::testing::UnitTest::GetInstance()->current_test_info()->test_case_name() + "_"s +
                          ::testing::UnitTest::GetInstance()->current_test_info()->name() + ".txt"));
             }
@@ -79,7 +82,7 @@ namespace SecureShell::Test
         ASSERT_EQ(fut.wait_for(1s), std::future_status::ready);
         auto result = fut.get();
 
-        ASSERT_TRUE(result.has_value());
+        ASSERT_TRUE(result.has_value()) << result.error().toString();
         EXPECT_GT(result.value().size(), 0);
         auto it = std::find_if(result.value().begin(), result.value().end(), [](const auto& entry) {
             return entry.path == "file1.txt";
@@ -260,10 +263,12 @@ namespace SecureShell::Test
         auto result = fut.get();
         ASSERT_TRUE(result.has_value());
 
-        auto file = std::move(result).value();
-        std::byte byte;
+        auto fileWeak = std::move(result).value();
+        auto file = fileWeak.lock();
+        ASSERT_TRUE(file);
 
-        auto readFut = file.read(&byte, 1);
+        char byte;
+        auto readFut = file->readSome(&byte, 1);
         ASSERT_EQ(readFut.wait_for(1s), std::future_status::ready);
         auto readResult = readFut.get();
         ASSERT_TRUE(readResult.has_value());
@@ -282,9 +287,12 @@ namespace SecureShell::Test
         auto result = fut.get();
         ASSERT_TRUE(result.has_value());
 
-        auto file = std::move(result).value();
-        std::vector<std::byte> buffer(1024);
-        auto readFut = file.read(buffer.data(), buffer.size());
+        auto fileWeak = std::move(result).value();
+        auto file = fileWeak.lock();
+        ASSERT_TRUE(file);
+
+        std::vector<char> buffer(1024);
+        auto readFut = file->readSome(buffer.data(), buffer.size());
 
         ASSERT_EQ(readFut.wait_for(1s), std::future_status::ready);
         auto readResult = readFut.get();
@@ -305,9 +313,12 @@ namespace SecureShell::Test
         auto result = fut.get();
         ASSERT_TRUE(result.has_value());
 
-        auto file = std::move(result).value();
+        auto fileWeak = std::move(result).value();
+        auto file = fileWeak.lock();
+        ASSERT_TRUE(file);
+
         std::string data;
-        auto readFut = file.read([&data](std::string_view chunk) {
+        auto readFut = file->readAll([&data](std::string_view chunk) {
             data.append(chunk);
             return true;
         });
@@ -330,9 +341,12 @@ namespace SecureShell::Test
         auto result = fut.get();
         ASSERT_TRUE(result.has_value());
 
-        auto file = std::move(result).value();
+        auto fileWeak = std::move(result).value();
+        auto file = fileWeak.lock();
+        ASSERT_TRUE(file);
+
         std::string data;
-        auto readFut = file.read([&data](std::string_view chunk) {
+        auto readFut = file->readAll([&data](std::string_view chunk) {
             data.append(chunk);
             return true;
         });
@@ -355,10 +369,13 @@ namespace SecureShell::Test
         auto result = fut.get();
         ASSERT_TRUE(result.has_value());
 
-        auto file = std::move(result).value();
-        ASSERT_EQ(file.seek(2).wait_for(1s), std::future_status::ready);
-        std::vector<std::byte> buffer(1024);
-        auto readFut2 = file.read(buffer.data(), buffer.size());
+        auto fileWeak = std::move(result).value();
+        auto file = fileWeak.lock();
+        ASSERT_TRUE(file);
+
+        ASSERT_EQ(file->seek(2).wait_for(1s), std::future_status::ready);
+        std::vector<char> buffer(1024);
+        auto readFut2 = file->readSome(buffer.data(), buffer.size());
 
         ASSERT_EQ(readFut2.wait_for(1s), std::future_status::ready);
         auto readResult2 = readFut2.get();
@@ -379,11 +396,14 @@ namespace SecureShell::Test
         auto result = fut.get();
         ASSERT_TRUE(result.has_value());
 
-        auto file = std::move(result).value();
-        std::vector<std::byte> buffer(1024);
-        ASSERT_EQ(file.seek(2).wait_for(1s), std::future_status::ready);
-        ASSERT_EQ(file.rewind().wait_for(1s), std::future_status::ready);
-        auto readFut2 = file.read(buffer.data(), buffer.size());
+        auto fileWeak = std::move(result).value();
+        auto file = fileWeak.lock();
+        ASSERT_TRUE(file);
+
+        std::vector<char> buffer(1024);
+        ASSERT_EQ(file->seek(2).wait_for(1s), std::future_status::ready);
+        ASSERT_EQ(file->rewind().wait_for(1s), std::future_status::ready);
+        auto readFut2 = file->readSome(buffer.data(), buffer.size());
 
         ASSERT_EQ(readFut2.wait_for(1s), std::future_status::ready);
         auto readResult2 = readFut2.get();
@@ -404,14 +424,72 @@ namespace SecureShell::Test
         auto result = fut.get();
         ASSERT_TRUE(result.has_value());
 
-        auto file = std::move(result).value();
-        ASSERT_EQ(file.seek(2).wait_for(1s), std::future_status::ready);
-        auto tellFut = file.tell();
+        auto fileWeak = std::move(result).value();
+        auto file = fileWeak.lock();
+        ASSERT_TRUE(file);
+
+        ASSERT_EQ(file->seek(2).wait_for(1s), std::future_status::ready);
+        auto tellFut = file->tell();
 
         ASSERT_EQ(tellFut.wait_for(1s), std::future_status::ready);
         auto tellResult = tellFut.get();
         ASSERT_TRUE(tellResult.has_value());
 
         EXPECT_EQ(tellResult.value(), 2);
+    }
+
+    TEST_F(SftpTests, CanLetSftpSessionMoveOutOfScope)
+    {
+        CREATE_SERVER_AND_JOINER(Sftp);
+
+        {
+            auto [_, sftp] = createSftpSession(serverStartResult->port);
+        }
+    }
+
+    TEST_F(SftpTests, CanLetSftpSessionMoveOutOfScopeWithOpenFile)
+    {
+        CREATE_SERVER_AND_JOINER(Sftp);
+
+        {
+            auto [_, sftp] = createSftpSession(serverStartResult->port);
+            auto fut =
+                sftp->openFile("/home/test/file1.txt", SftpSession::OpenType::Read, std::filesystem::perms::owner_read);
+            ASSERT_EQ(fut.wait_for(1s), std::future_status::ready);
+            auto result = fut.get();
+            ASSERT_TRUE(result.has_value());
+        }
+    }
+
+    TEST_F(SftpTests, CannotCloseSftpSessionTwice)
+    {
+        CREATE_SERVER_AND_JOINER(Sftp);
+
+        auto [_, sftp] = createSftpSession(serverStartResult->port);
+        ASSERT_TRUE(sftp->close());
+        EXPECT_FALSE(sftp->close());
+    }
+
+    TEST_F(SftpTests, CanStatFileUsingFileStream)
+    {
+        CREATE_SERVER_AND_JOINER(Sftp);
+        auto [_, sftp] = createSftpSession(serverStartResult->port);
+
+        auto fut =
+            sftp->openFile("/home/test/file1.txt", SftpSession::OpenType::Read, std::filesystem::perms::owner_read);
+        ASSERT_EQ(fut.wait_for(1s), std::future_status::ready);
+        auto result = fut.get();
+        ASSERT_TRUE(result.has_value());
+
+        auto fileWeak = std::move(result).value();
+        auto file = fileWeak.lock();
+        ASSERT_TRUE(file);
+
+        auto statFut = file->stat();
+        ASSERT_EQ(statFut.wait_for(1s), std::future_status::ready);
+        auto statResult = statFut.get();
+        ASSERT_TRUE(statResult.has_value());
+
+        EXPECT_GT(statResult.value().size, 0);
     }
 }

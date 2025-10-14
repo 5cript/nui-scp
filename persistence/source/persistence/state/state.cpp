@@ -1,5 +1,6 @@
 #include <persistence/state/state.hpp>
 #include <nlohmann/json.hpp>
+#include <utility/visit_overloaded.hpp>
 
 #include <tuple>
 
@@ -13,6 +14,7 @@ namespace Persistence
         j["sessions"] = state.sessions;
         j["termios"] = state.termios;
         j["sshOptions"] = state.sshOptions;
+        j["sftpOptions"] = state.sftpOptions;
         j["sshSessionOptions"] = state.sshSessionOptions;
         j["uiOptions"] = state.uiOptions;
         j["logLevel"] = [&]() {
@@ -33,6 +35,9 @@ namespace Persistence
         if (j.contains("sshOptions"))
             j.at("sshOptions").get_to(state.sshOptions);
 
+        if (j.contains("sftpOptions"))
+            j.at("sftpOptions").get_to(state.sftpOptions);
+
         if (j.contains("sshSessionOptions"))
             j.at("sshSessionOptions").get_to(state.sshSessionOptions);
 
@@ -41,5 +46,40 @@ namespace Persistence
 
         if (j.contains("logLevel"))
             state.logLevel = Log::levelFromString(j.at("logLevel").get<std::string>());
+    }
+
+    State State::fullyResolve() const
+    {
+        State resolved{*this};
+
+        auto fillDefaults = [](auto& target, auto const& source) {
+            if (!target.hasReference())
+                return;
+
+            if (auto iter = source.find(target.ref()); iter != source.end())
+                target.useDefaultsFrom(iter->second);
+        };
+
+        for (auto& [key, session] : resolved.sessions)
+        {
+            fillDefaults(session.terminalOptions, resolved.terminalOptions);
+            fillDefaults(session.termios, resolved.termios);
+
+            Utility::visitOverloaded(
+                session.engine,
+                [&](std::monostate) {
+                    // Nothing to do here
+                },
+                [&](ExecutingTerminalEngine&) {
+                    // Nothing to do here
+                },
+                [&](SshTerminalEngine& engine) {
+                    fillDefaults(engine.sshSessionOptions, resolved.sshSessionOptions);
+                    fillDefaults(engine.sshSessionOptions->sshOptions, resolved.sshOptions);
+                    fillDefaults(engine.sshSessionOptions->sftpOptions, resolved.sftpOptions);
+                });
+        }
+
+        return resolved;
     }
 }

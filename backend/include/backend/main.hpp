@@ -1,9 +1,10 @@
 #pragma once
 
 #include <backend/process/process_store.hpp>
-#include <backend/ssh_session_manager.hpp>
+#include <backend/session_manager.hpp>
 #include <persistence/state_holder.hpp>
 #include <backend/password/password_prompter.hpp>
+#include <ssh/async/processing_thread.hpp>
 
 #include <boost/asio/steady_timer.hpp>
 #include <nui/core.hpp>
@@ -37,7 +38,7 @@ class Main
     Nui::RpcHub hub_;
     ProcessStore processes_;
     PasswordPrompter prompter_;
-    SshSessionManager sshSessionManager_;
+    std::shared_ptr<SessionManager> sshSessionManager_;
     std::atomic_bool shuttingDown_;
     boost::asio::steady_timer childSignalTimer_;
 };

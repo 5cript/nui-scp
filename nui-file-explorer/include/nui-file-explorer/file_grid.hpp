@@ -90,19 +90,51 @@ namespace NuiFileExplorer
          * @brief Determines how the grid should be displayed.
          */
         void flavor(FileGridFlavor value);
+
+        /**
+         * @brief Returns the current grid flavor.
+         */
         FileGridFlavor flavor() const;
 
         /**
          * @brief Sets the size of the icons in the grid.
          */
         void iconSize(unsigned int value);
+
+        /**
+         * @brief Sets the spacing between icons in the grid.
+         */
         void iconSpacing(unsigned int value);
+
+        /**
+         * @brief Returns the size of the icons in the grid.
+         */
         unsigned int iconSize() const;
+
+        /**
+         * @brief Returns the spacing between icons in the grid.
+         */
         unsigned int iconSpacing() const;
 
+        /**
+         * @brief Deselects all items.
+         */
         void deselectAll(bool rerender = false);
 
+        /**
+         * @brief Selects all items.
+         */
         void selectAll(bool rerender = false);
+
+        /**
+         * @brief Returns all selected items.
+         */
+        std::vector<Item> selectedItems() const;
+
+        /**
+         * @brief Returns the paths of all selected items.
+         */
+        std::vector<std::filesystem::path> selectedPaths() const;
 
         /**
          * @brief Use this to close all menus and deselect all items.
@@ -134,6 +166,37 @@ namespace NuiFileExplorer
          * @param callback Called when the refresh button is clicked
          */
         void onRefresh(std::function<void()> const& callback);
+
+        /**
+         * @brief Triggered when items are requested to be deleted.
+         *
+         * @param callback
+         */
+        void onDelete(std::function<void(std::vector<Item> const&)> const& callback);
+
+        /**
+         * @brief Triggered when item is requested to be renamed.
+         *
+         * @param callback
+         */
+        void onRename(std::function<void(Item const&)> const& callback);
+
+        /**
+         * @brief Triggered when item is requested to be queried for attrs.
+         *
+         * @param callback
+         */
+        void onProperties(std::function<void(Item const&)> const& callback);
+
+        /**
+         * @brief Triggered when items are requested to be downloaded.
+         */
+        void onDownload(std::function<void(std::vector<Item> const&)> const& callback);
+
+        /**
+         * @brief Triggered when an error occurs.
+         */
+        void onError(std::function<void(std::string const&)> const& callback);
 
       private:
         Nui::ElementRenderer iconFlavor();

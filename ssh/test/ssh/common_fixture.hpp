@@ -154,7 +154,7 @@ namespace SecureShell::Test
                 });
         }
 
-        TemporaryDirectory isolateDirectory_{programDirectory / "temp", false};
+        Utility::TemporaryDirectory isolateDirectory_{programDirectory / "temp", false};
         boost::asio::thread_pool pool_{1};
         nlohmann::json defaultPackageJson_ = nlohmann::json({
             {"name", "test"},

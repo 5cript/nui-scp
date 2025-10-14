@@ -8,9 +8,6 @@
 
 #include <memory>
 #include <string>
-#include <string_view>
-
-// TODO: https://devblogs.microsoft.com/commandline/windows-command-line-introducing-the-windows-pseudo-console-conpty/
 
 class ExecutingTerminalEngine : public SingleChannelTerminalEngine
 {
@@ -26,7 +23,7 @@ class ExecutingTerminalEngine : public SingleChannelTerminalEngine
     ExecutingTerminalEngine(Settings settings);
     ROAR_PIMPL_SPECIAL_FUNCTIONS(ExecutingTerminalEngine);
 
-    void open(std::function<void(bool, std::string const&)> onOpen, bool fileMode = false) override;
+    void open(std::function<void(bool, std::string const&)> onOpen) override;
     void dispose(std::function<void()> onDisposeComplete) override;
     void write(std::string const& data) override;
     void resize(int cols, int rows) override;

@@ -11,7 +11,11 @@ class TerminalChannel
 {
   public:
     TerminalChannel(MultiChannelTerminalEngine* engine, Ids::ChannelId channelId);
-    ROAR_PIMPL_SPECIAL_FUNCTIONS(TerminalChannel);
+    virtual ~TerminalChannel();
+    TerminalChannel(TerminalChannel const&) = delete;
+    TerminalChannel(TerminalChannel&&);
+    TerminalChannel& operator=(TerminalChannel const&) = delete;
+    TerminalChannel& operator=(TerminalChannel&&);
 
     void open(
         Nui::val host,

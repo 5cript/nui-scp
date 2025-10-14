@@ -1,5 +1,6 @@
 #include <frontend/dialog/confirm_dialog.hpp>
 #include <frontend/components/ui5-text.hpp>
+#include <frontend/components/ui5-list.hpp>
 #include <log/log.hpp>
 
 #include <ui5/components/dialog.hpp>
@@ -10,6 +11,26 @@
 #include <nui/frontend/elements.hpp>
 #include <nui/frontend/dom/basic_element.hpp>
 
+namespace
+{
+    std::string stateToString(ConfirmDialog::State state)
+    {
+        switch (state)
+        {
+            case ConfirmDialog::State::Positive:
+                return "Positive";
+            case ConfirmDialog::State::Critical:
+                return "Critical";
+            case ConfirmDialog::State::Negative:
+                return "Negative";
+            case ConfirmDialog::State::Information:
+                return "Information";
+            default:
+                return "None";
+        }
+    }
+}
+
 struct ConfirmDialog::Implementation
 {
     std::string id;
@@ -19,6 +40,7 @@ struct ConfirmDialog::Implementation
     Nui::Observed<std::string> headerText;
     Nui::Observed<std::string> text;
     Nui::Observed<Button> buttons;
+    Nui::Observed<std::vector<OpenOptions::ListElement>> listItems;
 
     Implementation(std::string id)
         : id{std::move(id)}
@@ -27,6 +49,8 @@ struct ConfirmDialog::Implementation
         , state{}
         , headerText{}
         , text{}
+        , buttons{}
+        , listItems{}
     {}
 };
 
@@ -34,23 +58,19 @@ ConfirmDialog::ConfirmDialog(std::string id)
     : impl_{std::make_unique<Implementation>(id)}
 {}
 
-void ConfirmDialog::open(
-    State state,
-    std::string const& headerText,
-    std::string const& text,
-    Button buttons,
-    std::function<void(Button buttonPressed)> const& onClose)
+void ConfirmDialog::open(OpenOptions const& options)
 {
-    impl_->onClose = onClose;
-    impl_->state = state;
-    impl_->headerText = headerText;
-    impl_->text = text;
-    impl_->buttons = buttons;
+    impl_->onClose = options.onClose;
+    impl_->state = options.state;
+    impl_->headerText = options.headerText;
+    impl_->text = options.text;
+    impl_->buttons = options.buttons;
+    impl_->listItems = options.listItems;
     Nui::globalEventContext.executeActiveEventsImmediately();
 
     if (auto diag = impl_->dialog.lock(); diag)
     {
-        diag->val().set("header-text", headerText);
+        diag->val().set("header-text", options.headerText);
         diag->val().set("open", true);
     }
 }
@@ -78,20 +98,34 @@ Nui::ElementRenderer ConfirmDialog::operator()()
     return ui5::dialog{
         id = "ConfirmDialog_" + impl_->id,
         "state"_prop = observe(impl_->state).generate([this](){
-            switch (impl_->state.value())
-            {
-                case State::Positive: return "Positive";
-                case State::Critical: return "Critical";
-                case State::Negative: return "Negative";
-                case State::Information: return "Information";
-                default: return "None";
-            }
+            return stateToString(impl_->state.value());
         }),
         "headerText"_prop = impl_->headerText,
         reference = impl_->dialog,
     }(
         section{}(
-            ui5::text{}(impl_->text)
+            ui5::text{
+                style = "margin-bottom: 10px;"
+            }(impl_->text),
+            ui5::list{
+                style = "max-height: 500px; overflow-y: auto;"
+            }(
+                impl_->listItems.map([](auto, auto const& element) {
+                    const auto additionalTextState = [&element]() -> std::optional<std::string> {
+                        if (element.additionalState)
+                            return stateToString(element.additionalState.value());
+                        return std::nullopt;
+                    }();
+
+                    return ui5::li{
+                        "description"_attr = element.description,
+                        "additional-text"_attr = element.additionalText,
+                        "additional-text-state"_attr = additionalTextState
+                    }(
+                        element.text
+                    );
+                })
+            )
         ),
         div{
             "slot"_prop = "footer",

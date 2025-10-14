@@ -1,6 +1,6 @@
 #pragma once
 
-#include "./temporary_directory.hpp"
+#include <utility/temporary_directory.hpp>
 
 #include <boost/asio.hpp>
 
@@ -22,7 +22,7 @@ namespace SecureShell::Test
 
     struct NodeProcessResult
     {
-        boost::asio::deadline_timer timer;
+        boost::asio::steady_timer timer;
         boost::asio::writable_pipe stdinPipe;
         boost::asio::readable_pipe stdoutPipe;
         boost::asio::readable_pipe stderrPipe;
@@ -32,6 +32,7 @@ namespace SecureShell::Test
         int code = 0;
 
         void command(std::string const& command);
+        void terminate();
     };
 
     void npmInstall(
@@ -41,6 +42,6 @@ namespace SecureShell::Test
 
     std::shared_ptr<NodeProcessResult> nodeProcess(
         boost::asio::any_io_executor executor,
-        TemporaryDirectory const& isolateDirectory,
+        Utility::TemporaryDirectory const& isolateDirectory,
         std::string const& program);
 }

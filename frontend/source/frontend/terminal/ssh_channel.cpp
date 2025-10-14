@@ -64,7 +64,7 @@ void SshChannel::open(
 void SshChannel::write(std::string const& data)
 {
     Nui::RpcClient::callWithBackChannel(
-        "SshSessionManager::Channel::write",
+        fmt::format("Session::{}::Channel::write", sshSessionId_.value()),
         [](Nui::val) {
             // TODO: handle error
         },
@@ -74,7 +74,7 @@ void SshChannel::write(std::string const& data)
 void SshChannel::resize(int cols, int rows)
 {
     Nui::RpcClient::callWithBackChannel(
-        "SshSessionManager::Channel::ptyResize",
+        fmt::format("Session::{}::Channel::ptyResize", sshSessionId_.value()),
         [](Nui::val) {
             // TODO: handle error
         },
@@ -85,7 +85,7 @@ void SshChannel::resize(int cols, int rows)
 void SshChannel::dispose(std::function<void()> onExit)
 {
     Nui::RpcClient::callWithBackChannel(
-        "SshSessionManager::Session::closeChannel",
+        fmt::format("Session::{}::Channel::close", sshSessionId_.value()),
         [onExit = std::move(onExit)](Nui::val) {
             onExit();
         },

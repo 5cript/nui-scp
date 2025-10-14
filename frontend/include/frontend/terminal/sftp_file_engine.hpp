@@ -6,7 +6,7 @@
 class SftpFileEngine : public FileEngine
 {
   public:
-    SftpFileEngine(SshTerminalEngine::Settings settings);
+    SftpFileEngine(SshTerminalEngine* engine);
     ROAR_PIMPL_SPECIAL_FUNCTIONS(SftpFileEngine);
 
     void listDirectory(
@@ -14,9 +14,17 @@ class SftpFileEngine : public FileEngine
         std::function<void(std::optional<std::vector<SharedData::DirectoryEntry>> const&)> onComplete) override;
     void dispose() override;
     void createDirectory(std::filesystem::path const& path, std::function<void(bool)> onComplete) override;
+    void createFile(std::filesystem::path const& path, std::function<void(bool)> onComplete) override;
+
+    std::optional<Ids::ChannelId> release();
+
+    void addDownload(
+        std::filesystem::path const& remotePath,
+        std::filesystem::path const& localPath,
+        std::function<void(std::optional<Ids::OperationId>)> onOperationCreated) override;
 
   private:
-    void lazyOpen(std::function<void(std::optional<Ids::SessionId> const&)> const& onOpen);
+    void lazyOpen(std::function<void(std::optional<Ids::ChannelId> const&)> const& onOpen);
 
   private:
     struct Implementation;

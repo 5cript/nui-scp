@@ -91,7 +91,11 @@ namespace Log
             else
             {
                 std::scoped_lock lock{guard_};
-                stash_.emplace_back(level, msg);
+                // Do not accumulate logs in tests:
+                if (level != Level::Off)
+                {
+                    stash_.emplace_back(level, msg);
+                }
             }
 
             spdlog::log(toSpdlogLevel(level), msg);

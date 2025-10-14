@@ -13,12 +13,14 @@ target_sources(
         dialog/password_prompter.cpp
         dialog/confirm_dialog.cpp
         session_components/session_options.cpp
+        session_components/operation_queue.cpp
         terminal/terminal.cpp
         terminal/executing_engine.cpp
         terminal/sftp_file_engine.cpp
         terminal/ssh_engine.cpp
         terminal/user_control_engine.cpp
         terminal/ssh_channel.cpp
+        components/progress_bar.cpp
 )
 
 target_include_directories(${PROJECT_NAME} PRIVATE ${CMAKE_SOURCE_DIR}/frontend/include)
@@ -27,6 +29,7 @@ target_include_directories(${PROJECT_NAME} PRIVATE ${CMAKE_SOURCE_DIR}/frontend/
 target_link_libraries(
     ${PROJECT_NAME}
     PRIVATE
+        core-target
         nui-frontend
         nui-file-explorer
         ui5
@@ -39,6 +42,26 @@ target_link_libraries(
         events
         ids
 )
+
+function(set_memory64_flags)
+    cmake_parse_arguments(
+        MEM64
+        ""
+        "TARGETS"
+        ""
+        ${ARGN}
+    )
+    foreach(target IN LISTS MEM64_TARGETS)
+        set_target_properties(
+            ${target}
+            PROPERTIES
+                LINK_FLAGS "-sMEMORY64=1"
+                COMPILE_FLAGS "-sMEMORY64=1"
+        )
+    endforeach()
+endfunction()
+
+set_memory64_flags(TARGETS nui-frontend nlohmann_json::nlohmann_json)
 
 nui_prepare_emscripten_target(
     TARGET
@@ -53,12 +76,15 @@ nui_prepare_emscripten_target(
     EMSCRIPTEN_LINK_OPTIONS
         -sEXPORTED_FUNCTIONS=_frontendMain
         -sALLOW_MEMORY_GROWTH=1
+        -sMEMORY64=1
+        -sWASM_BIGINT
         -fexceptions
         # -O2
         -g
         # or other options, see emscripten docs.
     EMSCRIPTEN_COMPILE_OPTIONS
         # -O3
+        -sMEMORY64=1
         -g
     CXX_STANDARD
         23

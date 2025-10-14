@@ -1,3 +1,5 @@
+option(NUI_FILE_EXPLORER_MEMORY64 "Enable MEMORY64 for nui-file-explorer" OFF)
+
 add_library(
     nui-file-explorer
     STATIC
@@ -16,3 +18,8 @@ target_include_directories(
     PUBLIC
         ${CMAKE_CURRENT_LIST_DIR}/../../include
 )
+
+if (NUI_FILE_EXPLORER_MEMORY64)
+    target_compile_options(nui-file-explorer PRIVATE -sMEMORY64=1)
+    target_link_options(nui-file-explorer PRIVATE -sMEMORY64=1)
+endif()

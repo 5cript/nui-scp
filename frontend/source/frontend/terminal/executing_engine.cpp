@@ -48,7 +48,7 @@ ExecutingTerminalEngine::~ExecutingTerminalEngine()
 
 ROAR_PIMPL_SPECIAL_FUNCTIONS_IMPL_NO_DTOR(ExecutingTerminalEngine);
 
-void ExecutingTerminalEngine::open(std::function<void(bool, std::string const&)> onOpen, bool)
+void ExecutingTerminalEngine::open(std::function<void(bool, std::string const&)> onOpen)
 {
     impl_->stdoutReceiver =
         Nui::RpcClient::autoRegisterFunction("execTerminalStdout_" + impl_->id, [this](Nui::val val) {

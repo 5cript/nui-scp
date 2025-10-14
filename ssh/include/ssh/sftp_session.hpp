@@ -3,7 +3,8 @@
 #include <libssh/libsshpp.hpp>
 #include <libssh/sftp.h>
 #include <ssh/async/processing_thread.hpp>
-#include <shared_data/directory_entry.hpp>
+#include <ssh/async/processing_strand.hpp>
+#include <ssh/file_information.hpp>
 #include <ssh/file_stream.hpp>
 #include <ssh/sftp_error.hpp>
 #include <ssh/session.hpp>
@@ -25,8 +26,9 @@ namespace SecureShell
     {
       public:
         using Error = SftpError;
+        friend class FileStream;
 
-        SftpSession(Session* owner, sftp_session session);
+        SftpSession(Session* owner, std::unique_ptr<ProcessingStrand> strand, sftp_session session);
         ~SftpSession();
         SftpSession(SftpSession const&) = delete;
         SftpSession& operator=(SftpSession const&) = delete;
@@ -38,36 +40,18 @@ namespace SecureShell
             return session_;
         }
 
-        void close();
-
-        struct DirectoryEntry : public SharedData::DirectoryEntry
-        {
-            static DirectoryEntry fromSftpAttributes(sftp_attributes attributes);
-        };
+        bool close(bool isBackElement = false);
 
         template <typename FunctionT>
         void perform(FunctionT&& func)
         {
-            std::scoped_lock lock{ownerMutex_};
-            if (owner_)
-                owner_->processingThread_.pushTask(std::forward<FunctionT>(func));
+            strand_->pushTask(std::forward<FunctionT>(func));
         }
 
         template <typename FunctionT>
         auto performPromise(FunctionT&& func) -> std::future<std::invoke_result_t<std::decay_t<FunctionT>>>
         {
-            using ResultType = std::invoke_result_t<std::decay_t<FunctionT>>;
-            {
-                std::scoped_lock lock{ownerMutex_};
-                if (owner_)
-                    return owner_->processingThread_.pushPromiseTask(std::forward<FunctionT>(func));
-            }
-            std::promise<ResultType> promise{};
-            promise.set_value(std::unexpected(SftpError{
-                .message = "Owner is null",
-                .wrapperError = WrapperErrors::OwnerNull,
-            }));
-            return promise.get_future();
+            return strand_->pushPromiseTask(std::forward<FunctionT>(func));
         }
 
         /**
@@ -79,9 +63,10 @@ namespace SecureShell
          * @brief Lists the contents of a directory.
          *
          * @param path
-         * @return std::future<std::expected<std::vector<DirectoryEntry>, Error>>
+         * @return std::future<std::expected<std::vector<FileInformation>, Error>>
          */
-        std::future<std::expected<std::vector<DirectoryEntry>, Error>> listDirectory(std::filesystem::path const& path);
+        std::future<std::expected<std::vector<FileInformation>, Error>>
+        listDirectory(std::filesystem::path const& path);
 
         /**
          * @brief Create a directory.
@@ -126,16 +111,16 @@ namespace SecureShell
          * @brief Gets the attributes of a file or directory.
          *
          * @param path
-         * @return std::future<std::expected<DirectoryEntry, Error>>
+         * @return std::future<std::expected<FileInformation, Error>>
          */
-        std::future<std::expected<DirectoryEntry, Error>> stat(std::filesystem::path const& path);
+        std::future<std::expected<FileInformation, Error>> stat(std::filesystem::path const& path);
 
         /**
          * @brief Sets the attributes of a file or directory.
          *
          * @param path
          * @param attributes
-         * @return std::future<std::expected<DirectoryEntry, Error>>
+         * @return std::future<std::expected<FileInformation, Error>>
          */
         std::future<std::expected<void, Error>> stat(std::filesystem::path const& path, sftp_attributes attributes);
 
@@ -174,15 +159,24 @@ namespace SecureShell
             Exclusive = O_EXCL,
         };
 
-        std::future<std::expected<FileStream, Error>>
+        std::future<std::expected<std::weak_ptr<FileStream>, Error>>
         openFile(std::filesystem::path const& path, OpenType openType, std::filesystem::perms permissions);
 
         std::future<std::expected<sftp_limits_struct, Error>> limits();
 
+        ProcessingStrand* strand() const
+        {
+            return strand_.get();
+        }
+
       private:
-        std::mutex ownerMutex_;
+        void fileStreamRemoveItself(FileStream* stream, bool isBackElement);
+        void removeAllFileStreams();
+
+      private:
         Session* owner_;
+        std::unique_ptr<ProcessingStrand> strand_;
         sftp_session session_;
-        // std::optional<ProcessingThread::PermanentTaskId> readTaskId_{std::nullopt};
+        std::vector<std::shared_ptr<FileStream>> fileStreams_;
     };
 }

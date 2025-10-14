@@ -103,6 +103,27 @@ namespace SecureShell::Test
             ASSERT_TRUE(expectedSession.has_value());
             auto session = std::move(expectedSession).value();
             session->start();
+        };
+
+        ASSERT_NO_FATAL_FAILURE(sessionScope());
+    }
+
+    TEST_F(SshSessionTests, CanConnectToSshServerCreateChannelAndDestructWithoutCrash)
+    {
+        auto [result, processThread] = createSshServer();
+        ASSERT_TRUE(result);
+        auto joiner = Nui::ScopeExit{[&]() noexcept {
+            result->command("exit");
+            if (processThread.joinable())
+                processThread.join();
+        }};
+
+        auto sessionScope = [this, &result]() {
+            auto expectedSession = makePasswordTestSession(result->port);
+
+            ASSERT_TRUE(expectedSession.has_value());
+            auto session = std::move(expectedSession).value();
+            session->start();
 
             auto expectedChannel = session->createPtyChannel({}).get();
             ASSERT_TRUE(expectedChannel.has_value());
@@ -268,7 +289,8 @@ namespace SecureShell::Test
         auto [result, processThread] = createSshServer();
         ASSERT_TRUE(result);
         auto joiner = Nui::ScopeExit{[&]() noexcept {
-            result->command("exit");
+            // result->command("exit");
+            result->terminate();
             if (processThread.joinable())
                 processThread.join();
         }};
@@ -392,5 +414,107 @@ namespace SecureShell::Test
         };
 
         ASSERT_NO_FATAL_FAILURE(sessionScope());
+    }
+
+    TEST_F(SshSessionTests, CannotStartReadingOnClosedChannel)
+    {
+        auto [result, processThread] = createSshServer();
+        ASSERT_TRUE(result);
+        auto joiner = Nui::ScopeExit{[&]() noexcept {
+            result->command("exit");
+            if (processThread.joinable())
+                processThread.join();
+        }};
+
+        auto expectedSession = makePasswordTestSession(result->port);
+
+        ASSERT_TRUE(expectedSession.has_value());
+        auto session = std::move(expectedSession).value();
+        session->start();
+
+        auto expectedChannel = session->createPtyChannel({}).get();
+        ASSERT_TRUE(expectedChannel.has_value());
+        auto channel = expectedChannel.value().lock();
+
+        channel->close();
+
+        std::promise<void> awaiter{};
+        EXPECT_THROW(channelStartReading(channel, awaiter), std::runtime_error);
+    }
+
+    TEST_F(SshSessionTests, CannotWriteAfterChannelClose)
+    {
+        auto [result, processThread] = createSshServer();
+        ASSERT_TRUE(result);
+        auto joiner = Nui::ScopeExit{[&]() noexcept {
+            result->command("exit");
+            if (processThread.joinable())
+                processThread.join();
+        }};
+
+        auto expectedSession = makePasswordTestSession(result->port);
+
+        ASSERT_TRUE(expectedSession.has_value());
+        auto session = std::move(expectedSession).value();
+        session->start();
+
+        auto expectedChannel = session->createPtyChannel({}).get();
+        ASSERT_TRUE(expectedChannel.has_value());
+        auto channel = expectedChannel.value().lock();
+
+        channel->close();
+
+        EXPECT_EQ(channel->write("ls -lah"), false);
+    }
+
+    TEST_F(SshSessionTests, CannotResizePtyAfterChannelClose)
+    {
+        auto [result, processThread] = createSshServer();
+        ASSERT_TRUE(result);
+        auto joiner = Nui::ScopeExit{[&]() noexcept {
+            result->command("exit");
+            if (processThread.joinable())
+                processThread.join();
+        }};
+
+        auto expectedSession = makePasswordTestSession(result->port);
+
+        ASSERT_TRUE(expectedSession.has_value());
+        auto session = std::move(expectedSession).value();
+        session->start();
+
+        auto expectedChannel = session->createPtyChannel({}).get();
+        ASSERT_TRUE(expectedChannel.has_value());
+        auto channel = expectedChannel.value().lock();
+
+        channel->close();
+
+        auto resizeFut = channel->resizePty(80, 24);
+        ASSERT_EQ(resizeFut.wait_for(5s), std::future_status::ready);
+        EXPECT_EQ(resizeFut.get(), SSH_ERROR);
+    }
+
+    TEST_F(SshSessionTests, CannotCloseChannelTwice)
+    {
+        auto [result, processThread] = createSshServer();
+        ASSERT_TRUE(result);
+        auto joiner = Nui::ScopeExit{[&]() noexcept {
+            result->command("exit");
+            if (processThread.joinable())
+                processThread.join();
+        }};
+
+        auto expectedSession = makePasswordTestSession(result->port);
+
+        ASSERT_TRUE(expectedSession.has_value());
+        auto session = std::move(expectedSession).value();
+        session->start();
+
+        auto expectedChannel = session->createPtyChannel({}).get();
+        ASSERT_TRUE(expectedChannel.has_value());
+        auto channel = expectedChannel.value().lock();
+
+        channel->close();
+        EXPECT_FALSE(channel->close());
     }
 }

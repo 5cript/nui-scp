@@ -1,11 +1,11 @@
 #pragma once
 
-#include "utility/awaiter.hpp"
+#include <utility/awaiter.hpp>
 #include <ssh/async/processing_thread.hpp>
+#include <ssh/async/processing_strand.hpp>
 
 #include <gtest/gtest.h>
 
-#include <future>
 #include <latch>
 #include <thread>
 
@@ -74,7 +74,7 @@ namespace SecureShell::Test
         Awaiter awaiter{};
         {
             ProcessingThread processingThread;
-            processingThread.start(std::chrono::milliseconds{1}, std::chrono::milliseconds{100});
+            processingThread.start(std::chrono::milliseconds{1});
             for (unsigned int i = 0; i < ProcessingThread::maximumTasksProcessableAtOnce * 3; ++i)
             {
                 EXPECT_TRUE(processingThread.pushTask([&counter, &awaiter] {
@@ -338,5 +338,148 @@ namespace SecureShell::Test
         processingThread.pushPermanentTask([] {});
         processingThread.clearPermanentTasks();
         EXPECT_EQ(0, processingThread.permanentTaskCount());
+    }
+
+    TEST_F(ProcessingThreadTest, CanWaitForCycle)
+    {
+        ProcessingThread processingThread;
+        processingThread.start(std::chrono::milliseconds{1});
+        EXPECT_TRUE(processingThread.awaitCycle());
+    }
+
+    TEST_F(ProcessingThreadTest, CanWaitForCyclesMultipleTimes)
+    {
+        ProcessingThread processingThread;
+        processingThread.start(std::chrono::milliseconds{1});
+        for (int i = 0; i < 5; ++i)
+        {
+            EXPECT_TRUE(processingThread.awaitCycle());
+        }
+    }
+
+    TEST_F(ProcessingThreadTest, CanMakeStrandAndPushTaskThroughIt)
+    {
+        ProcessingThread processingThread;
+        processingThread.start(std::chrono::milliseconds{1});
+        auto strand = processingThread.createStrand();
+        strand->pushTask([] {});
+        processingThread.stop();
+    }
+
+    TEST_F(ProcessingThreadTest, CanMakeStrandAndPushPermanentTaskThroughIt)
+    {
+        ProcessingThread processingThread;
+        processingThread.start(std::chrono::milliseconds{1});
+        auto strand = processingThread.createStrand();
+        strand->pushPermanentTask([] {});
+        processingThread.stop();
+    }
+
+    TEST_F(ProcessingThreadTest, TaskInStrandIsExecuted)
+    {
+        Awaiter awaiter{};
+        ProcessingThread processingThread;
+        processingThread.start(std::chrono::milliseconds{1});
+        auto strand = processingThread.createStrand();
+        strand->pushTask([&awaiter] {
+            awaiter.arrive();
+        });
+        ASSERT_TRUE(awaiter.waitFor());
+    }
+
+    TEST_F(ProcessingThreadTest, PermanentTaskInStrandIsExecuted)
+    {
+        Awaiter awaiter{};
+        ProcessingThread processingThread;
+        processingThread.start(std::chrono::milliseconds{1});
+        auto strand = processingThread.createStrand();
+        auto result = strand->pushPermanentTask([&awaiter] {
+            awaiter.arrive();
+        });
+        ASSERT_TRUE(result.first);
+        ASSERT_TRUE(awaiter.waitFor());
+    }
+
+    TEST_F(ProcessingThreadTest, CannotPushTaskAfterFinalTask)
+    {
+        ProcessingThread processingThread;
+        processingThread.start(std::chrono::milliseconds{1});
+        auto strand = processingThread.createStrand();
+        strand->pushFinalTask([] {});
+        EXPECT_FALSE(strand->pushTask([] {}));
+    }
+
+    TEST_F(ProcessingThreadTest, CannotPushPermanentTaskAfterFinalTask)
+    {
+        ProcessingThread processingThread;
+        processingThread.start(std::chrono::milliseconds{1});
+        auto strand = processingThread.createStrand();
+        strand->pushFinalTask([] {});
+        EXPECT_FALSE(strand->pushPermanentTask([] {}).first);
+    }
+
+    TEST_F(ProcessingThreadTest, CanPushFinalTaskAfterFinalTask)
+    {
+        ProcessingThread processingThread;
+        processingThread.start(std::chrono::milliseconds{1});
+        auto strand = processingThread.createStrand();
+        strand->pushFinalTask([] {});
+        EXPECT_NO_THROW(strand->pushFinalTask([] {}));
+    }
+
+    TEST_F(ProcessingThreadTest, FinalTaskRemovesAllPermanentTasks)
+    {
+        ProcessingThread processingThread;
+        processingThread.start(std::chrono::milliseconds{1});
+        auto strand = processingThread.createStrand();
+        strand->pushPermanentTask([] {});
+        strand->pushPermanentTask([] {});
+        strand->pushPermanentTask([] {});
+        strand->pushFinalTask([] {});
+        EXPECT_EQ(0, processingThread.permanentTaskCount());
+    }
+
+    TEST_F(ProcessingThreadTest, CanPushFinalFromTask)
+    {
+        Awaiter awaiter{};
+        ProcessingThread processingThread;
+        processingThread.start(std::chrono::milliseconds{1});
+        auto strand = processingThread.createStrand();
+        strand->pushTask([&strand, &awaiter] {
+            strand->pushFinalTask([&awaiter] {
+                awaiter.arrive();
+            });
+        });
+        ASSERT_TRUE(awaiter.waitFor());
+    }
+
+    TEST_F(ProcessingThreadTest, CanPushFinalFromPermanentTask)
+    {
+        Awaiter awaiter{};
+        ProcessingThread processingThread;
+        processingThread.start(std::chrono::milliseconds{1});
+        auto strand = processingThread.createStrand();
+        strand->pushPermanentTask([&strand, &awaiter] {
+            strand->pushFinalTask([&awaiter] {
+                awaiter.arrive();
+            });
+        });
+        ASSERT_TRUE(awaiter.waitFor());
+    }
+
+    TEST_F(ProcessingThreadTest, CanPushFinalFromTaskFromPermanentTask)
+    {
+        Awaiter awaiter{};
+        ProcessingThread processingThread;
+        processingThread.start(std::chrono::milliseconds{1});
+        auto strand = processingThread.createStrand();
+        strand->pushPermanentTask([&strand, &awaiter] {
+            strand->pushTask([&strand, &awaiter] {
+                strand->pushFinalTask([&awaiter] {
+                    awaiter.arrive();
+                });
+            });
+        });
+        ASSERT_TRUE(awaiter.waitFor());
     }
 }

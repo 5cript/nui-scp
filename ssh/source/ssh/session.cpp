@@ -7,16 +7,34 @@
 
 namespace SecureShell
 {
+    namespace
+    {
+        void removeFromContainer(auto& container, auto* ptr, bool isBackElement)
+        {
+            if (isBackElement && container.back().get() == ptr)
+            {
+                container.pop_back();
+            }
+            else
+            {
+                auto it = std::find_if(container.begin(), container.end(), [ptr](const auto& c) {
+                    return c.get() == ptr;
+                });
+                if (it != container.end())
+                    container.erase(it);
+            }
+        }
+    }
+
     Session::Session()
         : processingThread_{}
         , session_{}
         , channels_{}
-        , channelsToRemove_{}
     {}
 
     void Session::start()
     {
-        processingThread_.start(std::chrono::milliseconds{100}, std::chrono::milliseconds{1});
+        processingThread_.start(std::chrono::milliseconds{1});
     }
 
     void Session::stop()
@@ -33,10 +51,8 @@ namespace SecureShell
     {
         removeAllChannels();
         removeAllSftpSessions();
-        processingThread_.pushTask([this]() {
-            session_.disconnect();
-        });
         processingThread_.stop();
+        session_.disconnect();
     }
 
     Session::~Session()
@@ -46,80 +62,34 @@ namespace SecureShell
 
     void Session::removeAllChannels()
     {
-        processingThread_.pushTask([this]() {
-            if (!channelsToRemove_.empty())
-                removalTask();
-            channelsToRemove_ = std::move(channels_);
-            removalTask();
-        });
-    }
-
-    void Session::channelRemoveItself(Channel* channel)
-    {
-        if (channel)
+        while (!channels_.empty())
         {
-            processingThread_.pushTask([this, channel]() {
-                auto it = std::find_if(channels_.begin(), channels_.end(), [channel](const auto& c) {
-                    return c.get() == channel;
-                });
-                if (it != channels_.end())
-                {
-                    channelsToRemove_.push_back(*it);
-                    channels_.erase(it);
-                    processingThread_.pushTask([this]() {
-                        removalTask();
-                    });
-                }
-                else
-                {
-                    // Possibly already flagged for removal
-                }
-            });
-        }
-    }
-
-    void Session::removalTask()
-    {
-        for (const auto& toRemove : channelsToRemove_)
-        {
-            auto& channel = static_cast<ssh::Channel&>(*toRemove);
-            if (channel.isOpen())
-            {
-                channel.sendEof();
-                channel.close();
-            }
-        }
-        channelsToRemove_.clear();
-    }
-
-    void Session::sftpSessionRemoveItself(SftpSession* sftpSession)
-    {
-        if (sftpSession)
-        {
-            processingThread_.pushTask([this, sftpSession]() {
-                auto it = std::find_if(sftpSessions_.begin(), sftpSessions_.end(), [sftpSession](const auto& s) {
-                    return s.get() == sftpSession;
-                });
-                if (it != sftpSessions_.end())
-                {
-                    sftpSessions_.erase(it);
-                }
-            });
+            channels_.back()->close(true);
         }
     }
 
     void Session::removeAllSftpSessions()
     {
-        processingThread_.pushTask([this]() {
-            sftpSessions_.clear();
-        });
+        while (!sftpSessions_.empty())
+        {
+            sftpSessions_.back()->close(false);
+        }
+    }
+
+    void Session::channelRemoveItself(Channel* channel, bool isBackElement)
+    {
+        removeFromContainer(channels_, channel, isBackElement);
+    }
+    void Session::sftpSessionRemoveItself(SftpSession* sftpSession, bool isBackElement)
+    {
+        removeFromContainer(sftpSessions_, sftpSession, isBackElement);
     }
 
     std::future<std::expected<std::weak_ptr<Channel>, int>> Session::createPtyChannel(PtyCreationOptions options)
     {
         auto promise = std::make_shared<std::promise<std::expected<std::weak_ptr<Channel>, int>>>();
-        auto fut = promise->get_future();
-        processingThread_.pushTask([this, options = std::move(options), promise = std::move(promise)]() mutable {
+
+        processingThread_.pushTask([this, options = std::move(options), promise]() mutable {
             auto ptyChannel = std::make_unique<ssh::Channel>(session_);
             auto& channel = *ptyChannel;
             auto result = Detail::sequential(
@@ -152,11 +122,13 @@ namespace SecureShell
                 return promise->set_value(std::unexpected(session_.getErrorCode()));
             }
 
-            auto sharedChannel = std::make_shared<Channel>(this, std::move(ptyChannel));
+            auto sharedChannel =
+                std::make_shared<Channel>(this, processingThread_.createStrand(), std::move(ptyChannel));
             channels_.push_back(sharedChannel);
             return promise->set_value(sharedChannel);
         });
-        return fut;
+
+        return promise->get_future();
     }
 
     std::future<std::expected<std::weak_ptr<SftpSession>, SftpError>> Session::createSftpSession()
@@ -185,7 +157,7 @@ namespace SecureShell
                 sftp_free(sftp);
             }
 
-            auto sftpSession = std::make_shared<SftpSession>(this, sftp);
+            auto sftpSession = std::make_shared<SftpSession>(this, processingThread_.createStrand(), sftp);
             promise->set_value(sftpSession);
             sftpSessions_.push_back(sftpSession);
         });
@@ -436,6 +408,18 @@ namespace SecureShell
                         const auto result = static_cast<ssh::Session&>(*session).userauthPassword(buf.data());
                         if (result == SSH_AUTH_SUCCESS)
                             return (int)SSH_AUTH_SUCCESS;
+                    }
+                }
+
+                if (sessionOptions.passwordUnsafe)
+                {
+                    buf = sessionOptions.passwordUnsafe.value();
+                    const auto result = static_cast<ssh::Session&>(*session).userauthPassword(buf.data());
+                    if (result == SSH_AUTH_SUCCESS)
+                    {
+                        if (pwCache)
+                            pwCache->emplace_back(sessionOptions.user, sessionOptions.host, sessionOptions.port, buf);
+                        return (int)SSH_AUTH_SUCCESS;
                     }
                 }
 

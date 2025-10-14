@@ -35,6 +35,21 @@ namespace SecureShell::Test
         }
     }
 
+    void NodeProcessResult::terminate()
+    {
+        if (killed)
+            return;
+        killed = true;
+        try
+        {
+            mainModule->terminate();
+        }
+        catch (std::exception const& e)
+        {
+            std::cerr << "Failed to terminate process: " << e.what() << std::endl;
+        }
+    }
+
     void npmInstall(
         boost::asio::any_io_executor executor,
         std::filesystem::path const& directory,
@@ -74,7 +89,7 @@ namespace SecureShell::Test
 
     std::shared_ptr<NodeProcessResult> nodeProcess(
         boost::asio::any_io_executor executor,
-        TemporaryDirectory const& isolateDirectory,
+        Utility::TemporaryDirectory const& isolateDirectory,
         std::string const& program)
     {
         using namespace std::string_literals;
@@ -87,27 +102,11 @@ namespace SecureShell::Test
         const auto nodeExecutable = boost::process::v2::filesystem::path{std::string{node}};
 
         auto result = std::make_shared<NodeProcessResult>(
-            boost::asio::deadline_timer{executor, boost::posix_time::seconds{processKillTimer.count()}},
+            boost::asio::steady_timer{executor, processKillTimer},
             boost::asio::writable_pipe{executor},
             boost::asio::readable_pipe{executor},
             boost::asio::readable_pipe{executor},
             nullptr);
-
-#ifdef _WIN32
-        const auto nodeShell = MSYS2_BASH;
-        const auto nodeCommandArgs = std::vector<std::string>{
-            "--login",
-            "-i",
-            "-c",
-            "\"cd "s + isolateDirectory.path().generic_string() + " && node ./main.mjs --log-file=./log.txt\"",
-        };
-#else
-        const auto nodeShell = "/bin/bash";
-        const auto nodeCommandArgs = std::vector<std::string>{
-            "-c",
-            "cd "s + isolateDirectory.path().generic_string() + " && node ./main.mjs --log-file=./log.txt",
-        };
-#endif
 
         result->mainModule = std::make_unique<boost::process::v2::process>(
             executor,
@@ -127,7 +126,14 @@ namespace SecureShell::Test
             if (auto result = weak.lock())
             {
                 result->killed = true;
-                result->mainModule->terminate();
+                try
+                {
+                    result->mainModule->terminate();
+                }
+                catch (std::exception const& e)
+                {
+                    std::cerr << "Failed to terminate process: " << e.what() << std::endl;
+                }
             }
         });
 

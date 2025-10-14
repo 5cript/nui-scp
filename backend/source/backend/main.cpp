@@ -158,11 +158,11 @@ Main::Main(int const, char const* const* argv)
     , hub_{window_}
     , processes_{window_.getExecutor(), window_, hub_}
     , prompter_{hub_}
-    , sshSessionManager_{}
+    , sshSessionManager_{std::make_shared<SessionManager>(window_.getExecutor(), stateHolder_, window_, hub_)}
     , shuttingDown_{false}
     , childSignalTimer_{window_.getExecutor()}
 {
-    sshSessionManager_.addPasswordProvider(-99, &prompter_);
+    sshSessionManager_->addPasswordProvider(-99, &prompter_);
 
     stateHolder_.load([](bool success, Persistence::StateHolder& holder) {
         if (!success)
@@ -174,6 +174,7 @@ Main::Main(int const, char const* const* argv)
 Main::~Main()
 {
     shuttingDown_ = true;
+    // sshSessionManager_->stopUpdateDispatching();
     childSignalTimer_.cancel();
 }
 
@@ -189,7 +190,7 @@ void Main::registerRpc()
     Log::setupBackendRpcHub(&hub_);
     stateHolder_.registerRpc(hub_);
     processes_.registerRpc(window_, hub_);
-    sshSessionManager_.registerRpc(window_, hub_);
+    sshSessionManager_->registerRpc();
 }
 
 void Main::show()
@@ -261,10 +262,12 @@ int main(int const argc, char const* const* argv)
 
     ssh_init();
 
-    Main m{argc, argv};
-    m.registerRpc();
-    m.startChildSignalTimer();
-    m.show();
+    {
+        Main m{argc, argv};
+        m.registerRpc();
+        m.startChildSignalTimer();
+        m.show();
+    }
 
     ssh_finalize();
 }
