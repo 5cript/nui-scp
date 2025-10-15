@@ -10,6 +10,7 @@ add_library(
         state/terminal_theme.cpp
         state/termios.cpp
         state/ui_options.cpp
+        state/queue_options.cpp
         state_holder.cpp
 )
 

@@ -61,6 +61,7 @@ namespace Persistence
             {"type", engine.type},
             {"terminalOptions", engine.terminalOptions},
             {"termios", engine.termios},
+            {"queueOptions", engine.queueOptions},
         };
 
         Utility::visitOverloaded(
@@ -116,6 +117,37 @@ namespace Persistence
 
         if (j.contains("layouts"))
             engine.layouts = j.at("layouts");
+
+        if (j.contains("queueOptions"))
+            j.at("queueOptions").get_to(engine.queueOptions);
+    }
+    void TerminalEngine::useDefaultsFrom(TerminalEngine const& other)
+    {
+        if (!orderBy)
+            orderBy = other.orderBy;
+        if (!startupSession)
+            startupSession = other.startupSession;
+        terminalOptions.useDefaultsFrom(other.terminalOptions.value());
+        termios.useDefaultsFrom(other.termios.value());
+        if (std::holds_alternative<std::monostate>(engine))
+            engine = other.engine;
+        else
+        {
+            Utility::visitOverloaded(
+                engine,
+                [&](ExecutingTerminalEngine& e) {
+                    if (auto* otherEngine = std::get_if<ExecutingTerminalEngine>(&other.engine); otherEngine)
+                        e.useDefaultsFrom(*otherEngine);
+                },
+                [&](SshTerminalEngine& e) {
+                    if (auto* otherEngine = std::get_if<SshTerminalEngine>(&other.engine); otherEngine)
+                        e.useDefaultsFrom(*otherEngine);
+                },
+                [](std::monostate) {});
+        }
+        if (!layouts)
+            layouts = other.layouts;
+        queueOptions.useDefaultsFrom(other.queueOptions.value());
     }
 
     ExecutingTerminalEngine defaultMsys2TerminalEngine()

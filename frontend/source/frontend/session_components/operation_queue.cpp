@@ -508,6 +508,26 @@ OperationQueue::OperationQueue(
           std::make_unique<Implementation>(stateHolder, events, std::move(persistenceSessionName), confirmDialog),
       }
 {
+    impl_->stateHolder->load(
+        [this, name = impl_->persistenceSessionName](bool success, Persistence::StateHolder& holder) {
+            if (!success)
+                return;
+
+            auto const& state = holder.stateCache().fullyResolve();
+
+            auto iter = state.sessions.find(name);
+            if (iter == end(state.sessions))
+            {
+                Log::error("No options found for name: {}", name);
+                return;
+            }
+
+            auto [engineKey, engine] = *iter;
+            impl_->paused = engine.queueOptions->startInPausedState.value_or(true);
+            *impl_->autoClean = engine.queueOptions->autoRemoveCompletedOperations.value_or(false);
+            Nui::globalEventContext.executeActiveEventsImmediately();
+        });
+
     Nui::setInterval(
         1000,
         [this]() {
@@ -814,6 +834,14 @@ Nui::ElementRenderer OperationQueue::operator()()
                 "design"_prop = "Graphical",
                 "change"_event = [this](Nui::val event) {
                     *impl_->autoClean = event["target"]["checked"].as<bool>();
+                    impl_->stateHolder->load([this, name = impl_->persistenceSessionName](bool success, Persistence::StateHolder& holder) {
+                        if (!success)
+                            return;
+
+                        auto iter = holder.stateCache().sessions.find(name);
+                        iter->second.queueOptions->autoRemoveCompletedOperations = impl_->autoClean->value();
+                        holder.save([]() {});
+                    });
                 }
             }(),
             div{
