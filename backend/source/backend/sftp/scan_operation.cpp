@@ -24,9 +24,43 @@ std::expected<void, ScanOperation::Error> ScanOperation::scanOnce(std::filesyste
         return enterErrorState<void>({.type = ErrorType::SftpError, .sftpError = result.error()});
 
     // Dont copy "." and ".." over:
-    std::copy_if(result->begin(), result->end(), std::back_inserter(entries_), [](auto const& entry) {
+    auto backInserter = std::back_inserter(entries_);
+    const auto checkDotAndDotDot = [](auto const& entry) {
         return entry.path.filename() != "." && entry.path.filename() != "..";
-    });
+    };
+    const auto checkDot = [](auto const& entry) {
+        return entry.path.filename() != ".";
+    };
+    const auto checkDotDot = [](auto const& entry) {
+        return entry.path.filename() != "..";
+    };
+    std::function<bool(SharedData::DirectoryEntry const&)> filter = checkDotAndDotDot;
+    enum Filter
+    {
+        Both,
+        Dot,
+        DotDot
+    } currentFilter = Both;
+    auto iter = result->begin();
+    auto end = result->end();
+    for (; iter != end; ++iter)
+    {
+        if (filter(*iter))
+            *backInserter++ = *iter;
+        else
+        {
+            if (currentFilter == Both)
+                currentFilter = iter->path.filename() == "." ? Filter::DotDot : Filter::Dot;
+            else
+                break;
+
+            if (currentFilter == Dot)
+                filter = checkDot;
+            else
+                filter = checkDotDot;
+        }
+    }
+    std::copy(iter, end, backInserter);
     return {};
 }
 
