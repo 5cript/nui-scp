@@ -266,7 +266,8 @@ void Session::setupFileGrid()
         Log::info("Download items requested: {}", items.size());
         for (const auto& item : items)
         {
-            Log::info("Item: {}", item.path.generic_string());
+
+            Log::debug("Item: {}", item.path.generic_string());
         }
 
         if (items.empty())
@@ -302,10 +303,12 @@ void Session::setupFileGrid()
                  }
 
                  std::vector<std::pair<std::filesystem::path, std::filesystem::path>> downloadItems;
-                 std::transform(items.begin(), items.end(), std::back_inserter(downloadItems), [](auto const& item) {
-                     // TODO: Proper target path handling:
-                     return std::make_pair(item.path, "D:/DownloadTemp" / item.path.filename());
-                 });
+                 std::transform(
+                     items.begin(), items.end(), std::back_inserter(downloadItems), [this](auto const& item) {
+                         // TODO: Proper target path handling:
+                         return std::make_pair(
+                             impl_->currentPath / item.path, "D:/DownloadTemp" / item.path.filename());
+                     });
 
                  Log::info("Downloading items");
                  for (const auto& item : downloadItems)
