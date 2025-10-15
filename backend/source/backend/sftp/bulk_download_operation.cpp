@@ -22,7 +22,7 @@ std::expected<BulkDownloadOperation::WorkStatus, BulkDownloadOperation::Error> B
 
     // TODO: Not implemented yet
 
-    return enterErrorState<WorkStatus>({.type = Operation::ErrorType::CannotWorkFailedOperation});
+    return WorkStatus::Complete;
 }
 
 SharedData::OperationType BulkDownloadOperation::type() const

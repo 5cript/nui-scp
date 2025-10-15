@@ -2,6 +2,7 @@
 #include <frontend/components/progress_bar.hpp>
 #include <frontend/observed_random_access_map.hpp>
 #include <shared_data/file_operations/download_progress.hpp>
+#include <shared_data/file_operations/scan_progress.hpp>
 #include <shared_data/file_operations/operation_added.hpp>
 #include <shared_data/file_operations/operation_type.hpp>
 #include <shared_data/file_operations/operation_error_type.hpp>
@@ -12,6 +13,7 @@
 #include <shared_data/error_or_success.hpp>
 #include <utility/convert_naming_convention.hpp>
 #include <utility/visit_overloaded.hpp>
+#include <utility/format_bytes.hpp>
 
 #include <log/log.hpp>
 #include <nui/frontend/attributes.hpp>
@@ -27,12 +29,13 @@
 #include <variant>
 #include <map>
 #include <chrono>
+#include <string_view>
 
 using namespace std::chrono_literals;
 
 namespace
 {
-    constexpr std::string_view progressHeight = "15px";
+    constexpr std::string_view progressHeight{"15px"};
 
     namespace Svgs
     {
@@ -118,25 +121,132 @@ namespace
         {
             namespace svg = Nui::Elements::Svg;
             namespace svga = Nui::Attributes::Svg;
+            using namespace Nui::Attributes;
 
             // clang-format off
             return svg::svg {
                 svga::viewBox = "0 0 24 24",
                 svga::fill = "none",
             }(
-                svg::path {
-                    svga::d = "M3 7v4a4 4 0 0 0 4 4h10",
+                // Circle (lens)
+                svg::circle {
+                    svga::cx = "11",
+                    svga::cy = "11",
+                    svga::r = "7",
+                    svga::stroke = "currentColor",
+                    svga::strokeWidth = "1.6",
+                }(),
+                // Handle
+                svg::line {
+                    "x1"_attr = "16.65",
+                    "y1"_attr = "16.65",
+                    "x2"_attr = "21",
+                    "y2"_attr = "21",
+                    svga::stroke = "currentColor",
+                    svga::strokeWidth = "1.6",
+                    svga::strokeLinecap = "round",
+                }()
+            );
+            // clang-format on
+        }
+
+        Nui::ElementRenderer scanAnimated()
+        {
+            namespace svg = Nui::Elements::Svg;
+            namespace svga = Nui::Attributes::Svg;
+            using namespace Nui::Attributes;
+
+            // clang-format off
+            return svg::svg {
+                svga::viewBox = "0 0 24 24",
+                svga::fill = "none",
+                "xmlns"_attr = "http://www.w3.org/2000/svg"
+            }(
+                // Lens (circle)
+                svg::circle {
+                    svga::cx = "11",
+                    svga::cy = "11",
+                    svga::r = "7",
                     svga::stroke = "currentColor",
                     svga::strokeWidth = "1.6",
                     svga::strokeLinecap = "round",
                     svga::strokeLinejoin = "round"
                 }(),
-                svg::path {
-                    svga::d = "M21 17v-4a4 4 0 0 0-4-4H7",
-                    svga::stroke = "currentColor",
-                    svga::strokeWidth = "1.6",
-                    svga::strokeLinecap = "round",
-                    svga::strokeLinejoin = "round"
+
+                // Moving scan line inside the lens (thin rounded rect)
+                svg::rect {
+                    // place rectangle inside circle bounds (left aligned at x=5 to right at x=17)
+                    svga::x = "5",
+                    svga::y = "6",           // starting y — animate will update this
+                    svga::width = "12",
+                    svga::height = "0.9",
+                    svga::rx = "0.45",      // rounded corners to make it look like a soft line
+                    svga::fill = "currentColor",
+                    svga::opacity = "0.18",
+                    svga::clipPath = "url(#lensClip)" // clip to the lens so it doesn't draw outside
+                }(
+                    // animate y position: 6 -> 16 -> 6 (loop)
+                    svg::animate {
+                        svga::attributeName = "y",
+                        svga::values = "6;16;6",
+                        svga::dur = "1.6s",
+                        svga::repeatCount = "indefinite",
+                        svga::keyTimes = "0;0.5;1",
+                        svga::calcMode = "linear"
+                    }()
+                ),
+
+                // optional faint pulse on the leading edge to suggest scanning sweep (subtle)
+                svg::rect {
+                    svga::x = "5",
+                    svga::y = "6",
+                    svga::width = "12",
+                    svga::height = "0.9",
+                    svga::rx = "0.45",
+                    svga::fill = "currentColor",
+                    svga::opacity = "0.0",
+                    svga::clipPath = "url(#lensClip)"
+                }(
+                    svg::animate {
+                        svga::attributeName = "opacity",
+                        svga::values = "0;0.28;0",
+                        svga::dur = "1.6s",
+                        svga::repeatCount = "indefinite",
+                        svga::keyTimes = "0;0.5;1"
+                    }(),
+                    // animate the opacity slightly offset (so the pulse follows the scan line)
+                    svg::animateTransform {
+                        svga::attributeName = "transform",
+                        svga::type = "translate",
+                        svga::values = "0 0; 0 10; 0 0",
+                        svga::dur = "1.6s",
+                        svga::repeatCount = "indefinite"
+                    }()
+                ),
+
+                // Clip path matching the lens so scan line stays inside the circle
+                svg::defs {}(
+                    svg::clipPath {
+                        svga::id = "lensClip"
+                    }(
+                        svg::circle {
+                            svga::cx = "11",
+                            svga::cy = "11",
+                            svga::r = "7"
+                        }()
+                    )
+                ),
+
+                // Handle
+                svg::line {
+                    "x1"_attr = "16.65",
+                    "y1"_attr = "16.65",
+                    "x2"_attr = "21",
+                    "y2"_attr = "21",
+                    "stroke"_attr = "currentColor",
+                    "strokeWidth"_attr = "1.6",
+                    "strokeLinecap"_attr = "round",
+                    "strokeLinejoin"_attr = "round"
                 }()
             );
             // clang-format on
@@ -173,6 +283,11 @@ namespace
             return state_.value();
         }
 
+        virtual std::string statusText() const
+        {
+            return fmt::format("status: {}", formattedState());
+        }
+
         Nui::ElementRenderer operator()() const
         {
             using namespace Nui::Elements;
@@ -202,18 +317,22 @@ namespace
                     div {
                         class_ = "opq-type"
                     }(
+                        observe(state_),
                         [this]() -> Nui::ElementRenderer {
                             if (type_ == SharedData::OperationType::Download)
                                 return Svgs::download();
                             else if (type_ == SharedData::OperationType::Upload)
                                 return Svgs::upload();
-                            else if (type_ == SharedData::OperationType::Rename)
-                                return Svgs::scan();
-                            else if (type_ == SharedData::OperationType::Delete)
-                                return Svgs::scan();
+                            else if (type_ == SharedData::OperationType::Scan)
+                            {
+                                if (isCompletedState())
+                                    return Svgs::scan();
+                                else
+                                    return Svgs::scanAnimated();
+                            }
                             else
                                 return div{}("UnknownType");
-                        }()
+                        }
                     ),
                     div {
                         class_ = "opq-title"
@@ -225,7 +344,7 @@ namespace
                         }(
                             Nui::observe(state_),
                             [this]() -> std::string {
-                                return fmt::format("status: {}", formattedState());
+                                return static_cast<Derived const*>(this)->statusText();
                             }
                         )
                     ),
@@ -406,11 +525,89 @@ namespace
         std::filesystem::path remotePath_;
     };
 
+    class DisplayedScanOperation : public OperationCard<DisplayedScanOperation>
+    {
+      public:
+        DisplayedScanOperation(
+            Ids::OperationId operationId,
+            std::function<void(OperationCard const& operation)> doRemoveSelf,
+            std::shared_ptr<Nui::Observed<bool>> doDeletionCountdown)
+            : OperationCard{
+                  SharedData::OperationType::Scan,
+                  std::move(operationId),
+                  std::move(doRemoveSelf),
+                  std::move(doDeletionCountdown)}
+        {}
+
+        Nui::ElementRenderer body() const
+        {
+            using namespace Nui::Elements;
+            using namespace Nui::Attributes;
+            using Nui::Elements::div;
+            using Nui::Elements::span;
+
+            // clang-format off
+            return div{
+                class_ = observe(state_).generate([this](){
+                    if (isCompletedState())
+                        return "opq-body opq-collapsed";
+                    else
+                        return "opq-body";
+                }),
+            }(
+                div {
+                    style = "margin-top: 8px, font-size: 13px; color: var(--muted);"
+                }(
+                    observe(totalBytes_, currentIndex_, totalScanned_).generate([this]() -> std::string {
+                        return fmt::format(
+                            "Scanned a total of {} items, currently at item {} ({} total).",
+                            totalScanned_.value(),
+                            currentIndex_.value(),
+                            Utility::formatBytes(totalBytes_.value(), Utility::determineOrderOfMagnitude(totalBytes_.value())));
+                    })
+                )
+            );
+            // clang-format on
+        }
+
+        void setProgress(std::uint64_t totalBytes, std::uint64_t currentIndex, std::uint64_t totalScanned)
+        {
+            totalBytes_ = totalBytes;
+            currentIndex_ = currentIndex;
+            totalScanned_ = totalScanned;
+            Nui::globalEventContext.executeActiveEventsImmediately();
+        }
+
+        std::string title() const
+        {
+            return "Scanning remote directory";
+        }
+
+        bool warrantsCancelConfirm() const override
+        {
+            return true;
+        }
+
+        std::string statusText() const override
+        {
+            return fmt::format(
+                "status: {}, scanned {} items of size {}",
+                formattedState(),
+                totalScanned_.value(),
+                Utility::formatBytes(totalBytes_.value(), Utility::determineOrderOfMagnitude(totalBytes_.value())));
+        }
+
+      private:
+        Nui::Observed<std::uint64_t> totalBytes_{0ull};
+        Nui::Observed<std::uint64_t> currentIndex_{0ull};
+        Nui::Observed<std::uint64_t> totalScanned_{0ull};
+    };
+
     struct DisplayedOperation
     {
         Ids::OperationId operationId;
         SharedData::OperationType type;
-        std::variant<std::monostate, DisplayedDownloadOperation> details;
+        std::variant<std::monostate, DisplayedDownloadOperation, DisplayedScanOperation> details;
 
         Ids::OperationId key() const
         {
@@ -531,7 +728,7 @@ OperationQueue::OperationQueue(
     Nui::setInterval(
         1000,
         [this]() {
-            if (impl_->autoClean && !impl_->operations.empty())
+            if (impl_->autoClean->value() && !impl_->operations.empty())
             {
                 auto now = std::chrono::steady_clock::now();
                 bool anyRemoved = false;
@@ -615,14 +812,6 @@ void OperationQueue::activate(FileEngine* fileEngine, Ids::SessionId sessionId)
         Nui::RpcClient::autoRegisterFunction(
             fmt::format("OperationQueue::{}::onOperationAdded", impl_->sessionId.value()),
             [this](SharedData::OperationAdded const& added) {
-                if (!added.localPath || !added.remotePath)
-                {
-                    Log::error(
-                        "Received OperationAdded for operation id: {} without localPath or remotePath",
-                        added.operationId.value());
-                    return;
-                }
-
                 impl_->operations.insert(
                     added.operationId,
                     DisplayedOperation{
@@ -630,6 +819,14 @@ void OperationQueue::activate(FileEngine* fileEngine, Ids::SessionId sessionId)
                         .type = added.type,
                         .details = [&added, this]() -> decltype(DisplayedOperation::details) {
                             if (added.type == SharedData::OperationType::Download)
+                            {
+                                if (!added.localPath || !added.remotePath)
+                                {
+                                    Log::error(
+                                        "Received OperationAdded for operation id: {} without localPath or remotePath",
+                                        added.operationId.value());
+                                    return std::monostate{};
+                                }
                                 return DisplayedDownloadOperation{
                                     added.totalBytes ? static_cast<long long>(*added.totalBytes) : 0,
                                     added.operationId,
@@ -640,6 +837,25 @@ void OperationQueue::activate(FileEngine* fileEngine, Ids::SessionId sessionId)
                                     },
                                     impl_->autoClean,
                                 };
+                            }
+                            else if (added.type == SharedData::OperationType::Scan)
+                            {
+                                if (!added.remotePath)
+                                {
+                                    Log::error(
+                                        "Received OperationAdded for operation id: {} without remotePath",
+                                        added.operationId.value());
+                                    return std::monostate{};
+                                }
+                                // TODO:
+                                return DisplayedScanOperation{
+                                    added.operationId,
+                                    [this](OperationCard<DisplayedScanOperation> const& operation) {
+                                        cancelOperation(operation);
+                                    },
+                                    impl_->autoClean,
+                                };
+                            }
                             return std::monostate{};
                         }()});
                 Nui::globalEventContext.executeActiveEventsImmediately();
@@ -677,6 +893,41 @@ void OperationQueue::activate(FileEngine* fileEngine, Ids::SessionId sessionId)
                     return;
                 }
                 details->setProgress(progress.current - progress.min);
+            }));
+
+    impl_->onUpdate.push_back(
+        Nui::RpcClient::autoRegisterFunction(
+            fmt::format("OperationQueue::{}::onScanProgress", impl_->sessionId.value()),
+            [this](SharedData::ScanProgress const& progress) {
+                Log::debug(
+                    "Received scan progress for operation id: {} - totalBytes: {}, currentIndex: {}, totalItems: {}",
+                    progress.operationId.value(),
+                    progress.totalBytes,
+                    progress.currentIndex,
+                    progress.totalScanned);
+
+                auto* operation = impl_->operations.at(progress.operationId);
+                if (!operation)
+                {
+                    Log::error("Received scan progress for unknown operation id: {}", progress.operationId.value());
+                    return;
+                }
+                if (operation->type != SharedData::OperationType::Scan)
+                {
+                    Log::error(
+                        "Received scan progress for operation id: {} which is not a scan",
+                        progress.operationId.value());
+                    return;
+                }
+                auto* details = std::get_if<DisplayedScanOperation>(&operation->details);
+                if (!details)
+                {
+                    Log::error(
+                        "Received scan progress for operation id: {} which has no scan details",
+                        progress.operationId.value());
+                    return;
+                }
+                details->setProgress(progress.totalBytes, progress.currentIndex, progress.totalScanned);
             }));
 
     impl_->onUpdate.push_back(

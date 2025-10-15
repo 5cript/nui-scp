@@ -53,6 +53,16 @@ class ScanOperation : public Operation
 
     std::expected<void, Error> cancel(bool adoptCancelState) override;
 
+    /**
+     * @brief Eject the scanned directory entries. Careful!: The internal list is moved out.
+     *
+     * @return std::vector<SharedData::DirectoryEntry>
+     */
+    std::vector<SharedData::DirectoryEntry> ejectEntries()
+    {
+        return std::move(entries_);
+    }
+
   private:
     std::expected<void, ScanOperation::Error> scanOnce(std::filesystem::path const& path);
 

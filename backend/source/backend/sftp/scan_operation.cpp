@@ -23,7 +23,10 @@ std::expected<void, ScanOperation::Error> ScanOperation::scanOnce(std::filesyste
     if (!result.has_value())
         return enterErrorState<void>({.type = ErrorType::SftpError, .sftpError = result.error()});
 
-    entries_.insert(entries_.end(), result->begin(), result->end());
+    // Dont copy "." and ".." over:
+    std::copy_if(result->begin(), result->end(), std::back_inserter(entries_), [](auto const& entry) {
+        return entry.path.filename() != "." && entry.path.filename() != "..";
+    });
     return {};
 }
 
@@ -46,7 +49,7 @@ std::expected<ScanOperation::WorkStatus, ScanOperation::Error> ScanOperation::wo
                 return enterErrorState<WorkStatus>(result.error());
             }
             progressCallback_(totalBytes_, currentIndex_, static_cast<std::uint64_t>(entries_.size()));
-            break;
+            return WorkStatus::MoreWork;
         }
         case (Running):
         {

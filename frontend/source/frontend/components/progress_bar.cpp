@@ -1,4 +1,5 @@
 #include <frontend/components/progress_bar.hpp>
+#include <utility/format_bytes.hpp>
 
 #include <nui/frontend/attributes.hpp>
 #include <nui/frontend/elements.hpp>
@@ -74,15 +75,6 @@
 
 namespace
 {
-    enum class OrderOfMagnitude
-    {
-        None = 0,
-        Kilo,
-        Mega,
-        Giga,
-        Tera
-    };
-
     int percentageBetween(long long current, long long min, long long max)
     {
         // Ensure min is less than or equal to max
@@ -99,20 +91,6 @@ namespace
         // Calculate percentage
         return static_cast<int>(100. * static_cast<double>(current - min) / static_cast<double>(max - min));
     }
-
-    OrderOfMagnitude determineOrderOfMagnitude(long long value)
-    {
-        if (value < 1000)
-            return OrderOfMagnitude::None;
-        else if (value < 1'000'000)
-            return OrderOfMagnitude::Kilo;
-        else if (value < 1'000'000'000)
-            return OrderOfMagnitude::Mega;
-        else if (value < 1'000'000'000'000)
-            return OrderOfMagnitude::Giga;
-        else
-            return OrderOfMagnitude::Tera;
-    }
 }
 
 struct ProgressBar::Implementation : public ProgressBar::Settings
@@ -120,11 +98,11 @@ struct ProgressBar::Implementation : public ProgressBar::Settings
     Nui::Observed<long long> progress{0};
     Nui::Observed<std::string> text{"0%"};
     Nui::Observed<std::string> backgroundColor{"#a0a0a0"};
-    OrderOfMagnitude magnitude;
+    Utility::OrderOfMagnitude magnitude;
 
     Implementation(Settings settings)
         : Settings{std::move(settings)}
-        , magnitude{determineOrderOfMagnitude(settings.max)}
+        , magnitude{Utility::determineOrderOfMagnitude(settings.max)}
     {}
 };
 
@@ -173,27 +151,10 @@ void ProgressBar::updateText()
         {
             if (impl_->byteMode)
             {
-                const auto formatSize = [](long long value, OrderOfMagnitude magnitude) {
-                    switch (magnitude)
-                    {
-                        case OrderOfMagnitude::None:
-                            return fmt::format("{} B", value);
-                        case OrderOfMagnitude::Kilo:
-                            return fmt::format("{:.2f} KB", value / 1024.0);
-                        case OrderOfMagnitude::Mega:
-                            return fmt::format("{:.2f} MB", value / (1024.0 * 1024.0));
-                        case OrderOfMagnitude::Giga:
-                            return fmt::format("{:.2f} GB", value / (1024.0 * 1024.0 * 1024.0));
-                        case OrderOfMagnitude::Tera:
-                            return fmt::format("{:.2f} TB", value / (1024.0 * 1024.0 * 1024.0 * 1024.0));
-                    }
-                    return std::string{};
-                };
-
                 return fmt::format(
                     "{} - {} ({})",
-                    formatSize(impl_->progress.value(), impl_->magnitude),
-                    formatSize(impl_->max, impl_->magnitude),
+                    Utility::formatBytes(impl_->progress.value(), impl_->magnitude),
+                    Utility::formatBytes(impl_->max, impl_->magnitude),
                     percent);
             }
             else
