@@ -365,7 +365,7 @@ std::expected<void, Operation::Error> OperationQueue::addDownloadOperation(
     }
     else
     {
-        Log::error("Remote path is neither a file nor a directory: {}.", result->type);
+        Log::error("Remote path is neither a file nor a directory: {}.", static_cast<std::uint8_t>(result->type));
         return std::unexpected(Operation::Error{.type = Operation::ErrorType::OperationNotPossibleOnFileType});
     }
 }

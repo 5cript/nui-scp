@@ -54,7 +54,7 @@ target_link_libraries(
         Boost::system
         Boost::process
         roar-include-only
-        shared_data
+        shared-data
         utility
         log
         persistence

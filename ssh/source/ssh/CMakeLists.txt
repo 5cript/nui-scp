@@ -24,5 +24,5 @@ target_link_libraries(
         ids
         persistence
         fmt
-        shared_data
+        shared-data
 )

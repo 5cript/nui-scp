@@ -12,56 +12,20 @@ ScanOperation::ScanOperation(SecureShell::SftpSession& sftp, ScanOperationOption
 
 ScanOperation::~ScanOperation() = default;
 
-std::expected<void, ScanOperation::Error> ScanOperation::scanOnce(std::filesystem::path const& path)
+std::expected<std::vector<SharedData::DirectoryEntry>, ScanOperation::Error>
+ScanOperation::scanner(std::filesystem::path const& path)
 {
     auto fut = sftp_->listDirectory(path);
     fut.wait_for(futureTimeout_);
     if (fut.wait_for(futureTimeout_) != std::future_status::ready)
-        return enterErrorState<void>({.type = ErrorType::FutureTimeout});
+        return enterErrorState<std::vector<SharedData::DirectoryEntry>>({.type = ErrorType::FutureTimeout});
 
-    const auto result = fut.get();
+    auto result = fut.get();
     if (!result.has_value())
-        return enterErrorState<void>({.type = ErrorType::SftpError, .sftpError = result.error()});
+        return enterErrorState<std::vector<SharedData::DirectoryEntry>>(
+            {.type = ErrorType::SftpError, .sftpError = result.error()});
 
-    // Dont copy "." and ".." over:
-    auto backInserter = std::back_inserter(entries_);
-    const auto checkDotAndDotDot = [](auto const& entry) {
-        return entry.path.filename() != "." && entry.path.filename() != "..";
-    };
-    const auto checkDot = [](auto const& entry) {
-        return entry.path.filename() != ".";
-    };
-    const auto checkDotDot = [](auto const& entry) {
-        return entry.path.filename() != "..";
-    };
-    std::function<bool(SharedData::DirectoryEntry const&)> filter = checkDotAndDotDot;
-    enum Filter
-    {
-        Both,
-        Dot,
-        DotDot
-    } currentFilter = Both;
-    auto iter = result->begin();
-    auto end = result->end();
-    for (; iter != end; ++iter)
-    {
-        if (filter(*iter))
-            *backInserter++ = *iter;
-        else
-        {
-            if (currentFilter == Both)
-                currentFilter = iter->path.filename() == "." ? Filter::DotDot : Filter::Dot;
-            else
-                break;
-
-            if (currentFilter == Dot)
-                filter = checkDot;
-            else
-                filter = checkDotDot;
-        }
-    }
-    std::copy(iter, end, backInserter);
-    return {};
+    return {std::move(result).value()};
 }
 
 std::expected<ScanOperation::WorkStatus, ScanOperation::Error> ScanOperation::work()
@@ -73,52 +37,29 @@ std::expected<ScanOperation::WorkStatus, ScanOperation::Error> ScanOperation::wo
         case (NotStarted):
         {
             state_ = Running;
-            totalBytes_ = 0;
-            currentIndex_ = 0;
             Log::info("ScanOperation: Starting scan of '{}'.", remotePath_.generic_string());
-            const auto result = scanOnce(remotePath_);
-            if (!result.has_value())
-            {
-                Log::error("ScanOperation: Failed to scan directory: {}", result.error().toString());
-                return enterErrorState<WorkStatus>(result.error());
-            }
-            progressCallback_(totalBytes_, currentIndex_, static_cast<std::uint64_t>(entries_.size()));
+            progressCallback_(0, 0, 0);
             return WorkStatus::MoreWork;
         }
         case (Running):
         {
-            if (currentIndex_ >= static_cast<std::uint64_t>(entries_.size()))
-            {
-                Log::info("ScanOperation: Scan of '{}' completed.", remotePath_.generic_string());
-                state_ = Completed;
-                return WorkStatus::Complete;
-            }
+            return withWalkerDo([this](auto& walker) -> std::expected<ScanOperation::WorkStatus, ScanOperation::Error> {
+                if (walker.completed())
+                {
+                    Log::info("ScanOperation: Scan of '{}' completed.", remotePath_.generic_string());
+                    state_ = Completed;
+                    return WorkStatus::Complete;
+                }
 
-            if (entries_[currentIndex_].isDirectory())
-            {
-                const auto result = scanOnce(entries_[currentIndex_].path);
+                auto result = walker.walk();
                 if (!result.has_value())
                 {
-                    Log::error(
-                        "ScanOperation: Failed to scan directory '{}': {}",
-                        entries_[currentIndex_].path.generic_string(),
-                        result.error().toString());
+                    Log::error("ScanOperation: Failed to scan directory: {}", result.error().toString());
                     return enterErrorState<WorkStatus>(result.error());
                 }
-                ++currentIndex_;
-            }
-
-            for (; currentIndex_ < static_cast<std::uint64_t>(entries_.size()); ++currentIndex_)
-            {
-                auto& entry = entries_[currentIndex_];
-                if (entry.isRegularFile())
-                    totalBytes_ += entry.size;
-                else if (entry.isDirectory())
-                    return WorkStatus::MoreWork;
-            }
-
-            progressCallback_(totalBytes_, currentIndex_, static_cast<std::uint64_t>(entries_.size()));
-            return WorkStatus::MoreWork;
+                progressCallback_(walker.totalBytes(), walker.currentIndex(), walker.totalEntries());
+                return WorkStatus::MoreWork;
+            });
         }
         case (Prepared):
         case (Preparing):

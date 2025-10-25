@@ -73,11 +73,12 @@ namespace SecureShell
                         }};
                     if (dir == nullptr)
                     {
-                        return std::unexpected(SftpSession::Error{
-                            .message = ssh_get_error(session_),
-                            .sshError = ssh_get_error_code(session_),
-                            .sftpError = sftp_get_error(session_),
-                        });
+                        return std::unexpected(
+                            SftpSession::Error{
+                                .message = ssh_get_error(session_),
+                                .sshError = ssh_get_error_code(session_),
+                                .sftpError = sftp_get_error(session_),
+                            });
                     }
 
                     {
@@ -86,26 +87,28 @@ namespace SecureShell
 
                         for (; entry != nullptr; entry.reset(sftp_readdir(session_, dir.get())))
                         {
-                            entries.push_back(FileInformation::fromSftpAttributes(entry.get()));
+                            entries.push_back(fromSftpAttributes(entry.get()));
                         }
                     }
 
                     if (!sftp_dir_eof(dir.get()))
                     {
-                        return std::unexpected(SftpSession::Error{
-                            .message = ssh_get_error(session_),
-                            .sshError = ssh_get_error_code(session_),
-                            .sftpError = sftp_get_error(session_),
-                        });
+                        return std::unexpected(
+                            SftpSession::Error{
+                                .message = ssh_get_error(session_),
+                                .sshError = ssh_get_error_code(session_),
+                                .sftpError = sftp_get_error(session_),
+                            });
                     }
                 }
                 if (closeResult != SSH_OK)
                 {
-                    return std::unexpected(SftpSession::Error{
-                        .message = ssh_get_error(session_),
-                        .sshError = closeResult,
-                        .sftpError = sftp_get_error(session_),
-                    });
+                    return std::unexpected(
+                        SftpSession::Error{
+                            .message = ssh_get_error(session_),
+                            .sshError = closeResult,
+                            .sftpError = sftp_get_error(session_),
+                        });
                 }
 
                 return entries;
@@ -177,7 +180,7 @@ namespace SecureShell
             if (attributes == nullptr)
                 return std::unexpected(lastError());
 
-            return FileInformation::fromSftpAttributes(attributes.get());
+            return fromSftpAttributes(attributes.get());
         });
     }
 

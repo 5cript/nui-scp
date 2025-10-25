@@ -34,7 +34,7 @@ target_link_libraries(
         nui-file-explorer
         ui5
         roar-include-only
-        shared_data
+        shared-data
         utility
         log
         persistence

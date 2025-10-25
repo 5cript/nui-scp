@@ -102,7 +102,7 @@ namespace SecureShell
                 sftp_fstat(file_.get()), sftp_attributes_free};
             if (attributes == nullptr)
                 return std::unexpected(lastError());
-            return FileInformation::fromSftpAttributes(attributes.get());
+            return fromSftpAttributes(attributes.get());
         });
     }
     std::future<std::expected<std::size_t, SftpError>> FileStream::tell()

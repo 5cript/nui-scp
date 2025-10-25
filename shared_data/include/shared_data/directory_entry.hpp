@@ -7,73 +7,80 @@
 
 namespace SharedData
 {
+    enum class FileType : std::uint8_t
+    {
+        Unknown = 0,
+        Regular = 1,
+        Directory = 2,
+        Symlink = 3,
+        Special = 4,
+        Socket = 5,
+        CharDevice = 6,
+        BlockDevice = 7,
+        Fifo = 8
+    };
+
     struct DirectoryEntry
     {
-        std::filesystem::path path = "";
-        std::filesystem::path longName = "";
-        std::uint32_t flags = 0;
-        /*
-            SSH_FILEXFER_TYPE_REGULAR          1
-            SSH_FILEXFER_TYPE_DIRECTORY        2
-            SSH_FILEXFER_TYPE_SYMLINK          3
-            SSH_FILEXFER_TYPE_SPECIAL          4
-            SSH_FILEXFER_TYPE_UNKNOWN          5
-            SSH_FILEXFER_TYPE_SOCKET           6
-            SSH_FILEXFER_TYPE_CHAR_DEVICE      7
-            SSH_FILEXFER_TYPE_BLOCK_DEVICE     8
-            SSH_FILEXFER_TYPE_FIFO             9
-         */
-        std::uint8_t type = 0;
-        std::uint64_t size = 0;
-        std::uint32_t uid = 0;
-        std::uint32_t gid = 0;
-        std::string owner = "";
-        std::string group = "";
-        std::filesystem::perms permissions = std::filesystem::perms::unknown;
-        std::uint64_t atime = 0;
-        std::uint32_t atimeNsec = 0;
-        std::uint64_t createTime = 0;
-        std::uint32_t createTimeNsec = 0;
-        std::uint64_t mtime = 0;
-        std::uint32_t mtimeNsec = 0;
-        std::string acl = "";
+        using FileType = SharedData::FileType;
+
+        std::filesystem::path path{};
+        std::filesystem::path longName{};
+        std::uint32_t flags{0};
+        FileType type{FileType::Unknown};
+        std::uint64_t size{0};
+        std::uint32_t uid{0};
+        std::uint32_t gid{0};
+        std::string owner{};
+        std::string group{};
+        std::filesystem::perms permissions{std::filesystem::perms::unknown};
+        std::uint64_t atime{0};
+        std::uint32_t atimeNsec{0};
+        std::uint64_t createTime{0};
+        std::uint32_t createTimeNsec{0};
+        std::uint64_t mtime{0};
+        std::uint32_t mtimeNsec{0};
+        std::string acl{};
 
         bool isDirectory() const
         {
-            return type == 2;
+            return type == FileType::Directory;
         }
         bool isRegularFile() const
         {
-            return type == 1;
+            return type == FileType::Regular;
         }
         bool isSymlink() const
         {
-            return type == 3;
+            return type == FileType::Symlink;
         }
         bool isSpecial() const
         {
-            return type == 4;
+            return type == FileType::Special;
         }
         bool isUnknown() const
         {
-            return type == 5;
+            return type == FileType::Unknown;
         }
         bool isSocket() const
         {
-            return type == 6;
+            return type == FileType::Socket;
         }
         bool isCharDevice() const
         {
-            return type == 7;
+            return type == FileType::CharDevice;
         }
         bool isBlockDevice() const
         {
-            return type == 8;
+            return type == FileType::BlockDevice;
         }
         bool isFifo() const
         {
-            return type == 9;
+            return type == FileType::Fifo;
         }
+
+        // Used for directory traversal. Avoids pointer instability in vector and unique_ptr
+        std::optional<std::size_t> parent{std::nullopt};
     };
 
     void to_json(nlohmann::json& j, DirectoryEntry const& entry);
