@@ -93,33 +93,35 @@ namespace
     }
 }
 
-struct ProgressBar::Implementation : public ProgressBar::Settings
+namespace Components
 {
-    Nui::Observed<long long> progress{0};
-    Nui::Observed<std::string> text{"0%"};
-    Nui::Observed<std::string> backgroundColor{"#a0a0a0"};
-    Utility::OrderOfMagnitude magnitude;
+    struct ProgressBar::Implementation : public ProgressBar::Settings
+    {
+        Nui::Observed<long long> progress{0};
+        Nui::Observed<std::string> text{"0%"};
+        Nui::Observed<std::string> backgroundColor{"#a0a0a0"};
+        Utility::OrderOfMagnitude magnitude;
 
-    Implementation(Settings settings)
-        : Settings{std::move(settings)}
-        , magnitude{Utility::determineOrderOfMagnitude(settings.max)}
+        Implementation(Settings settings)
+            : Settings{std::move(settings)}
+            , magnitude{Utility::determineOrderOfMagnitude(settings.max)}
+        {}
+    };
+
+    ProgressBar::ProgressBar(Settings settings)
+        : impl_{std::make_unique<Implementation>(std::move(settings))}
     {}
-};
 
-ProgressBar::ProgressBar(Settings settings)
-    : impl_{std::make_unique<Implementation>(std::move(settings))}
-{}
+    ROAR_PIMPL_SPECIAL_FUNCTIONS_IMPL(ProgressBar);
 
-ROAR_PIMPL_SPECIAL_FUNCTIONS_IMPL(ProgressBar);
+    Nui::ElementRenderer ProgressBar::operator()() const
+    {
+        using namespace Nui::Elements;
+        using namespace Nui::Attributes;
+        using Nui::Elements::div;
+        using fmt::format;
 
-Nui::ElementRenderer ProgressBar::operator()() const
-{
-    using namespace Nui::Elements;
-    using namespace Nui::Attributes;
-    using Nui::Elements::div;
-    using fmt::format;
-
-    // clang-format off
+        // clang-format off
     return div{
         class_ = "progress-bar",
         style = Style {
@@ -141,43 +143,44 @@ Nui::ElementRenderer ProgressBar::operator()() const
         // shine animation
         div{}()
     );
-    // clang-format on
-}
+        // clang-format on
+    }
 
-void ProgressBar::updateText()
-{
-    impl_->text = [this, percent = percentageBetween(impl_->progress.value(), impl_->min, impl_->max)]() {
-        if (impl_->showMinMax)
-        {
-            if (impl_->byteMode)
+    void ProgressBar::updateText()
+    {
+        impl_->text = [this, percent = percentageBetween(impl_->progress.value(), impl_->min, impl_->max)]() {
+            if (impl_->showMinMax)
             {
-                return fmt::format(
-                    "{} - {} ({})",
-                    Utility::formatBytes(impl_->progress.value(), impl_->magnitude),
-                    Utility::formatBytes(impl_->max, impl_->magnitude),
-                    percent);
+                if (impl_->byteMode)
+                {
+                    return fmt::format(
+                        "{} - {} ({})",
+                        Utility::formatBytes(impl_->progress.value(), impl_->magnitude),
+                        Utility::formatBytes(impl_->max, impl_->magnitude),
+                        percent);
+                }
+                else
+                    return fmt::format("{} / {} ({})", impl_->progress.value(), impl_->max, percent);
             }
             else
-                return fmt::format("{} / {} ({})", impl_->progress.value(), impl_->max, percent);
-        }
-        else
-            return fmt::format("{}%", percent);
-    }();
-}
+                return fmt::format("{}%", percent);
+        }();
+    }
 
-void ProgressBar::setProgress(long long current)
-{
-    const auto percent = percentageBetween(current, impl_->min, impl_->max);
-    const auto hue = std::max(5., 120. * std::pow(static_cast<double>(percent) / 100., 1.8));
+    void ProgressBar::setProgress(long long current)
+    {
+        const auto percent = percentageBetween(current, impl_->min, impl_->max);
+        const auto hue = std::max(5., 120. * std::pow(static_cast<double>(percent) / 100., 1.8));
 
-    impl_->progress = current;
-    impl_->backgroundColor = fmt::format("hsl({}, 100%, 50%)", static_cast<int>(hue));
-    updateText();
+        impl_->progress = current;
+        impl_->backgroundColor = fmt::format("hsl({}, 100%, 50%)", static_cast<int>(hue));
+        updateText();
 
-    Nui::globalEventContext.executeActiveEventsImmediately();
-}
+        Nui::globalEventContext.executeActiveEventsImmediately();
+    }
 
-long long ProgressBar::max() const
-{
-    return impl_->max;
+    long long ProgressBar::max() const
+    {
+        return impl_->max;
+    }
 }

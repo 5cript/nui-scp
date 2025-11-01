@@ -324,6 +324,8 @@ std::expected<void, Operation::Error> OperationQueue::addDownloadOperation(
                 .futureTimeout = std::chrono::seconds{5},
             });
 
+        // Cant use same ID for scan and bulk download
+        const auto bulkId = Ids::generateOperationId();
         auto bulk = std::make_unique<BulkDownloadOperation>(
             sftp,
             BulkDownloadOperation::BulkDownloadOperationOptions{
@@ -343,7 +345,7 @@ std::expected<void, Operation::Error> OperationQueue::addDownloadOperation(
             });
 
         operations_.emplace_back(operationId, std::move(scan));
-        operations_.emplace_back(operationId, std::move(bulk));
+        operations_.emplace_back(bulkId, std::move(bulk));
 
         hub_->callRemote(
             fmt::format("OperationQueue::{}::{}", sessionId_.value(), "onOperationAdded"),
@@ -355,7 +357,7 @@ std::expected<void, Operation::Error> OperationQueue::addDownloadOperation(
         hub_->callRemote(
             fmt::format("OperationQueue::{}::{}", sessionId_.value(), "onOperationAdded"),
             SharedData::OperationAdded{
-                .operationId = operationId,
+                .operationId = bulkId,
                 .type = SharedData::OperationType::BulkDownload,
                 .localPath = localPath,
                 .remotePath = remotePath,

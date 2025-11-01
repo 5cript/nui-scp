@@ -57,7 +57,8 @@ std::expected<ScanOperation::WorkStatus, ScanOperation::Error> ScanOperation::wo
                     Log::error("ScanOperation: Failed to scan directory: {}", result.error().toString());
                     return enterErrorState<WorkStatus>(result.error());
                 }
-                progressCallback_(walker.totalBytes(), walker.currentIndex(), walker.totalEntries());
+                // -1, because the walker includes the base/root dir of the search:
+                progressCallback_(walker.totalBytes(), walker.currentIndex(), walker.totalEntries() - 1);
                 return WorkStatus::MoreWork;
             });
         }

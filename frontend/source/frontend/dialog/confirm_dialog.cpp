@@ -1,6 +1,6 @@
 #include <frontend/dialog/confirm_dialog.hpp>
-#include <frontend/components/ui5-text.hpp>
-#include <frontend/components/ui5-list.hpp>
+#include <frontend/components/ui5/text.hpp>
+#include <frontend/components/ui5/list.hpp>
 #include <log/log.hpp>
 
 #include <ui5/components/dialog.hpp>

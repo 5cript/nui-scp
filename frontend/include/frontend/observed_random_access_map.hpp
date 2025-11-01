@@ -18,6 +18,7 @@ class ObservedRandomAccessMap
             throw std::invalid_argument("Key already exists in ObservedRandomAccessMap");
 
         observedValues_.push_back(std::make_unique<ValueT>(std::move(value)));
+        Log::info("Inserting key '{}' at index '{}'", key.value(), observedValues_.value().size() - 1);
         keyToIndexMap_[key] = observedValues_.value().size() - 1;
     }
 
