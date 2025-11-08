@@ -1,5 +1,6 @@
 #include <backend/sftp/operation_queue.hpp>
 #include <shared_data/file_operations/download_progress.hpp>
+#include <shared_data/file_operations/bulk_download_progress.hpp>
 #include <shared_data/file_operations/scan_progress.hpp>
 #include <shared_data/file_operations/operation_added.hpp>
 #include <shared_data/file_operations/operation_completed.hpp>
@@ -168,8 +169,8 @@ bool OperationQueue::work()
                 auto* next = (i + 1 < operations_.size()) ? operations_[i + 1].second.get() : nullptr;
                 if (next && next->type() == SharedData::OperationType::BulkDownload)
                 {
-                    static_cast<BulkDownloadOperation*>(next)->setScanResult(
-                        static_cast<ScanOperation*>(operation.get())->ejectEntries());
+                    auto* scan = static_cast<ScanOperation*>(operation.get());
+                    static_cast<BulkDownloadOperation*>(next)->setScanResult(scan->ejectEntries(), scan->totalBytes());
                 }
                 else
                 {
@@ -330,17 +331,45 @@ std::expected<void, Operation::Error> OperationQueue::addDownloadOperation(
             sftp,
             BulkDownloadOperation::BulkDownloadOperationOptions{
                 .overallProgressCallback =
-                    [](auto const&, auto, auto, auto, auto) {
-                        // TODO:
+                    [weak = weak_from_this(), bulkId](
+                        auto const& currentFile,
+                        std::uint64_t fileCurrentIndex,
+                        std::uint64_t fileCount,
+                        std::uint64_t currentFileBytes,
+                        std::uint64_t currentFileTotalBytes,
+                        std::uint64_t bytesCurrent,
+                        std::uint64_t bytesTotal) {
+                        auto self = weak.lock();
+                        if (!self)
+                            return;
+
+                        // Log::debug(
+                        //     "BulkDownloadOperation: Download progress for file: {} - {}/{} bytes - totaling {}/{} "
+                        //     "bytes",
+                        //     currentFile.string(),
+                        //     currentFileBytes,
+                        //     currentFileTotalBytes,
+                        //     bytesCurrent,
+                        //     bytesTotal);
+
+                        self->hub_->callRemote(
+                            fmt::format("OperationQueue::{}::onBulkDownloadProgress", self->sessionId_.value()),
+                            SharedData::BulkDownloadProgress{
+                                .operationId = bulkId,
+                                .currentFile = currentFile.string(),
+                                .fileCurrentIndex = fileCurrentIndex,
+                                .fileCount = fileCount,
+                                .currentFileBytes = currentFileBytes,
+                                .currentFileTotalBytes = currentFileTotalBytes,
+                                .bytesCurrent = bytesCurrent,
+                                .bytesTotal = bytesTotal,
+                            });
                     },
+                .remotePath = remotePath,
+                .localPath = localPath,
                 .individualOptions =
                     DownloadOperation::DownloadOperationOptions{
-                        .progressCallback =
-                            [](auto, auto, auto) {
-                                // TODO:
-                            },
-                        .remotePath = remotePath,
-                        .localPath = localPath,
+                        // TODO: Not just defaults.
                     },
             });
 

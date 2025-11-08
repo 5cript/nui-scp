@@ -43,12 +43,22 @@ namespace SharedData
     {
         OperationErrorType type;
         std::optional<SecureShell::SftpError> sftpError = std::nullopt;
+        std::optional<std::string> extraInfo = std::nullopt;
 
         std::string toString() const
         {
             const auto enumString = boost::describe::enum_to_string(type, "INVALID_ENUM_VALUE");
             if (sftpError.has_value())
-                return fmt::format("{}: {}", enumString, sftpError->toString());
+            {
+                if (extraInfo)
+                    return fmt::format("{}: {}. {}.", enumString, sftpError->toString(), *extraInfo);
+                else
+                    return fmt::format("{}: {}.", enumString, sftpError->toString());
+            }
+            if (extraInfo)
+            {
+                return fmt::format("{}: {}.", enumString, *extraInfo);
+            }
             return enumString;
         }
     };

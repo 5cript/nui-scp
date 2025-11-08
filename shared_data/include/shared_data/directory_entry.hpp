@@ -83,6 +83,35 @@ namespace SharedData
         std::optional<std::size_t> parent{std::nullopt};
     };
 
+    inline std::filesystem::path fullPath(std::vector<DirectoryEntry> const& entries, DirectoryEntry const& entry)
+    {
+        if (entry.parent)
+        {
+            const auto parentIndex = entry.parent.value();
+            if (parentIndex >= entries.size())
+                throw std::out_of_range("Parent index is out of range");
+            return fullPath(entries, entries[parentIndex]) / entry.path;
+        }
+        else
+            return entry.path;
+    }
+
+    inline std::filesystem::path
+    fullPathRelative(std::vector<DirectoryEntry> const& entries, DirectoryEntry const& entry)
+    {
+        if (entry.parent)
+        {
+            const auto parentIndex = entry.parent.value();
+            if (parentIndex >= entries.size())
+                throw std::out_of_range("Parent index is out of range");
+            if (parentIndex == 0)
+                return entry.path;
+            return fullPathRelative(entries, entries[parentIndex]) / entry.path;
+        }
+        else
+            return entry.path;
+    }
+
     void to_json(nlohmann::json& j, DirectoryEntry const& entry);
     void from_json(nlohmann::json const& j, DirectoryEntry& entry);
 }

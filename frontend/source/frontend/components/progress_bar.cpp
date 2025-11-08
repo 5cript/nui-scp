@@ -98,13 +98,15 @@ namespace Components
     struct ProgressBar::Implementation : public ProgressBar::Settings
     {
         Nui::Observed<long long> progress{0};
+        Nui::Observed<long long> maxObserved;
         Nui::Observed<std::string> text{"0%"};
         Nui::Observed<std::string> backgroundColor{"#a0a0a0"};
         Utility::OrderOfMagnitude magnitude;
 
         Implementation(Settings settings)
             : Settings{std::move(settings)}
-            , magnitude{Utility::determineOrderOfMagnitude(settings.max)}
+            , maxObserved{max}
+            , magnitude{Utility::determineOrderOfMagnitude(max)}
         {}
     };
 
@@ -131,8 +133,8 @@ namespace Components
         // bar fill
         div{
             style = Style{
-                "width"_style = observe(impl_->progress).generate([this]() {
-                    return format("{}%", percentageBetween(impl_->progress.value(), impl_->min, impl_->max));
+                "width"_style = observe(impl_->progress, impl_->maxObserved).generate([this]() {
+                    return format("{}%", percentageBetween(impl_->progress.value(), impl_->min, impl_->maxObserved.value()));
                 }),
                 "height"_style = impl_->height,
                 "background-color"_style = impl_->backgroundColor
@@ -148,7 +150,8 @@ namespace Components
 
     void ProgressBar::updateText()
     {
-        impl_->text = [this, percent = percentageBetween(impl_->progress.value(), impl_->min, impl_->max)]() {
+        impl_->text = [this,
+                       percent = percentageBetween(impl_->progress.value(), impl_->min, impl_->maxObserved.value())]() {
             if (impl_->showMinMax)
             {
                 if (impl_->byteMode)
@@ -156,11 +159,11 @@ namespace Components
                     return fmt::format(
                         "{} - {} ({})",
                         Utility::formatBytes(impl_->progress.value(), impl_->magnitude),
-                        Utility::formatBytes(impl_->max, impl_->magnitude),
+                        Utility::formatBytes(impl_->maxObserved.value(), impl_->magnitude),
                         percent);
                 }
                 else
-                    return fmt::format("{} / {} ({})", impl_->progress.value(), impl_->max, percent);
+                    return fmt::format("{} / {} ({})", impl_->progress.value(), impl_->maxObserved.value(), percent);
             }
             else
                 return fmt::format("{}%", percent);
@@ -169,7 +172,7 @@ namespace Components
 
     void ProgressBar::setProgress(long long current)
     {
-        const auto percent = percentageBetween(current, impl_->min, impl_->max);
+        const auto percent = percentageBetween(current, impl_->min, impl_->maxObserved.value());
         const auto hue = std::max(5., 120. * std::pow(static_cast<double>(percent) / 100., 1.8));
 
         impl_->progress = current;
@@ -181,6 +184,12 @@ namespace Components
 
     long long ProgressBar::max() const
     {
-        return impl_->max;
+        return impl_->maxObserved.value();
+    }
+
+    void ProgressBar::max(long long max)
+    {
+        impl_->maxObserved = max;
+        updateText();
     }
 }

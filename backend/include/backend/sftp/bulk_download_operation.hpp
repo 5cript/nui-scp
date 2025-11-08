@@ -19,12 +19,19 @@ class BulkDownloadOperation : public Operation
             std::filesystem::path const& currentFile,
             std::uint64_t fileCurrentIndex,
             std::uint64_t fileCount,
+            std::uint64_t currentFileBytes,
+            std::uint64_t currentFileTotalBytes,
             std::uint64_t bytesCurrent,
             std::uint64_t bytesTotal)>
-            overallProgressCallback = [](auto const&, auto, auto, auto, auto) {};
+            overallProgressCallback = [](auto const&, auto, auto, auto, auto, auto, auto) {};
 
-        // TODO: as tar, do compress tar?
+        std::filesystem::path remotePath{};
+        std::filesystem::path localPath{};
         DownloadOperation::DownloadOperationOptions individualOptions = {};
+        bool asArchive{false};
+        std::string archiveFormat{"tar"};
+        std::string compressionMethod{"gz"};
+        int compressionLevel{5};
     };
 
     BulkDownloadOperation(SecureShell::SftpSession& sftp, BulkDownloadOperationOptions options);
@@ -38,7 +45,7 @@ class BulkDownloadOperation : public Operation
     SharedData::OperationType type() const override;
     std::expected<void, Error> cancel(bool adoptCancelState) override;
 
-    void setScanResult(std::vector<SharedData::DirectoryEntry>&& entries);
+    void setScanResult(std::vector<SharedData::DirectoryEntry>&& entries, std::uint64_t totalBytes);
 
     bool isBarrier() const noexcept override
     {
@@ -52,6 +59,12 @@ class BulkDownloadOperation : public Operation
     }
 
     SecureShell::ProcessingStrand* strand() const override;
+
+  private:
+    std::expected<WorkStatus, Error> workNormal();
+    std::expected<WorkStatus, Error> workAsArchive();
+    std::expected<WorkStatus, Error> workCurrentFile();
+    std::filesystem::path fullLocalPath(SharedData::DirectoryEntry const& entry) const;
 
   private:
     SecureShell::SftpSession* sftp_;

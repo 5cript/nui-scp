@@ -12,6 +12,7 @@ namespace SharedData
 {
     BOOST_DEFINE_ENUM_CLASS(
         OperationErrorType,
+        ImplementationError, // This should never occur, it indicates a bug in the program:
         FileExists,
         FileNotFound,
         OpenFailure,
@@ -29,6 +30,7 @@ namespace SharedData
         CannotWorkCompletedOperation,
         CannotWorkFailedOperation,
         CannotWorkCanceledOperation,
+        CannotCreateDirectory,
         UnknownWorkState,
         InvalidOperationState,
         OperationNotPossibleOnFileType);

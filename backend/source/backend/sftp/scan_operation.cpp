@@ -28,6 +28,11 @@ ScanOperation::scanner(std::filesystem::path const& path)
     return {std::move(result).value()};
 }
 
+std::uint64_t ScanOperation::totalBytes() const
+{
+    return walker_->totalBytes();
+}
+
 std::expected<ScanOperation::WorkStatus, ScanOperation::Error> ScanOperation::work()
 {
     using enum OperationState;

@@ -77,6 +77,8 @@ class ScanOperation : public Operation
         });
     }
 
+    std::uint64_t totalBytes() const;
+
     std::expected<std::vector<SharedData::DirectoryEntry>, Error> scanner(std::filesystem::path const& path);
 
   private:

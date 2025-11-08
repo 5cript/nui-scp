@@ -6,6 +6,7 @@
 #include <frontend/terminal/file_engine.hpp>
 
 #include <shared_data/file_operations/download_progress.hpp>
+#include <shared_data/file_operations/bulk_download_progress.hpp>
 #include <shared_data/file_operations/scan_progress.hpp>
 #include <shared_data/file_operations/operation_added.hpp>
 #include <shared_data/file_operations/operation_type.hpp>
@@ -60,6 +61,7 @@ class OperationQueue
 
     void onOperationAdded(SharedData::OperationAdded const& added);
     void onDownloadProgress(SharedData::DownloadProgress const& progress);
+    void onBulkDownloadProgress(SharedData::BulkDownloadProgress const& progress);
     void onScanProgress(SharedData::ScanProgress const& progress);
     void onOperationCompleted(Nui::val val);
     void onIsPaused(SharedData::ErrorOrSuccess<SharedData::IsPaused> const& result);

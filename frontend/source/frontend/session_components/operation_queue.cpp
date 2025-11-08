@@ -406,11 +406,21 @@ namespace
             Ids::OperationId operationId,
             std::function<void(OperationCard const& operation)> doRemoveSelf,
             std::shared_ptr<Nui::Observed<bool>> doDeletionCountdown)
-            : OperationCard{
-                  SharedData::OperationType::Scan,
-                  std::move(operationId),
-                  std::move(doRemoveSelf),
-                  std::move(doDeletionCountdown)}
+            : OperationCard{SharedData::OperationType::Scan, std::move(operationId), std::move(doRemoveSelf), std::move(doDeletionCountdown)}
+            , fileProgressBar_({
+                  .height = std::string{progressHeight},
+                  .min = 0,
+                  .max = 1,
+                  .showMinMax = true,
+                  .byteMode = true,
+              })
+            , totalProgressBar_({
+                  .height = std::string{progressHeight},
+                  .min = 0,
+                  .max = 1,
+                  .showMinMax = true,
+                  .byteMode = true,
+              })
         {}
 
         bool warrantsCancelConfirm() const override
@@ -420,12 +430,31 @@ namespace
 
         std::string statusText() const override
         {
-            return "...";
+            return fmt::format("Total Progress - File {}/{}", fileCurrentIndex.value(), fileCount.value());
         }
 
         std::string title() const override
         {
             return "Bulk Download";
+        }
+
+        void setProgress(SharedData::BulkDownloadProgress const& progress)
+        {
+            if (currentFile.value() != progress.currentFile)
+                currentFile = progress.currentFile;
+
+            fileProgressBar_.setProgress(progress.currentFileBytes);
+            if (fileProgressBar_.max() != static_cast<long long>(progress.currentFileTotalBytes))
+                fileProgressBar_.max(static_cast<long long>(progress.currentFileTotalBytes));
+
+            totalProgressBar_.setProgress(progress.bytesCurrent);
+            if (totalProgressBar_.max() != static_cast<long long>(progress.bytesTotal))
+                totalProgressBar_.max(static_cast<long long>(progress.bytesTotal));
+
+            fileCurrentIndex = progress.fileCurrentIndex;
+            fileCount = progress.fileCount;
+
+            Nui::globalEventContext.executeActiveEventsImmediately();
         }
 
         Nui::ElementRenderer body() const override
@@ -444,13 +473,32 @@ namespace
                 div {
                     style = "margin-top: 8px, font-size: 13px; color: var(--muted);"
                 }(
-                    "Bulk download operation in progress..."
+                    span{}(
+                        observe(currentFile),
+                        [this](){
+                            return fmt::format("Current File: '{}'", currentFile.value());
+                        }
+                    ),
+                    fileProgressBar_(),
+                    span{}(
+                        observe(fileCurrentIndex, fileCount),
+                        [this](){
+                            return statusText();
+                        }
+                    ),
+                    totalProgressBar_()
                 )
             );
             // clang-format on
         }
 
       private:
+        Nui::Observed<std::string> currentFile{""};
+        Nui::Observed<std::uint64_t> fileCurrentIndex{0ull};
+        Nui::Observed<std::uint64_t> fileCount{0ull};
+
+        Components::ProgressBar fileProgressBar_;
+        Components::ProgressBar totalProgressBar_;
     };
 
     struct DisplayedOperation
@@ -676,6 +724,13 @@ void OperationQueue::activate(FileEngine* fileEngine, Ids::SessionId sessionId)
 
     impl_->onUpdate.push_back(
         Nui::RpcClient::autoRegisterFunction(
+            fmt::format("OperationQueue::{}::onBulkDownloadProgress", impl_->sessionId.value()),
+            [this](SharedData::BulkDownloadProgress const& progress) {
+                onBulkDownloadProgress(progress);
+            }));
+
+    impl_->onUpdate.push_back(
+        Nui::RpcClient::autoRegisterFunction(
             fmt::format("OperationQueue::{}::onScanProgress", impl_->sessionId.value()),
             [this](SharedData::ScanProgress const& progress) {
                 onScanProgress(progress);
@@ -828,6 +883,34 @@ void OperationQueue::onScanProgress(SharedData::ScanProgress const& progress)
         return;
     }
     renderer->setProgress(progress.totalBytes, progress.currentIndex, progress.totalScanned);
+}
+
+void OperationQueue::onBulkDownloadProgress(SharedData::BulkDownloadProgress const& progress)
+{
+    Log::debug("Received bulk download progress for operation id: {}.", progress.operationId.value());
+
+    auto* operation = impl_->operations.at(progress.operationId);
+    if (!operation)
+    {
+        Log::error("Received bulk download progress for unknown operation id: {}", progress.operationId.value());
+        return;
+    }
+    if (operation->type() != SharedData::OperationType::BulkDownload)
+    {
+        Log::error(
+            "Received bulk download progress for operation id: {} which is not a bulk download",
+            progress.operationId.value());
+        return;
+    }
+    auto* renderer = operation->getCardSpecifically<DisplayedBulkDownloadOperation>();
+    if (!renderer)
+    {
+        Log::error(
+            "Received bulk download progress for operation id: {} which has no bulk download renderer",
+            progress.operationId.value());
+        return;
+    }
+    renderer->setProgress(progress);
 }
 
 void OperationQueue::onOperationCompleted(Nui::val val)

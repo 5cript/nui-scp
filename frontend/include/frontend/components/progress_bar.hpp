@@ -29,6 +29,13 @@ namespace Components
         void setProgress(long long current);
 
         /**
+         * @brief Set the maximum value of the progress bar.
+         *
+         * @param max The maximum value.
+         */
+        void max(long long max);
+
+        /**
          * @brief Get the maximum value of the progress bar.
          *
          * @return long long
