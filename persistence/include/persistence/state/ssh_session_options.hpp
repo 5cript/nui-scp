@@ -3,6 +3,7 @@
 #include <persistence/state_core.hpp>
 #include <persistence/state/ssh_options.hpp>
 #include <persistence/state/sftp_options.hpp>
+#include <persistence/state/queue_options.hpp>
 #include <persistence/reference.hpp>
 
 #include <string>
@@ -22,7 +23,6 @@ namespace Persistence
         std::optional<std::unordered_map<std::string, std::string>> environment{std::nullopt};
         bool openSftpByDefault{true};
         std::optional<std::string> defaultDirectory{std::nullopt};
-
         Referenceable<SshOptions> sshOptions{};
         Referenceable<SftpOptions> sftpOptions{};
         void useDefaultsFrom(SshSessionOptions const& other);

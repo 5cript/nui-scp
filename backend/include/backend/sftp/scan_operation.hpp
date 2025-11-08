@@ -3,6 +3,7 @@
 #include <ssh/file_stream.hpp>
 #include <backend/sftp/operation.hpp>
 #include <nui/utility/move_detector.hpp>
+#include <utility/directory_traversal.hpp>
 
 #include <filesystem>
 #include <fstream>
@@ -53,6 +54,33 @@ class ScanOperation : public Operation
 
     std::expected<void, Error> cancel(bool adoptCancelState) override;
 
+    auto withWalkerDo(auto&& fn)
+    {
+        auto scan = [this](std::filesystem::path const& path) {
+            return scanner(path);
+        };
+        using WalkerType = Utility::DeepDirectoryWalker<SharedData::DirectoryEntry, Error, decltype(scan), true>;
+        if (!walker_)
+            walker_ = std::make_unique<WalkerType>(remotePath_, std::move(scan));
+        return fn(static_cast<WalkerType&>(*walker_));
+    }
+
+    /**
+     * @brief Eject the scanned directory entries. Careful!: The internal list is moved out.
+     *
+     * @return std::vector<SharedData::DirectoryEntry>
+     */
+    std::vector<SharedData::DirectoryEntry> ejectEntries()
+    {
+        return withWalkerDo([](auto& walker) {
+            return std::move(walker).ejectEntries();
+        });
+    }
+
+    std::uint64_t totalBytes() const;
+
+    std::expected<std::vector<SharedData::DirectoryEntry>, Error> scanner(std::filesystem::path const& path);
+
   private:
     std::expected<void, ScanOperation::Error> scanOnce(std::filesystem::path const& path);
 
@@ -62,7 +90,5 @@ class ScanOperation : public Operation
     std::function<void(std::uint64_t totalBytes, std::uint64_t currentIndex, std::uint64_t totalScanned)>
         progressCallback_;
     std::chrono::seconds futureTimeout_;
-    std::vector<SharedData::DirectoryEntry> entries_{};
-    std::uint64_t currentIndex_{0};
-    std::uint64_t totalBytes_{0};
+    std::unique_ptr<Utility::BaseDirectoryWalker> walker_;
 };

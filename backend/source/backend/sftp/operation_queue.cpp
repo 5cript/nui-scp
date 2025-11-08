@@ -1,5 +1,7 @@
 #include <backend/sftp/operation_queue.hpp>
 #include <shared_data/file_operations/download_progress.hpp>
+#include <shared_data/file_operations/bulk_download_progress.hpp>
+#include <shared_data/file_operations/scan_progress.hpp>
 #include <shared_data/file_operations/operation_added.hpp>
 #include <shared_data/file_operations/operation_completed.hpp>
 #include <shared_data/error_or_success.hpp>
@@ -139,9 +141,15 @@ bool OperationQueue::work()
     if (updateCount == 0)
         return false;
 
+    bool previousWasBarrier = false;
     for (std::size_t i = 0; i < updateCount; ++i)
     {
+        if (previousWasBarrier)
+            break;
+
         auto& [id, operation] = operations_[i];
+        previousWasBarrier = operation->isBarrier();
+
         const auto workResult = operation->work();
         if (!workResult.has_value())
         {
@@ -156,6 +164,20 @@ bool OperationQueue::work()
         if (workStatus == Operation::WorkStatus::Complete)
         {
             Log::info("Operation completed successfully: {}", id.value());
+            if (operation->type() == SharedData::OperationType::Scan)
+            {
+                auto* next = (i + 1 < operations_.size()) ? operations_[i + 1].second.get() : nullptr;
+                if (next && next->type() == SharedData::OperationType::BulkDownload)
+                {
+                    auto* scan = static_cast<ScanOperation*>(operation.get());
+                    static_cast<BulkDownloadOperation*>(next)->setScanResult(scan->ejectEntries(), scan->totalBytes());
+                }
+                else
+                {
+                    Log::error("Scan operation completed but no following BulkOperation to set results to.");
+                }
+            }
+
             completeOperation(makeCompletedOperation(OperationQueue::CompletionReason::Completed, id, *operation));
             operations_.pop_front();
             // Exit loop and avoid any offset math. Just do another update cycle.
@@ -285,52 +307,96 @@ std::expected<void, Operation::Error> OperationQueue::addDownloadOperation(
             sftp,
             ScanOperation::ScanOperationOptions{
                 .progressCallback =
-                    [](auto, auto, auto) {
-                        // TODO:
+                    [weak = weak_from_this(), operationId](auto totalBytes, auto currentIndex, auto totalScanned) {
+                        auto self = weak.lock();
+                        if (!self)
+                            return;
+
+                        self->hub_->callRemote(
+                            fmt::format("OperationQueue::{}::onScanProgress", self->sessionId_.value()),
+                            SharedData::ScanProgress{
+                                .operationId = operationId,
+                                .totalBytes = totalBytes,
+                                .currentIndex = currentIndex,
+                                .totalScanned = totalScanned,
+                            });
                     },
                 .remotePath = remotePath,
                 .futureTimeout = std::chrono::seconds{5},
             });
 
+        // Cant use same ID for scan and bulk download
+        const auto bulkId = Ids::generateOperationId();
         auto bulk = std::make_unique<BulkDownloadOperation>(
             sftp,
             BulkDownloadOperation::BulkDownloadOperationOptions{
                 .overallProgressCallback =
-                    [](auto const&, auto, auto, auto, auto) {
-                        // TODO:
+                    [weak = weak_from_this(), bulkId](
+                        auto const& currentFile,
+                        std::uint64_t fileCurrentIndex,
+                        std::uint64_t fileCount,
+                        std::uint64_t currentFileBytes,
+                        std::uint64_t currentFileTotalBytes,
+                        std::uint64_t bytesCurrent,
+                        std::uint64_t bytesTotal) {
+                        auto self = weak.lock();
+                        if (!self)
+                            return;
+
+                        // Log::debug(
+                        //     "BulkDownloadOperation: Download progress for file: {} - {}/{} bytes - totaling {}/{} "
+                        //     "bytes",
+                        //     currentFile.string(),
+                        //     currentFileBytes,
+                        //     currentFileTotalBytes,
+                        //     bytesCurrent,
+                        //     bytesTotal);
+
+                        self->hub_->callRemote(
+                            fmt::format("OperationQueue::{}::onBulkDownloadProgress", self->sessionId_.value()),
+                            SharedData::BulkDownloadProgress{
+                                .operationId = bulkId,
+                                .currentFile = currentFile.string(),
+                                .fileCurrentIndex = fileCurrentIndex,
+                                .fileCount = fileCount,
+                                .currentFileBytes = currentFileBytes,
+                                .currentFileTotalBytes = currentFileTotalBytes,
+                                .bytesCurrent = bytesCurrent,
+                                .bytesTotal = bytesTotal,
+                            });
                     },
+                .remotePath = remotePath,
+                .localPath = localPath,
                 .individualOptions =
                     DownloadOperation::DownloadOperationOptions{
-                        .progressCallback =
-                            [](auto, auto, auto) {
-                                // TODO:
-                            },
-                        .remotePath = remotePath,
-                        .localPath = localPath,
+                        // TODO: Not just defaults.
                     },
             });
 
         operations_.emplace_back(operationId, std::move(scan));
-        operations_.emplace_back(operationId, std::move(bulk));
+        operations_.emplace_back(bulkId, std::move(bulk));
 
         hub_->callRemote(
             fmt::format("OperationQueue::{}::{}", sessionId_.value(), "onOperationAdded"),
             SharedData::OperationAdded{
                 .operationId = operationId,
                 .type = SharedData::OperationType::Scan,
+                .remotePath = remotePath,
             });
         hub_->callRemote(
             fmt::format("OperationQueue::{}::{}", sessionId_.value(), "onOperationAdded"),
             SharedData::OperationAdded{
-                .operationId = operationId,
+                .operationId = bulkId,
                 .type = SharedData::OperationType::BulkDownload,
+                .localPath = localPath,
+                .remotePath = remotePath,
             });
 
         return {};
     }
     else
     {
-        Log::error("Remote path is neither a file nor a directory: {}.", result->type);
+        Log::error("Remote path is neither a file nor a directory: {}.", static_cast<std::uint8_t>(result->type));
         return std::unexpected(Operation::Error{.type = Operation::ErrorType::OperationNotPossibleOnFileType});
     }
 }

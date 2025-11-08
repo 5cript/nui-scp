@@ -8,6 +8,7 @@
 #include <persistence/state/ssh_options.hpp>
 #include <persistence/state/ssh_session_options.hpp>
 #include <persistence/state/ui_options.hpp>
+#include <persistence/state/queue_options.hpp>
 
 namespace Persistence
 {
@@ -19,6 +20,7 @@ namespace Persistence
         std::unordered_map<std::string, SftpOptions> sftpOptions{};
         std::unordered_map<std::string, TerminalEngine> sessions{};
         std::unordered_map<std::string, SshSessionOptions> sshSessionOptions{};
+        std::unordered_map<std::string, QueueOptions> queueOptions{};
         UiOptions uiOptions{};
         Log::Level logLevel{Log::Level::Info};
 

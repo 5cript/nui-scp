@@ -1,4 +1,5 @@
 #include <frontend/components/progress_bar.hpp>
+#include <utility/format_bytes.hpp>
 
 #include <nui/frontend/attributes.hpp>
 #include <nui/frontend/elements.hpp>
@@ -74,15 +75,6 @@
 
 namespace
 {
-    enum class OrderOfMagnitude
-    {
-        None = 0,
-        Kilo,
-        Mega,
-        Giga,
-        Tera
-    };
-
     int percentageBetween(long long current, long long min, long long max)
     {
         // Ensure min is less than or equal to max
@@ -99,49 +91,39 @@ namespace
         // Calculate percentage
         return static_cast<int>(100. * static_cast<double>(current - min) / static_cast<double>(max - min));
     }
-
-    OrderOfMagnitude determineOrderOfMagnitude(long long value)
-    {
-        if (value < 1000)
-            return OrderOfMagnitude::None;
-        else if (value < 1'000'000)
-            return OrderOfMagnitude::Kilo;
-        else if (value < 1'000'000'000)
-            return OrderOfMagnitude::Mega;
-        else if (value < 1'000'000'000'000)
-            return OrderOfMagnitude::Giga;
-        else
-            return OrderOfMagnitude::Tera;
-    }
 }
 
-struct ProgressBar::Implementation : public ProgressBar::Settings
+namespace Components
 {
-    Nui::Observed<long long> progress{0};
-    Nui::Observed<std::string> text{"0%"};
-    Nui::Observed<std::string> backgroundColor{"#a0a0a0"};
-    OrderOfMagnitude magnitude;
+    struct ProgressBar::Implementation : public ProgressBar::Settings
+    {
+        Nui::Observed<long long> progress{0};
+        Nui::Observed<long long> maxObserved;
+        Nui::Observed<std::string> text{"0%"};
+        Nui::Observed<std::string> backgroundColor{"#a0a0a0"};
+        Utility::OrderOfMagnitude magnitude;
 
-    Implementation(Settings settings)
-        : Settings{std::move(settings)}
-        , magnitude{determineOrderOfMagnitude(settings.max)}
+        Implementation(Settings settings)
+            : Settings{std::move(settings)}
+            , maxObserved{max}
+            , magnitude{Utility::determineOrderOfMagnitude(max)}
+        {}
+    };
+
+    ProgressBar::ProgressBar(Settings settings)
+        : impl_{std::make_unique<Implementation>(std::move(settings))}
     {}
-};
 
-ProgressBar::ProgressBar(Settings settings)
-    : impl_{std::make_unique<Implementation>(std::move(settings))}
-{}
+    ROAR_PIMPL_SPECIAL_FUNCTIONS_IMPL(ProgressBar);
 
-ROAR_PIMPL_SPECIAL_FUNCTIONS_IMPL(ProgressBar);
+    Nui::ElementRenderer ProgressBar::operator()() const
+    {
+        using namespace Nui::Elements;
+        using namespace Nui::Attributes;
+        using Nui::Elements::div;
+        using fmt::format;
 
-Nui::ElementRenderer ProgressBar::operator()() const
-{
-    using namespace Nui::Elements;
-    using namespace Nui::Attributes;
-    using Nui::Elements::div;
-    using fmt::format;
-
-    // clang-format off
+        // clang-format off
     return div{
         class_ = "progress-bar",
         style = Style {
@@ -151,8 +133,8 @@ Nui::ElementRenderer ProgressBar::operator()() const
         // bar fill
         div{
             style = Style{
-                "width"_style = observe(impl_->progress).generate([this]() {
-                    return format("{}%", percentageBetween(impl_->progress.value(), impl_->min, impl_->max));
+                "width"_style = observe(impl_->progress, impl_->maxObserved).generate([this]() {
+                    return format("{}%", percentageBetween(impl_->progress.value(), impl_->min, impl_->maxObserved.value()));
                 }),
                 "height"_style = impl_->height,
                 "background-color"_style = impl_->backgroundColor
@@ -163,60 +145,51 @@ Nui::ElementRenderer ProgressBar::operator()() const
         // shine animation
         div{}()
     );
-    // clang-format on
-}
+        // clang-format on
+    }
 
-void ProgressBar::updateText()
-{
-    impl_->text = [this, percent = percentageBetween(impl_->progress.value(), impl_->min, impl_->max)]() {
-        if (impl_->showMinMax)
-        {
-            if (impl_->byteMode)
+    void ProgressBar::updateText()
+    {
+        impl_->text = [this,
+                       percent = percentageBetween(impl_->progress.value(), impl_->min, impl_->maxObserved.value())]() {
+            if (impl_->showMinMax)
             {
-                const auto formatSize = [](long long value, OrderOfMagnitude magnitude) {
-                    switch (magnitude)
-                    {
-                        case OrderOfMagnitude::None:
-                            return fmt::format("{} B", value);
-                        case OrderOfMagnitude::Kilo:
-                            return fmt::format("{:.2f} KB", value / 1024.0);
-                        case OrderOfMagnitude::Mega:
-                            return fmt::format("{:.2f} MB", value / (1024.0 * 1024.0));
-                        case OrderOfMagnitude::Giga:
-                            return fmt::format("{:.2f} GB", value / (1024.0 * 1024.0 * 1024.0));
-                        case OrderOfMagnitude::Tera:
-                            return fmt::format("{:.2f} TB", value / (1024.0 * 1024.0 * 1024.0 * 1024.0));
-                    }
-                    return std::string{};
-                };
-
-                return fmt::format(
-                    "{} - {} ({})",
-                    formatSize(impl_->progress.value(), impl_->magnitude),
-                    formatSize(impl_->max, impl_->magnitude),
-                    percent);
+                if (impl_->byteMode)
+                {
+                    return fmt::format(
+                        "{} - {} ({})",
+                        Utility::formatBytes(impl_->progress.value(), impl_->magnitude),
+                        Utility::formatBytes(impl_->maxObserved.value(), impl_->magnitude),
+                        percent);
+                }
+                else
+                    return fmt::format("{} / {} ({})", impl_->progress.value(), impl_->maxObserved.value(), percent);
             }
             else
-                return fmt::format("{} / {} ({})", impl_->progress.value(), impl_->max, percent);
-        }
-        else
-            return fmt::format("{}%", percent);
-    }();
-}
+                return fmt::format("{}%", percent);
+        }();
+    }
 
-void ProgressBar::setProgress(long long current)
-{
-    const auto percent = percentageBetween(current, impl_->min, impl_->max);
-    const auto hue = std::max(5., 120. * std::pow(static_cast<double>(percent) / 100., 1.8));
+    void ProgressBar::setProgress(long long current)
+    {
+        const auto percent = percentageBetween(current, impl_->min, impl_->maxObserved.value());
+        const auto hue = std::max(5., 120. * std::pow(static_cast<double>(percent) / 100., 1.8));
 
-    impl_->progress = current;
-    impl_->backgroundColor = fmt::format("hsl({}, 100%, 50%)", static_cast<int>(hue));
-    updateText();
+        impl_->progress = current;
+        impl_->backgroundColor = fmt::format("hsl({}, 100%, 50%)", static_cast<int>(hue));
+        updateText();
 
-    Nui::globalEventContext.executeActiveEventsImmediately();
-}
+        Nui::globalEventContext.executeActiveEventsImmediately();
+    }
 
-long long ProgressBar::max() const
-{
-    return impl_->max;
+    long long ProgressBar::max() const
+    {
+        return impl_->maxObserved.value();
+    }
+
+    void ProgressBar::max(long long max)
+    {
+        impl_->maxObserved = max;
+        updateText();
+    }
 }

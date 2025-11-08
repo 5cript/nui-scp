@@ -6,8 +6,6 @@
 
 namespace SecureShell
 {
-    struct FileInformation : public SharedData::DirectoryEntry
-    {
-        static FileInformation fromSftpAttributes(sftp_attributes attributes);
-    };
+    using FileInformation = SharedData::DirectoryEntry;
+    FileInformation fromSftpAttributes(sftp_attributes attributes);
 }

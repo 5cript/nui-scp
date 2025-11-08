@@ -1,5 +1,5 @@
 #include <frontend/session_components/session_options.hpp>
-#include <frontend/components/ui5-suggestion-item.hpp>
+#include <frontend/components/ui5/suggestion-item.hpp>
 #include <frontend/events/frontend_events.hpp>
 #include <log/log.hpp>
 

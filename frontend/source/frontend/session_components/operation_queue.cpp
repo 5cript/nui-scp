@@ -1,17 +1,17 @@
 #include <frontend/session_components/operation_queue.hpp>
-#include <frontend/components/progress_bar.hpp>
 #include <frontend/observed_random_access_map.hpp>
-#include <shared_data/file_operations/download_progress.hpp>
-#include <shared_data/file_operations/operation_added.hpp>
-#include <shared_data/file_operations/operation_type.hpp>
-#include <shared_data/file_operations/operation_error_type.hpp>
-#include <shared_data/file_operations/operation_error.hpp>
-#include <shared_data/file_operations/operation_state.hpp>
-#include <shared_data/file_operations/operation_completed.hpp>
-#include <shared_data/is_paused.hpp>
-#include <shared_data/error_or_success.hpp>
+
+#include <frontend/components/progress_bar.hpp>
+#include <frontend/components/svg/play.hpp>
+#include <frontend/components/svg/pause.hpp>
+#include <frontend/components/svg/download.hpp>
+#include <frontend/components/svg/upload.hpp>
+#include <frontend/components/svg/scan.hpp>
+#include <frontend/components/svg/scan_animated.hpp>
+
 #include <utility/convert_naming_convention.hpp>
 #include <utility/visit_overloaded.hpp>
+#include <utility/format_bytes.hpp>
 
 #include <log/log.hpp>
 #include <nui/frontend/attributes.hpp>
@@ -27,124 +27,34 @@
 #include <variant>
 #include <map>
 #include <chrono>
+#include <string_view>
 
 using namespace std::chrono_literals;
 
 namespace
 {
-    constexpr std::string_view progressHeight = "15px";
+    constexpr std::string_view progressHeight{"15px"};
+    namespace Svgs = Components::Svg;
 
-    namespace Svgs
+    class OperationCardInterface
     {
-        Nui::ElementRenderer play()
-        {
-            namespace svg = Nui::Elements::Svg;
-            namespace svga = Nui::Attributes::Svg;
+      public:
+        virtual ~OperationCardInterface() = default;
 
-            // clang-format off
-            return svg::svg {
-                svga::viewBox = "0 0 24 24",
-                svga::fill = "none",
-            }(
-                svg::path {
-                    svga::d = "M8 5v14l11-7L8 5z",
-                    svga::fill = "currentColor"
-                }()
-            );
-            // clang-format on
-        }
-
-        Nui::ElementRenderer pause()
-        {
-            namespace svg = Nui::Elements::Svg;
-            namespace svga = Nui::Attributes::Svg;
-
-            // clang-format off
-            return svg::svg {
-                svga::viewBox = "0 0 24 24",
-                svga::fill = "none",
-            }(
-                svg::path {
-                    svga::d = "M6 5h4v14H6zM14 5h4v14h-4z",
-                    svga::fill = "currentColor"
-                }()
-            );
-            // clang-format on
-        }
-
-        Nui::ElementRenderer download()
-        {
-            namespace svg = Nui::Elements::Svg;
-            namespace svga = Nui::Attributes::Svg;
-
-            // clang-format off
-            return svg::svg {
-                svga::viewBox = "0 0 24 24",
-                svga::fill = "none",
-            }(
-                svg::path {
-                    svga::d = "M12 3v10m0 0 4-4m-4 4-4-4M5 21h14",
-                    svga::stroke = "currentColor",
-                    svga::strokeWidth = "1.6",
-                    svga::strokeLinecap = "round",
-                    svga::strokeLinejoin = "round"
-                }()
-            );
-            // clang-format on
-        }
-
-        Nui::ElementRenderer upload()
-        {
-            namespace svg = Nui::Elements::Svg;
-            namespace svga = Nui::Attributes::Svg;
-
-            // clang-format off
-            return svg::svg {
-                svga::viewBox = "0 0 24 24",
-                svga::fill = "none",
-            }(
-                svg::path {
-                    svga::d = "M12 21V11m0 0 4 4m-4-4-4 4M19 3H5",
-                    svga::stroke = "currentColor",
-                    svga::strokeWidth = "1.6",
-                    svga::strokeLinecap = "round",
-                    svga::strokeLinejoin = "round"
-                }()
-            );
-            // clang-format on
-        }
-
-        Nui::ElementRenderer scan()
-        {
-            namespace svg = Nui::Elements::Svg;
-            namespace svga = Nui::Attributes::Svg;
-
-            // clang-format off
-            return svg::svg {
-                svga::viewBox = "0 0 24 24",
-                svga::fill = "none",
-            }(
-                svg::path {
-                    svga::d = "M3 7v4a4 4 0 0 0 4 4h10",
-                    svga::stroke = "currentColor",
-                    svga::strokeWidth = "1.6",
-                    svga::strokeLinecap = "round",
-                    svga::strokeLinejoin = "round"
-                }(),
-                svg::path {
-                    svga::d = "M21 17v-4a4 4 0 0 0-4-4H7",
-                    svga::stroke = "currentColor",
-                    svga::strokeWidth = "1.6",
-                    svga::strokeLinecap = "round",
-                    svga::strokeLinejoin = "round"
-                }()
-            );
-            // clang-format on
-        }
-    }
+        virtual std::string statusText() const = 0;
+        virtual std::string title() const = 0;
+        virtual bool warrantsCancelConfirm() const = 0;
+        virtual Nui::ElementRenderer body() const = 0;
+        virtual void state(SharedData::OperationState newState) = 0;
+        virtual SharedData::OperationState state() const = 0;
+        virtual bool isCompletedState() const = 0;
+        virtual std::chrono::steady_clock::time_point completionTime() const = 0;
+        virtual void completionTime(std::chrono::steady_clock::time_point time) = 0;
+        virtual Nui::ElementRenderer operator()() const = 0;
+    };
 
     template <typename Derived>
-    class OperationCard
+    class OperationCard : public OperationCardInterface
     {
       public:
         explicit OperationCard(
@@ -163,17 +73,22 @@ namespace
             return Utility::splitByPascalCase(Utility::enumToString(state_.value())).joined(" ");
         }
 
-        void state(SharedData::OperationState newState)
+        void state(SharedData::OperationState newState) override
         {
             state_ = newState;
         }
 
-        SharedData::OperationState state() const
+        SharedData::OperationState state() const override
         {
             return state_.value();
         }
 
-        Nui::ElementRenderer operator()() const
+        virtual std::string statusText() const override
+        {
+            return fmt::format("status: {}", formattedState());
+        }
+
+        Nui::ElementRenderer operator()() const override
         {
             using namespace Nui::Elements;
             using namespace Nui::Attributes;
@@ -202,18 +117,22 @@ namespace
                     div {
                         class_ = "opq-type"
                     }(
+                        observe(state_),
                         [this]() -> Nui::ElementRenderer {
                             if (type_ == SharedData::OperationType::Download)
                                 return Svgs::download();
                             else if (type_ == SharedData::OperationType::Upload)
                                 return Svgs::upload();
-                            else if (type_ == SharedData::OperationType::Rename)
-                                return Svgs::scan();
-                            else if (type_ == SharedData::OperationType::Delete)
-                                return Svgs::scan();
+                            else if (type_ == SharedData::OperationType::Scan)
+                            {
+                                if (isCompletedState())
+                                    return Svgs::scan();
+                                else
+                                    return Svgs::scanAnimated();
+                            }
                             else
                                 return div{}("UnknownType");
-                        }()
+                        }
                     ),
                     div {
                         class_ = "opq-title"
@@ -225,7 +144,7 @@ namespace
                         }(
                             Nui::observe(state_),
                             [this]() -> std::string {
-                                return fmt::format("status: {}", formattedState());
+                                return static_cast<Derived const*>(this)->statusText();
                             }
                         )
                     ),
@@ -275,8 +194,7 @@ namespace
                         observe(state_).generate([this]() -> std::string {
                             if (isCompletedState())
                                 return "Remove";
-                            else
-                                return "Cancel";
+                            return "Cancel";
                         })
                     )
                 ),
@@ -285,7 +203,7 @@ namespace
             // clang-format on
         }
 
-        bool isCompletedState() const
+        bool isCompletedState() const override
         {
             const auto state = state_.value();
             return state == SharedData::OperationState::Completed || state == SharedData::OperationState::Failed ||
@@ -313,12 +231,12 @@ namespace
                 "Elapsed: 0s");
         }
 
-        std::chrono::steady_clock::time_point completionTime() const
+        std::chrono::steady_clock::time_point completionTime() const override
         {
             return completionTime_.value();
         }
 
-        void completionTime(std::chrono::steady_clock::time_point time)
+        void completionTime(std::chrono::steady_clock::time_point time) override
         {
             completionTime_ = time;
             Nui::globalEventContext.executeActiveEventsImmediately();
@@ -329,7 +247,15 @@ namespace
             return startTime_;
         }
 
-        virtual bool warrantsCancelConfirm() const = 0;
+        auto bodyClass() const
+        {
+            using namespace Nui::Attributes;
+            return class_ = observe(state_).generate([this]() {
+                if (isCompletedState())
+                    return "opq-body opq-collapsed";
+                return "opq-body";
+            });
+        }
 
       protected:
         std::chrono::steady_clock::time_point startTime_{std::chrono::steady_clock::now()};
@@ -363,7 +289,7 @@ namespace
             , remotePath_{std::move(remotePath)}
         {}
 
-        Nui::ElementRenderer body() const
+        Nui::ElementRenderer body() const override
         {
             using namespace Nui::Elements;
             using namespace Nui::Attributes;
@@ -372,13 +298,7 @@ namespace
 
             // clang-format off
             return div{
-                class_ = observe(state_).generate([this](){
-                    const auto state = state_.value();
-                    if (state == SharedData::OperationState::Completed || state == SharedData::OperationState::Failed || state == SharedData::OperationState::Canceled)
-                        return "opq-body opq-collapsed";
-                    else
-                        return "opq-body";
-                }),
+                bodyClass()
             }(
                 progressBar_()
             );
@@ -390,7 +310,7 @@ namespace
             progressBar_.setProgress(current);
         }
 
-        std::string title() const
+        std::string title() const override
         {
             return fmt::format("Download '{}' to '{}'", remotePath_.generic_string(), localPath_.generic_string());
         }
@@ -401,69 +321,246 @@ namespace
         }
 
       private:
-        ProgressBar progressBar_;
+        Components::ProgressBar progressBar_;
         std::filesystem::path localPath_;
         std::filesystem::path remotePath_;
     };
 
+    class DisplayedScanOperation : public OperationCard<DisplayedScanOperation>
+    {
+      public:
+        DisplayedScanOperation(
+            Ids::OperationId operationId,
+            std::function<void(OperationCard const& operation)> doRemoveSelf,
+            std::shared_ptr<Nui::Observed<bool>> doDeletionCountdown)
+            : OperationCard{
+                  SharedData::OperationType::Scan,
+                  std::move(operationId),
+                  std::move(doRemoveSelf),
+                  std::move(doDeletionCountdown)}
+        {}
+
+        Nui::ElementRenderer body() const override
+        {
+            using namespace Nui::Elements;
+            using namespace Nui::Attributes;
+            using Nui::Elements::div;
+            using Nui::Elements::span;
+
+            // clang-format off
+            return div{
+                bodyClass()
+            }(
+                div {
+                    style = "margin-top: 8px, font-size: 13px; color: var(--muted);"
+                }(
+                    observe(totalBytes_, currentIndex_, totalScanned_).generate([this]() -> std::string {
+                        return fmt::format(
+                            "Scanned a total of {} items, currently at item {} ({} total).",
+                            totalScanned_.value(),
+                            currentIndex_.value(),
+                            Utility::formatBytes(totalBytes_.value(), Utility::determineOrderOfMagnitude(totalBytes_.value())));
+                    })
+                )
+            );
+            // clang-format on
+        }
+
+        void setProgress(std::uint64_t totalBytes, std::uint64_t currentIndex, std::uint64_t totalScanned)
+        {
+            totalBytes_ = totalBytes;
+            currentIndex_ = currentIndex;
+            totalScanned_ = totalScanned;
+            Nui::globalEventContext.executeActiveEventsImmediately();
+        }
+
+        std::string title() const override
+        {
+            return "Scanning remote directory";
+        }
+
+        bool warrantsCancelConfirm() const override
+        {
+            return true;
+        }
+
+        std::string statusText() const override
+        {
+            return fmt::format(
+                "status: {}, scanned {} items of size {}",
+                formattedState(),
+                totalScanned_.value(),
+                Utility::formatBytes(totalBytes_.value(), Utility::determineOrderOfMagnitude(totalBytes_.value())));
+        }
+
+      private:
+        Nui::Observed<std::uint64_t> totalBytes_{0ull};
+        Nui::Observed<std::uint64_t> currentIndex_{0ull};
+        Nui::Observed<std::uint64_t> totalScanned_{0ull};
+    };
+
+    struct DisplayedBulkDownloadOperation : public OperationCard<DisplayedBulkDownloadOperation>
+    {
+      public:
+        DisplayedBulkDownloadOperation(
+            Ids::OperationId operationId,
+            std::function<void(OperationCard const& operation)> doRemoveSelf,
+            std::shared_ptr<Nui::Observed<bool>> doDeletionCountdown)
+            : OperationCard{SharedData::OperationType::Scan, std::move(operationId), std::move(doRemoveSelf), std::move(doDeletionCountdown)}
+            , fileProgressBar_({
+                  .height = std::string{progressHeight},
+                  .min = 0,
+                  .max = 1,
+                  .showMinMax = true,
+                  .byteMode = true,
+              })
+            , totalProgressBar_({
+                  .height = std::string{progressHeight},
+                  .min = 0,
+                  .max = 1,
+                  .showMinMax = true,
+                  .byteMode = true,
+              })
+        {}
+
+        bool warrantsCancelConfirm() const override
+        {
+            return true;
+        }
+
+        std::string statusText() const override
+        {
+            return fmt::format("Total Progress - File {}/{}", fileCurrentIndex.value(), fileCount.value());
+        }
+
+        std::string title() const override
+        {
+            return "Bulk Download";
+        }
+
+        void setProgress(SharedData::BulkDownloadProgress const& progress)
+        {
+            if (currentFile.value() != progress.currentFile)
+                currentFile = progress.currentFile;
+
+            fileProgressBar_.setProgress(progress.currentFileBytes);
+            if (fileProgressBar_.max() != static_cast<long long>(progress.currentFileTotalBytes))
+                fileProgressBar_.max(static_cast<long long>(progress.currentFileTotalBytes));
+
+            totalProgressBar_.setProgress(progress.bytesCurrent);
+            if (totalProgressBar_.max() != static_cast<long long>(progress.bytesTotal))
+                totalProgressBar_.max(static_cast<long long>(progress.bytesTotal));
+
+            fileCurrentIndex = progress.fileCurrentIndex;
+            fileCount = progress.fileCount;
+
+            Nui::globalEventContext.executeActiveEventsImmediately();
+        }
+
+        Nui::ElementRenderer body() const override
+        {
+            using namespace Nui::Elements;
+            using namespace Nui::Attributes;
+            using Nui::Elements::div;
+            using Nui::Elements::span;
+
+            Log::info("Rendering bulk download operation body");
+
+            // clang-format off
+            return div{
+                bodyClass()
+            }(
+                div {
+                    style = "margin-top: 8px, font-size: 13px; color: var(--muted);"
+                }(
+                    span{}(
+                        observe(currentFile),
+                        [this](){
+                            return fmt::format("Current File: '{}'", currentFile.value());
+                        }
+                    ),
+                    fileProgressBar_(),
+                    span{}(
+                        observe(fileCurrentIndex, fileCount),
+                        [this](){
+                            return statusText();
+                        }
+                    ),
+                    totalProgressBar_()
+                )
+            );
+            // clang-format on
+        }
+
+      private:
+        Nui::Observed<std::string> currentFile{""};
+        Nui::Observed<std::uint64_t> fileCurrentIndex{0ull};
+        Nui::Observed<std::uint64_t> fileCount{0ull};
+
+        Components::ProgressBar fileProgressBar_;
+        Components::ProgressBar totalProgressBar_;
+    };
+
     struct DisplayedOperation
     {
-        Ids::OperationId operationId;
-        SharedData::OperationType type;
-        std::variant<std::monostate, DisplayedDownloadOperation> details;
+      public:
+        DisplayedOperation(
+            Ids::OperationId operationId,
+            SharedData::OperationType type,
+            std::unique_ptr<OperationCardInterface> card)
+            : operationId_{std::move(operationId)}
+            , type_{type}
+            , card_{std::move(card)}
+        {}
 
+        Nui::ElementRenderer operator()()
+        {
+            return (*card_)();
+        }
+
+        // for the map key
         Ids::OperationId key() const
         {
-            return operationId;
+            return operationId_;
         }
 
         SharedData::OperationState state() const
         {
-            return Utility::visitOverloaded(
-                details,
-                [](auto const& op) {
-                    return op.state();
-                },
-                [](std::monostate) {
-                    return SharedData::OperationState::NotStarted;
-                });
+            return card_->state();
         }
 
         void state(SharedData::OperationState newState)
         {
-            return Utility::visitOverloaded(
-                details,
-                [newState](auto& op) {
-                    op.state(newState);
-                    if (op.isCompletedState())
-                        op.completionTime(std::chrono::steady_clock::now());
-                },
-                [](std::monostate) {});
+            card_->state(newState);
+            if (card_->isCompletedState())
+                card_->completionTime(std::chrono::steady_clock::now());
         }
 
         bool isCompletedState() const
         {
-            return Utility::visitOverloaded(
-                details,
-                [](auto const& op) {
-                    return op.isCompletedState();
-                },
-                [](std::monostate) {
-                    return false;
-                });
+            return card_->isCompletedState();
         }
 
         std::chrono::steady_clock::time_point completionTime() const
         {
-            return Utility::visitOverloaded(
-                details,
-                [](auto const& op) {
-                    return op.completionTime();
-                },
-                [](std::monostate) {
-                    return std::chrono::steady_clock::now();
-                });
+            return card_->completionTime();
         }
+
+        SharedData::OperationType type() const
+        {
+            return type_;
+        }
+
+        template <typename T>
+        T* getCardSpecifically()
+        {
+            return dynamic_cast<T*>(card_.get());
+        }
+
+      private:
+        Ids::OperationId operationId_;
+        SharedData::OperationType type_;
+        std::unique_ptr<OperationCardInterface> card_;
     };
 }
 
@@ -508,10 +605,30 @@ OperationQueue::OperationQueue(
           std::make_unique<Implementation>(stateHolder, events, std::move(persistenceSessionName), confirmDialog),
       }
 {
+    impl_->stateHolder->load(
+        [this, name = impl_->persistenceSessionName](bool success, Persistence::StateHolder& holder) {
+            if (!success)
+                return;
+
+            auto const& state = holder.stateCache().fullyResolve();
+
+            auto iter = state.sessions.find(name);
+            if (iter == end(state.sessions))
+            {
+                Log::error("No options found for name: {}", name);
+                return;
+            }
+
+            auto [engineKey, engine] = *iter;
+            impl_->paused = engine.queueOptions->startInPausedState.value_or(true);
+            *impl_->autoClean = engine.queueOptions->autoRemoveCompletedOperations.value_or(false);
+            Nui::globalEventContext.executeActiveEventsImmediately();
+        });
+
     Nui::setInterval(
         1000,
         [this]() {
-            if (impl_->autoClean && !impl_->operations.empty())
+            if (impl_->autoClean->value() && !impl_->operations.empty())
             {
                 auto now = std::chrono::steady_clock::now();
                 bool anyRemoved = false;
@@ -595,132 +712,265 @@ void OperationQueue::activate(FileEngine* fileEngine, Ids::SessionId sessionId)
         Nui::RpcClient::autoRegisterFunction(
             fmt::format("OperationQueue::{}::onOperationAdded", impl_->sessionId.value()),
             [this](SharedData::OperationAdded const& added) {
-                if (!added.localPath || !added.remotePath)
-                {
-                    Log::error(
-                        "Received OperationAdded for operation id: {} without localPath or remotePath",
-                        added.operationId.value());
-                    return;
-                }
-
-                impl_->operations.insert(
-                    added.operationId,
-                    DisplayedOperation{
-                        .operationId = added.operationId,
-                        .type = added.type,
-                        .details = [&added, this]() -> decltype(DisplayedOperation::details) {
-                            if (added.type == SharedData::OperationType::Download)
-                                return DisplayedDownloadOperation{
-                                    added.totalBytes ? static_cast<long long>(*added.totalBytes) : 0,
-                                    added.operationId,
-                                    *added.localPath,
-                                    *added.remotePath,
-                                    [this](OperationCard<DisplayedDownloadOperation> const& operation) {
-                                        cancelOperation(operation);
-                                    },
-                                    impl_->autoClean,
-                                };
-                            return std::monostate{};
-                        }()});
-                Nui::globalEventContext.executeActiveEventsImmediately();
+                onOperationAdded(added);
             }));
 
     impl_->onUpdate.push_back(
         Nui::RpcClient::autoRegisterFunction(
             fmt::format("OperationQueue::{}::onDownloadProgress", impl_->sessionId.value()),
             [this](SharedData::DownloadProgress const& progress) {
-                Log::debug(
-                    "Received download progress for operation id: {} - {}/{}",
-                    progress.operationId.value(),
-                    progress.current - progress.min,
-                    progress.max - progress.min);
+                onDownloadProgress(progress);
+            }));
 
-                auto* operation = impl_->operations.at(progress.operationId);
-                if (!operation)
-                {
-                    Log::error("Received download progress for unknown operation id: {}", progress.operationId.value());
-                    return;
-                }
-                if (operation->type != SharedData::OperationType::Download)
-                {
-                    Log::error(
-                        "Received download progress for operation id: {} which is not a download",
-                        progress.operationId.value());
-                    return;
-                }
-                auto* details = std::get_if<DisplayedDownloadOperation>(&operation->details);
-                if (!details)
-                {
-                    Log::error(
-                        "Received download progress for operation id: {} which has no download details",
-                        progress.operationId.value());
-                    return;
-                }
-                details->setProgress(progress.current - progress.min);
+    impl_->onUpdate.push_back(
+        Nui::RpcClient::autoRegisterFunction(
+            fmt::format("OperationQueue::{}::onBulkDownloadProgress", impl_->sessionId.value()),
+            [this](SharedData::BulkDownloadProgress const& progress) {
+                onBulkDownloadProgress(progress);
+            }));
+
+    impl_->onUpdate.push_back(
+        Nui::RpcClient::autoRegisterFunction(
+            fmt::format("OperationQueue::{}::onScanProgress", impl_->sessionId.value()),
+            [this](SharedData::ScanProgress const& progress) {
+                onScanProgress(progress);
             }));
 
     impl_->onUpdate.push_back(
         Nui::RpcClient::autoRegisterFunction(
             fmt::format("OperationQueue::{}::onOperationCompleted", impl_->sessionId.value()), [this](Nui::val val) {
-                SharedData::OperationCompleted completed{};
-                try
-                {
-                    Nui::convertFromVal(val, completed);
-                }
-                catch (std::exception const& e)
-                {
-                    Log::error("Failed to convert OperationCompleted: {}", e.what());
-                    return;
-                }
-
-                Log::info("Received operation completed for operation id: {}", completed.operationId.value());
-                auto* operation = impl_->operations.at(completed.operationId);
-                if (!operation)
-                {
-                    Log::error(
-                        "Received operation completed for unknown operation id: {}", completed.operationId.value());
-                    return;
-                }
-                switch (completed.reason)
-                {
-                    case (SharedData::OperationCompletionReason::Completed):
-                    {
-                        operation->state(SharedData::OperationState::Completed);
-                        break;
-                    }
-                    case (SharedData::OperationCompletionReason::Canceled):
-                    {
-                        operation->state(SharedData::OperationState::Canceled);
-                        break;
-                    }
-                    case (SharedData::OperationCompletionReason::Failed):
-                    {
-                        operation->state(SharedData::OperationState::Failed);
-                        break;
-                    }
-                    default:
-                        Log::warn(
-                            "Received operation completed for operation id: {} with unknown reason: {}",
-                            completed.operationId.value(),
-                            static_cast<int>(completed.reason));
-                }
-                Nui::globalEventContext.executeActiveEventsImmediately();
+                onOperationCompleted(std::move(val));
             }));
 
     Nui::RpcClient::callWithBackChannel(
         fmt::format("OperationQueue::{}::isPaused", impl_->sessionId.value()),
         [this](SharedData::ErrorOrSuccess<SharedData::IsPaused> const& result) {
-            if (result)
-            {
-                Log::info("Initial pause state of operation queue is: {}", result.paused ? "paused" : "running");
-                impl_->paused = result.paused;
-                Nui::globalEventContext.executeActiveEventsImmediately();
-            }
-            else
-            {
-                Log::error("Failed to get initial paused state: {}", result.error.value());
-            }
+            onIsPaused(result);
         });
+}
+
+void OperationQueue::onOperationAdded(SharedData::OperationAdded const& added)
+{
+    auto makeCard = [&added, this]() -> std::unique_ptr<OperationCardInterface> {
+        Log::info("Operation of type '{}' added to frontend queue", Utility::enumToString(added.type));
+        if (added.type == SharedData::OperationType::Download)
+        {
+            if (!added.localPath || !added.remotePath)
+            {
+                Log::error(
+                    "Received OperationAdded for operation id: {} without localPath or remotePath",
+                    added.operationId.value());
+                return {};
+            }
+            return std::make_unique<DisplayedDownloadOperation>(
+                added.totalBytes ? static_cast<long long>(*added.totalBytes) : 0,
+                added.operationId,
+                *added.localPath,
+                *added.remotePath,
+                [this](OperationCard<DisplayedDownloadOperation> const& operation) {
+                    cancelOperation(operation);
+                },
+                impl_->autoClean);
+        }
+        else if (added.type == SharedData::OperationType::Scan)
+        {
+            if (!added.remotePath)
+            {
+                Log::error(
+                    "Received OperationAdded for operation id: {} without remotePath", added.operationId.value());
+                return {};
+            }
+            return std::make_unique<DisplayedScanOperation>(
+                added.operationId,
+                [this](OperationCard<DisplayedScanOperation> const& operation) {
+                    cancelOperation(operation);
+                },
+                impl_->autoClean);
+        }
+        else if (added.type == SharedData::OperationType::BulkDownload)
+        {
+            Log::info("Creating bulk download operation card for operation id: {}", added.operationId.value());
+            return std::make_unique<DisplayedBulkDownloadOperation>(
+                added.operationId,
+                [this](OperationCard<DisplayedBulkDownloadOperation> const& operation) {
+                    cancelOperation(operation);
+                },
+                impl_->autoClean);
+        }
+        Log::error(
+            "Received OperationAdded for operation id: {} with unknown type: {}",
+            added.operationId.value(),
+            static_cast<int>(added.type));
+        return {};
+    };
+
+    auto card = makeCard();
+    if (!card)
+    {
+        Log::error("Failed to create operation card for operation id: {}", added.operationId.value());
+        return;
+    }
+    Log::info("Inserting operation id: {} into operation queue", added.operationId.value());
+    try
+    {
+        impl_->operations.insert(added.operationId, DisplayedOperation{added.operationId, added.type, std::move(card)});
+    }
+    catch (std::exception const& e)
+    {
+        Log::error("Failed to insert operation id: {} into operation queue: {}", added.operationId.value(), e.what());
+        return;
+    }
+    Nui::globalEventContext.executeActiveEventsImmediately();
+}
+
+void OperationQueue::onDownloadProgress(SharedData::DownloadProgress const& progress)
+{
+    Log::debug(
+        "Received download progress for operation id: {} - {}/{}",
+        progress.operationId.value(),
+        progress.current - progress.min,
+        progress.max - progress.min);
+
+    auto* operation = impl_->operations.at(progress.operationId);
+    if (!operation)
+    {
+        Log::error("Received download progress for unknown operation id: {}", progress.operationId.value());
+        return;
+    }
+    if (operation->type() != SharedData::OperationType::Download)
+    {
+        Log::error(
+            "Received download progress for operation id: {} which is not a download", progress.operationId.value());
+        return;
+    }
+    auto* renderer = operation->getCardSpecifically<DisplayedDownloadOperation>();
+    if (!renderer)
+    {
+        Log::error(
+            "Received download progress for operation id: {} which has no download renderer",
+            progress.operationId.value());
+        return;
+    }
+    renderer->setProgress(progress.current - progress.min);
+}
+
+void OperationQueue::onScanProgress(SharedData::ScanProgress const& progress)
+{
+
+    Log::debug(
+        "Received scan progress for operation id: {} - totalBytes: {}, currentIndex: {}, totalItems: {}",
+        progress.operationId.value(),
+        progress.totalBytes,
+        progress.currentIndex,
+        progress.totalScanned);
+
+    auto* operation = impl_->operations.at(progress.operationId);
+    if (!operation)
+    {
+        Log::error("Received scan progress for unknown operation id: {}", progress.operationId.value());
+        return;
+    }
+    if (operation->type() != SharedData::OperationType::Scan)
+    {
+        Log::error("Received scan progress for operation id: {} which is not a scan", progress.operationId.value());
+        return;
+    }
+    auto* renderer = operation->getCardSpecifically<DisplayedScanOperation>();
+    if (!renderer)
+    {
+        Log::error(
+            "Received scan progress for operation id: {} which has no scan renderer", progress.operationId.value());
+        return;
+    }
+    renderer->setProgress(progress.totalBytes, progress.currentIndex, progress.totalScanned);
+}
+
+void OperationQueue::onBulkDownloadProgress(SharedData::BulkDownloadProgress const& progress)
+{
+    Log::debug("Received bulk download progress for operation id: {}.", progress.operationId.value());
+
+    auto* operation = impl_->operations.at(progress.operationId);
+    if (!operation)
+    {
+        Log::error("Received bulk download progress for unknown operation id: {}", progress.operationId.value());
+        return;
+    }
+    if (operation->type() != SharedData::OperationType::BulkDownload)
+    {
+        Log::error(
+            "Received bulk download progress for operation id: {} which is not a bulk download",
+            progress.operationId.value());
+        return;
+    }
+    auto* renderer = operation->getCardSpecifically<DisplayedBulkDownloadOperation>();
+    if (!renderer)
+    {
+        Log::error(
+            "Received bulk download progress for operation id: {} which has no bulk download renderer",
+            progress.operationId.value());
+        return;
+    }
+    renderer->setProgress(progress);
+}
+
+void OperationQueue::onOperationCompleted(Nui::val val)
+{
+    SharedData::OperationCompleted completed{};
+    try
+    {
+        Nui::convertFromVal(val, completed);
+    }
+    catch (std::exception const& e)
+    {
+        Log::error("Failed to convert OperationCompleted: {}", e.what());
+        return;
+    }
+
+    Log::info("Received operation completed for operation id: {}", completed.operationId.value());
+    auto* operation = impl_->operations.at(completed.operationId);
+    if (!operation)
+    {
+        Log::error("Received operation completed for unknown operation id: {}", completed.operationId.value());
+        return;
+    }
+    switch (completed.reason)
+    {
+        case (SharedData::OperationCompletionReason::Completed):
+        {
+            operation->state(SharedData::OperationState::Completed);
+            break;
+        }
+        case (SharedData::OperationCompletionReason::Canceled):
+        {
+            operation->state(SharedData::OperationState::Canceled);
+            break;
+        }
+        case (SharedData::OperationCompletionReason::Failed):
+        {
+            operation->state(SharedData::OperationState::Failed);
+            break;
+        }
+        default:
+            Log::warn(
+                "Received operation completed for operation id: {} with unknown reason: {}",
+                completed.operationId.value(),
+                static_cast<int>(completed.reason));
+    }
+    Nui::globalEventContext.executeActiveEventsImmediately();
+}
+
+void OperationQueue::onIsPaused(SharedData::ErrorOrSuccess<SharedData::IsPaused> const& result)
+{
+    if (result)
+    {
+        Log::info("Initial pause state of operation queue is: {}", result.paused ? "paused" : "running");
+        impl_->paused = result.paused;
+        Nui::globalEventContext.executeActiveEventsImmediately();
+    }
+    else
+    {
+        Log::error("Failed to get initial paused state: {}", result.error.value());
+    }
 }
 
 Nui::ElementRenderer OperationQueue::operator()()
@@ -731,18 +981,8 @@ Nui::ElementRenderer OperationQueue::operator()()
     using Nui::Elements::span;
 
     auto operationsMapper = [](auto, auto const& element) {
-        return div{}(std::visit(
-            [](auto const& details) -> Nui::ElementRenderer {
-                if constexpr (std::is_same_v<std::decay_t<decltype(details)>, std::monostate>)
-                {
-                    return div{}("Unknown operation type");
-                }
-                else
-                {
-                    return details();
-                }
-            },
-            element->details));
+        std::cout << "Mapping operation element" << std::endl;
+        return div{}((*element)());
     };
 
     auto makeSummaryText = [this]() -> std::string {
@@ -761,15 +1001,20 @@ Nui::ElementRenderer OperationQueue::operator()()
                 role = "button",
                 tabIndex = "0",
                 onClick = [this](){
-                    Nui::RpcClient::callWithBackChannel(fmt::format("OperationQueue::{}::pauseUnpause", impl_->sessionId.value()), [this, requestToPauseUnpauseWas = !impl_->paused.value()](SharedData::ErrorOrSuccess<> const& result){
-                        if (result) {
-                            Log::info("{} operation queue successfully", requestToPauseUnpauseWas ? "Paused" : "Unpaused");
-                            impl_->paused = !impl_->paused.value();
-                            Nui::globalEventContext.executeActiveEventsImmediately();
-                        }
-                        else
-                            Log::error("Failed to {} operation queue: {}", requestToPauseUnpauseWas ? "pause" : "unpause", result.error.value());
-                    }, !impl_->paused.value());
+                    Nui::RpcClient::callWithBackChannel(
+                        fmt::format("OperationQueue::{}::pauseUnpause", impl_->sessionId.value()),
+                        [this, requestToPauseUnpauseWas = !impl_->paused.value()](SharedData::ErrorOrSuccess<> const& result)
+                        {
+                            if (result) {
+                                Log::info("{} operation queue successfully", requestToPauseUnpauseWas ? "Paused" : "Unpaused");
+                                impl_->paused = !impl_->paused.value();
+                                Nui::globalEventContext.executeActiveEventsImmediately();
+                            }
+                            else
+                                Log::error("Failed to {} operation queue: {}", requestToPauseUnpauseWas ? "pause" : "unpause", result.error.value());
+                        },
+                        !impl_->paused.value()
+                    );
                 }
             }(
                 div{
@@ -778,8 +1023,7 @@ Nui::ElementRenderer OperationQueue::operator()()
                     observe(impl_->paused).generate([this](){
                         if (impl_->paused.value())
                             return Svgs::play();
-                        else
-                            return Svgs::pause();
+                        return Svgs::pause();
                     })
                 ),
                 div{
@@ -788,8 +1032,7 @@ Nui::ElementRenderer OperationQueue::operator()()
                     observe(impl_->paused).generate([this]() -> std::string {
                         if (!impl_->paused.value())
                             return "Pause";
-                        else
-                            return "Continue";
+                        return "Continue";
                     })
                 )
             ),
@@ -814,6 +1057,14 @@ Nui::ElementRenderer OperationQueue::operator()()
                 "design"_prop = "Graphical",
                 "change"_event = [this](Nui::val event) {
                     *impl_->autoClean = event["target"]["checked"].as<bool>();
+                    impl_->stateHolder->load([this, name = impl_->persistenceSessionName](bool success, Persistence::StateHolder& holder) {
+                        if (!success)
+                            return;
+
+                        auto iter = holder.stateCache().sessions.find(name);
+                        iter->second.queueOptions->autoRemoveCompletedOperations = impl_->autoClean->value();
+                        holder.save([]() {});
+                    });
                 }
             }(),
             div{

@@ -20,6 +20,7 @@ namespace Persistence
         j["logLevel"] = [&]() {
             return Log::levelToString(state.logLevel);
         }();
+        j["queueOptions"] = state.queueOptions;
     }
     void from_json(nlohmann::json const& j, State& state)
     {
@@ -46,6 +47,9 @@ namespace Persistence
 
         if (j.contains("logLevel"))
             state.logLevel = Log::levelFromString(j.at("logLevel").get<std::string>());
+
+        if (j.contains("queueOptions"))
+            j.at("queueOptions").get_to(state.queueOptions);
     }
 
     State State::fullyResolve() const
@@ -64,6 +68,7 @@ namespace Persistence
         {
             fillDefaults(session.terminalOptions, resolved.terminalOptions);
             fillDefaults(session.termios, resolved.termios);
+            fillDefaults(session.queueOptions, resolved.queueOptions);
 
             Utility::visitOverloaded(
                 session.engine,

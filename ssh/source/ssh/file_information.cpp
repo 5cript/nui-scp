@@ -2,14 +2,14 @@
 
 namespace SecureShell
 {
-    FileInformation FileInformation::fromSftpAttributes(sftp_attributes attributes)
+    FileInformation fromSftpAttributes(sftp_attributes attributes)
     {
         return FileInformation{
             SharedData::DirectoryEntry{
                 .path = attributes->name ? std::string{attributes->name} : std::string{},
                 .longName = attributes->longname ? std::string{attributes->longname} : std::string{},
                 .flags = attributes->flags,
-                .type = attributes->type,
+                .type = static_cast<SharedData::FileType>(attributes->type),
                 .size = attributes->size,
                 .uid = attributes->uid,
                 .gid = attributes->gid,

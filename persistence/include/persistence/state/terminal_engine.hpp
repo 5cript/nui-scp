@@ -29,6 +29,9 @@ namespace Persistence
     {
         bool isPty{true};
 
+        void useDefaultsFrom(BaseTerminalEngine const&)
+        {}
+
         BaseTerminalEngine() = default;
         virtual ~BaseTerminalEngine() = default;
         BaseTerminalEngine(BaseTerminalEngine const&) = default;
@@ -46,6 +49,19 @@ namespace Persistence
         std::optional<std::unordered_map<std::string, std::string>> environment{std::nullopt};
         std::optional<int> exitTimeoutSeconds{std::nullopt};
         std::optional<bool> cleanEnvironment{std::nullopt};
+
+        void useDefaultsFrom(ExecutingTerminalEngine const& other)
+        {
+            BaseTerminalEngine::useDefaultsFrom(other);
+            if (!arguments)
+                arguments = other.arguments;
+            if (!environment)
+                environment = other.environment;
+            if (!exitTimeoutSeconds)
+                exitTimeoutSeconds = other.exitTimeoutSeconds;
+            if (!cleanEnvironment)
+                cleanEnvironment = other.cleanEnvironment;
+        }
     };
     void to_json(nlohmann::json& j, ExecutingTerminalEngine const& engine);
     void from_json(nlohmann::json const& j, ExecutingTerminalEngine& engine);
@@ -53,6 +69,12 @@ namespace Persistence
     struct SshTerminalEngine : BaseTerminalEngine
     {
         Referenceable<SshSessionOptions> sshSessionOptions{};
+
+        void useDefaultsFrom(SshTerminalEngine const& other)
+        {
+            BaseTerminalEngine::useDefaultsFrom(other);
+            sshSessionOptions.useDefaultsFrom(other.sshSessionOptions.value());
+        }
     };
     void to_json(nlohmann::json& j, SshTerminalEngine const& engine);
     void from_json(nlohmann::json const& j, SshTerminalEngine& engine);
@@ -66,6 +88,9 @@ namespace Persistence
         Referenceable<Termios> termios{};
         std::variant<std::monostate, ExecutingTerminalEngine, SshTerminalEngine> engine{};
         std::optional<std::unordered_map<std::string, nlohmann::json>> layouts{};
+        Referenceable<QueueOptions> queueOptions{};
+
+        void useDefaultsFrom(TerminalEngine const& other);
     };
     void to_json(nlohmann::json& j, TerminalEngine const& engine);
     void from_json(nlohmann::json const& j, TerminalEngine& engine);

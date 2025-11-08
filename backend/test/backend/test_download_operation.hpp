@@ -59,10 +59,10 @@ namespace Test
                         -> std::future<std::expected<SecureShell::FileInformation, SecureShell::SftpError>> {
                         std::promise<std::expected<SecureShell::FileInformation, SecureShell::SftpError>> promise;
                         promise.set_value(
-                            SecureShell::FileInformation{{
+                            SecureShell::FileInformation{
                                 .size = size,
                                 .permissions = std::filesystem::perms::owner_all,
-                            }});
+                            });
                         return promise.get_future();
                     });
         }
@@ -224,9 +224,9 @@ namespace Test
             .WillOnce([]() -> std::future<std::expected<FileInformation, SecureShell::SftpError>> {
                 std::promise<std::expected<FileInformation, SecureShell::SftpError>> promise;
                 promise.set_value(
-                    FileInformation{{
+                    FileInformation{
                         .size = 0,
-                    }});
+                    });
                 return promise.get_future();
             });
 
@@ -249,9 +249,9 @@ namespace Test
             .WillOnce([]() -> std::future<std::expected<FileInformation, SecureShell::SftpError>> {
                 std::promise<std::expected<FileInformation, SecureShell::SftpError>> promise;
                 promise.set_value(
-                    FileInformation{{
+                    FileInformation{
                         .size = 42,
-                    }});
+                    });
                 return promise.get_future();
             });
 
@@ -274,9 +274,9 @@ namespace Test
             .WillOnce([]() -> std::future<std::expected<FileInformation, SecureShell::SftpError>> {
                 std::promise<std::expected<FileInformation, SecureShell::SftpError>> promise;
                 promise.set_value(
-                    FileInformation{{
+                    FileInformation{
                         .size = 42,
-                    }});
+                    });
                 return promise.get_future();
             });
 
@@ -306,9 +306,9 @@ namespace Test
                 .WillOnce([]() -> std::future<std::expected<FileInformation, SecureShell::SftpError>> {
                     std::promise<std::expected<FileInformation, SecureShell::SftpError>> promise;
                     promise.set_value(
-                        FileInformation{{
+                        FileInformation{
                             .size = 42,
-                        }});
+                        });
                     return promise.get_future();
                 });
 
@@ -338,9 +338,9 @@ namespace Test
                 .WillOnce([]() -> std::future<std::expected<FileInformation, SecureShell::SftpError>> {
                     std::promise<std::expected<FileInformation, SecureShell::SftpError>> promise;
                     promise.set_value(
-                        FileInformation{{
+                        FileInformation{
                             .size = 42,
-                        }});
+                        });
                     return promise.get_future();
                 });
 
@@ -392,9 +392,9 @@ namespace Test
             .WillOnce([]() -> std::future<std::expected<FileInformation, SecureShell::SftpError>> {
                 std::promise<std::expected<FileInformation, SecureShell::SftpError>> promise;
                 promise.set_value(
-                    FileInformation{{
+                    FileInformation{
                         .size = 42,
-                    }});
+                    });
                 return promise.get_future();
             });
 
