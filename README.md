@@ -37,7 +37,7 @@ Still under construction :construction:
 - [x] Bulk download.
 - [ ] Implement handling of symlinks in bulk downloads.
 - [ ] Implement bulk download to archives.
-- [ ] Forward download options for bulk downloads.
+- [x] Forward download options for bulk downloads.
 - [ ] Single file uploads.
 - [ ] Bulk uploads.
 - [x] Delete file.

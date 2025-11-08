@@ -325,6 +325,9 @@ std::expected<void, Operation::Error> OperationQueue::addDownloadOperation(
                 .futureTimeout = std::chrono::seconds{5},
             });
 
+        const auto transferOptions = sftpOpts_.downloadOptions.value_or(Persistence::TransferOptions{});
+        const auto defaultOptions = DownloadOperation::DownloadOperationOptions{};
+
         // Cant use same ID for scan and bulk download
         const auto bulkId = Ids::generateOperationId();
         auto bulk = std::make_unique<BulkDownloadOperation>(
@@ -369,7 +372,15 @@ std::expected<void, Operation::Error> OperationQueue::addDownloadOperation(
                 .localPath = localPath,
                 .individualOptions =
                     DownloadOperation::DownloadOperationOptions{
-                        // TODO: Not just defaults.
+                        .tempFileSuffix = transferOptions.tempFileSuffix.value_or(defaultOptions.tempFileSuffix),
+                        .mayOverwrite = transferOptions.mayOverwrite.value_or(defaultOptions.mayOverwrite),
+                        .reserveSpace = transferOptions.reserveSpace.value_or(defaultOptions.reserveSpace),
+                        .tryContinue = transferOptions.tryContinue.value_or(defaultOptions.tryContinue),
+                        .inheritPermissions =
+                            transferOptions.inheritPermissions.value_or(defaultOptions.inheritPermissions),
+                        .doCleanup = transferOptions.doCleanup.value_or(defaultOptions.doCleanup),
+                        .permissions = transferOptions.customPermissions ? transferOptions.customPermissions
+                                                                         : defaultOptions.permissions,
                     },
             });
 
