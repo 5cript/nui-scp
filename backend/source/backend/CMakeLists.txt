@@ -9,6 +9,7 @@ add_library(
         session.cpp
         sftp/operation_queue.cpp
         sftp/download_operation.cpp
+        sftp/upload_operation.cpp
         sftp/scan_operation.cpp
         sftp/bulk_download_operation.cpp
 )

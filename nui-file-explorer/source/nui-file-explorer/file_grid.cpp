@@ -130,6 +130,7 @@ namespace NuiFileExplorer
         std::function<void(std::vector<Item> const&)> onDelete{};
         std::function<void(Item const&)> onRename{};
         std::function<void(std::vector<Item> const&)> onDownload{};
+        std::function<void(std::filesystem::path destinationDir, std::vector<Item> const&)> onUpload{};
         std::function<void(std::string const&)> onError{};
         std::function<void(Item const&)> onProperties{};
         Settings settings{};
@@ -190,6 +191,11 @@ namespace NuiFileExplorer
     void FileGrid::onDownload(std::function<void(std::vector<Item> const&)> const& callback)
     {
         impl_->onDownload = callback;
+    }
+    void FileGrid::onUpload(
+        std::function<void(std::filesystem::path desinationDir, std::vector<Item> const&)> const& callback)
+    {
+        impl_->onUpload = callback;
     }
     void FileGrid::onError(std::function<void(std::string const&)> const& callback)
     {

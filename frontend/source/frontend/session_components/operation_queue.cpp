@@ -670,17 +670,16 @@ void OperationQueue::cancelOperation(OperationCard const& operation)
             Nui::RpcClient::callWithBackChannel(
                 fmt::format("OperationQueue::{}::cancel", impl_->sessionId.value()),
                 [this, operationId](SharedData::ErrorOrSuccess<> const& result) {
-                    if (result)
+                    if (!result)
                     {
-                        auto* operation = impl_->operations.at(operationId);
-                        if (operation)
-                            operation->state(SharedData::OperationState::Canceled);
-                        Nui::globalEventContext.executeActiveEventsImmediately();
+                        return Log::error(
+                            "Failed to cancel operation id {}: {}", operationId.value(), result.error.value());
                     }
-                    else
-                    {
-                        Log::error("Failed to cancel operation id {}: {}", operationId.value(), result.error.value());
-                    }
+
+                    auto* operation = impl_->operations.at(operationId);
+                    if (operation)
+                        operation->state(SharedData::OperationState::Canceled);
+                    Nui::globalEventContext.executeActiveEventsImmediately();
                 },
                 operationId);
         };
@@ -1091,17 +1090,19 @@ void OperationQueue::enqueueDownload(
     impl_->fileEngine->addDownload(remotePath, localPath, std::move(onComplete));
 }
 void OperationQueue::enqueueUpload(
-    std::filesystem::path const&,
-    std::filesystem::path const&,
+    std::filesystem::path const& remotePath,
+    std::filesystem::path const& localPath,
     std::function<void(std::optional<Ids::OperationId> const&)> onComplete)
 {
     if (!impl_->fileEngine)
     {
-        Log::error("No file engine set for operation queue, cannot enqueue download");
+        Log::error("No file engine set for operation queue, cannot enqueue upload");
         onComplete(std::nullopt);
         return;
     }
-    // TODO: Implement
+
+    Log::info("Frontend Operation Queue upload: {} -> {}", localPath.generic_string(), remotePath.generic_string());
+    impl_->fileEngine->addUpload(remotePath, localPath, std::move(onComplete));
 }
 void OperationQueue::enqueueRename(
     std::filesystem::path const&,

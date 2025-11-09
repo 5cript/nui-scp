@@ -36,6 +36,9 @@ Still under construction :construction:
 - [x] Single file downloads.
 - [x] Bulk download.
 - [ ] Implement handling of symlinks in bulk downloads.
+- [ ] Implement handling of symlinks in regular downloads.
+- [ ] Implement handling of symlinks in bulk uploads.
+- [ ] Implement handling of symlinks in regular uploads.
 - [ ] Implement bulk download to archives.
 - [x] Forward download options for bulk downloads.
 - [ ] Single file uploads.

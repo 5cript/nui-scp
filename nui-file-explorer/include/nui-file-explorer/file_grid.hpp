@@ -194,6 +194,12 @@ namespace NuiFileExplorer
         void onDownload(std::function<void(std::vector<Item> const&)> const& callback);
 
         /**
+         * @brief Triggered when items are requested to be uploaded / dropped onto the grid.
+         */
+        void
+        onUpload(std::function<void(std::filesystem::path desinationDir, std::vector<Item> const&)> const& callback);
+
+        /**
          * @brief Triggered when an error occurs.
          */
         void onError(std::function<void(std::string const&)> const& callback);
